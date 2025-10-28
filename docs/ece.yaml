@@ -1,0 +1,280 @@
+# Electron Cyclotron Emission (ECE) IDS Documentation for DIII-D
+# Based on OMAS: omas/machine_mappings/d3d.py::electron_cyclotron_emission_data
+
+system_overview: |
+  ECE measures electron temperature via cyclotron emission.
+  - Two sampling modes: standard and fast (high frequency)
+  - Channels numbered 1-NUMCH in MDS+, 0-indexed in IMAS
+  - Line of sight geometry defined by phi, theta, and vertical position
+
+special_considerations:
+  - Fast ECE mode uses different MDS+ nodes (TECEF prefix instead of TECE)
+  - Line of sight geometry is NOT stored in MDS+; computed from fixed points
+  - Uncertainties are computed, not fetched (7% calibration + sqrt(T*1000))
+  - Time in MDS+ is milliseconds, converted to seconds
+  - Frequency in MDS+ is GHz, converted to Hz for IMAS
+
+entries:
+  ece._numch:
+    summary: Number of active ECE channels
+    description: |
+      This determines how many channel entries exist and is needed
+      before fetching any per-channel data.
+    mds_path: \ECE::TOP.CAL{fast_suffix}.NUMCH
+    tree: ELECTRONS
+    stage: DIRECT
+    
+  ece._geometry_setup:
+    summary: ECE viewing geometry setup parameters
+    description: |
+      These define the line of sight for all ECE channels:
+      - ECEPHI: Toroidal angle of ECE view (degrees)
+      - ECETHETA: Poloidal angle of ECE view (degrees) 
+      - ECEZH: Vertical position of ECE antenna (meters)
+    mds_paths:
+      - \ECE::TOP.SETUP.ECEPHI
+      - \ECE::TOP.SETUP.ECETHETA
+      - \ECE::TOP.SETUP.ECEZH
+    tree: ELECTRONS
+    stage: DIRECT
+    
+  ece._frequency_setup:
+    summary: ECE frequency setup parameters
+    description: |
+      - FREQ: Center frequency per channel (GHz)
+      - FLTRWID: IF filter bandwidth per channel (GHz)
+    mds_paths:
+      - \ECE::TOP.SETUP.FREQ
+      - \ECE::TOP.SETUP.FLTRWID
+    tree: ELECTRONS
+    stage: DIRECT
+    
+  ece._time_base:
+    summary: Time base for ECE measurements
+    description: |
+      In MDS+, time is stored as the dimension of channel data.
+      We use TECE{fast_suffix}01 as the representative channel
+      since all channels share the same time base.
+    mds_path: dim_of(\ECE::TOP.TECE.TECE{fast_suffix}01)
+    tree: ELECTRONS
+    units_mds: ms
+    units_imas: s
+    conversion: divide by 1000
+    stage: DIRECT
+    
+  ece._temperature_data:
+    summary: Electron temperature data from all ECE channels
+    description: |
+      Each channel (TECE{fast_suffix}01 through TECE{fast_suffix}{NUMCH}) 
+      provides a time series of temperature measurements.
+      
+      This is only fetched when temperature data is actually requested,
+      allowing geometry/frequency queries without loading measurement data.
+    mds_path: \ECE::TOP.TECE.TECE{fast_suffix}{01-NUMCH}
+    tree: ELECTRONS
+    units_mds: keV
+    units_imas: eV
+    conversion: multiply by 1000
+    stage: DERIVED
+    depends_on:
+      - ece._numch
+    uncertainty_calculation: |
+      NOT stored in MDS+. Computed from:
+      - Calibration error: 7% (optimistic estimate)
+      - Statistical error: sqrt(T_keV * 1000) from Poisson statistics
+      - Combined: sqrt(abs(T_keV * 1000)) + 70 * abs(T_keV)
+    
+  ece.ids_properties.homogeneous_time:
+    summary: Indicates whether all channels share the same time base
+    description: |
+      Value: 0 (false) - ECE channels may have different time bases in principle,
+      though in practice DIII-D ECE typically has uniform sampling.
+      
+      This is a metadata field that requires no MDS+ fetches.
+    value: 0
+    omas_path: ods['ece.ids_properties.homogeneous_time']
+    stage: COMPUTED
+    
+  ece.line_of_sight.first_point.r:
+    summary: Major radius of first point defining ECE line of sight
+    description: |
+      Value: 2.5 m (outer wall location, not stored in MDS+)
+      This is a fixed geometric parameter for DIII-D ECE system.
+      No MDS+ data required - pure constant.
+    value: 2.5
+    units: meters
+    omas_path: ods['ece.line_of_sight.first_point.r']
+    stage: COMPUTED
+    
+  ece.line_of_sight.first_point.phi:
+    summary: Toroidal angle of first point
+    description: |
+      Converted from ECEPHI (degrees) to radians.
+      Formula: phi = ECEPHI * π / 180
+    mds_path: \ECE::TOP.SETUP.ECEPHI
+    units: radians
+    conversion: degrees to radians
+    omas_path: ods['ece.line_of_sight.first_point.phi']
+    stage: COMPUTED
+    depends_on:
+      - ece._geometry_setup
+      
+  ece.line_of_sight.first_point.z:
+    summary: Vertical position of first point
+    description: Directly from ECEZH (antenna vertical position).
+    mds_path: \ECE::TOP.SETUP.ECEZH
+    units: meters
+    omas_path: ods['ece.line_of_sight.first_point.z']
+    stage: COMPUTED
+    depends_on:
+      - ece._geometry_setup
+      
+  ece.line_of_sight.second_point.r:
+    summary: Major radius of second point defining ECE line of sight
+    description: |
+      Value: 0.8 m (approximate plasma center, not stored in MDS+)
+      This is a fixed geometric parameter for DIII-D ECE system.
+      No MDS+ data required - pure constant.
+    value: 0.8
+    units: meters
+    omas_path: ods['ece.line_of_sight.second_point.r']
+    stage: COMPUTED
+    
+  ece.line_of_sight.second_point.phi:
+    summary: Toroidal angle of second point
+    description: Same as first point phi (ECE views radially inward).
+    omas_path: ods['ece.line_of_sight.second_point.phi']
+    stage: COMPUTED
+    depends_on:
+      - ece._geometry_setup
+      
+  ece.line_of_sight.second_point.z:
+    summary: Vertical position of second point
+    description: |
+      Calculated from first point Z and poloidal viewing angle:
+      z2 = z1 + sin(ECETHETA * π / 180)
+    mds_paths:
+      - \ECE::TOP.SETUP.ECEZH  # z1
+      - \ECE::TOP.SETUP.ECETHETA  # angle
+    units: meters
+    formula: z1 + sin(theta_rad)
+    omas_path: ods['ece.line_of_sight.second_point.z']
+    stage: COMPUTED
+    depends_on:
+      - ece._geometry_setup
+      
+  ece.channel.name:
+    summary: Channel names
+    description: |
+      Format: ECE{channel_number}
+      Example: ECE1, ECE2, ..., ECE40
+      
+      Channel numbers are 1-indexed (matching MDS+ convention).
+      Only requires knowing NUMCH, not actual measurement data.
+    format: ECE{1-indexed}
+    omas_path: ods['ece']['channel'][i]['name']
+    stage: COMPUTED
+    depends_on:
+      - ece._numch
+      
+  ece.channel.identifier:
+    summary: Channel identifiers matching MDS+ node names
+    description: |
+      Format: TECE{fast_suffix}{channel:02d}
+      Examples: TECE01, TECE02, ..., TECEF01 (fast mode)
+      
+      These identifiers match the MDS+ node names exactly.
+      Only requires knowing NUMCH, not actual measurement data.
+    format: TECE{fast_suffix}{02d}
+    omas_path: ods['ece']['channel'][i]['identifier']
+    stage: COMPUTED
+    depends_on:
+      - ece._numch
+      
+  ece.channel.time:
+    summary: Time base for all channels
+    description: |
+      In DIII-D ECE, all channels share the same time base.
+      Time is replicated for each channel in flat array format.
+      
+      Conversion: MDS+ time (ms) / 1000 -> IMAS time (s)
+      
+      This can be fetched independently of temperature data,
+      useful for pre-allocating arrays or time-based queries.
+    units: seconds
+    conversion: ms to s (divide by 1000)
+    shape: (n_channels, n_time)
+    omas_path: ods['ece']['channel'][i]['time']
+    stage: COMPUTED
+    depends_on:
+      - ece._time_base
+      - ece._numch
+      
+  ece.channel.frequency.data:
+    summary: Center frequency for each channel
+    description: |
+      Each channel measures at a specific frequency corresponding to
+      the cyclotron frequency at a particular radial location.
+      
+      In flat format: Frequency is constant in time for each channel,
+      so it's broadcast to match time dimension.
+      
+      Conversion: FREQ (GHz) * 1e9 -> frequency (Hz)
+      
+      Can be fetched independently of temperature data.
+    mds_path: \ECE::TOP.SETUP.FREQ
+    units: Hz
+    conversion: GHz to Hz (multiply by 1e9)
+    shape: (n_channels, n_time)
+    omas_path: ods['ece']['channel'][i]['frequency']['data']
+    stage: COMPUTED
+    depends_on:
+      - ece._frequency_setup
+      - ece._time_base
+      - ece._numch
+      
+  ece.channel.if_bandwidth:
+    summary: Intermediate frequency filter bandwidth for each channel
+    description: |
+      Determines frequency resolution of the measurement.
+      Constant per channel (not time-varying).
+      
+      Conversion: FLTRWID (GHz) * 1e9 -> bandwidth (Hz)
+      
+      Can be fetched independently of temperature data.
+    mds_path: \ECE::TOP.SETUP.FLTRWID
+    units: Hz
+    conversion: GHz to Hz (multiply by 1e9)
+    shape: (n_channels,)
+    omas_path: ods['ece']['channel'][i]['if_bandwidth']
+    stage: COMPUTED
+    depends_on:
+      - ece._frequency_setup
+      - ece._numch
+      
+  ece.channel.t_e.data:
+    summary: Electron temperature data with uncertainties
+    description: |
+      This is the ONLY entry that requires fetching actual temperature measurements.
+      All other channel properties (name, frequency, geometry) can be queried
+      without triggering this expensive data fetch.
+      
+      Conversion: MDS+ (keV) * 1000 -> IMAS (eV)
+      
+      Uncertainties computed from:
+      - Calibration error: 7% (optimistic)
+      - Statistical error: sqrt(T_keV * 1000) eV
+      - Combined: sigma = sqrt(|T_keV * 1000|) + 70 * |T_keV|
+      
+      In OMAS: stored as uncertainties.uarray(nominal, sigma)
+      For awkward arrays: structure depends on implementation
+      (could be separate .data and .uncertainty arrays)
+    mds_path: \ECE::TOP.TECE.TECE{fast_suffix}{01-NUMCH}
+    units: eV
+    conversion: keV to eV (multiply by 1000)
+    shape: (n_channels, n_time)
+    uncertainty_formula: sqrt(|T_keV * 1000|) + 70 * |T_keV|
+    omas_path: ods['ece']['channel'][i]['t_e']['data']
+    stage: COMPUTED
+    depends_on:
+      - ece._temperature_data

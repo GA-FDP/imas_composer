@@ -1,0 +1,13 @@
+name: imas_composer
+
+
+channels:
+  - conda-forge
+  - ga-fdp
+
+dependencies:
+  - python
+  - awkward
+  - pyyaml
+  - pytest
+  - numpy

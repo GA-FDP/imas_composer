@@ -1,0 +1,146 @@
+# Thomson Scattering IDS Documentation for DIII-D
+# Based on OMAS: omas/machine_mappings/d3d.py::thomson_scattering_data
+
+system_overview: |
+  Thomson scattering measures electron density and temperature by detecting
+  scattered laser light. DIII-D has three Thomson scattering systems:
+  - TANGENTIAL: Views plasma tangentially
+  - DIVERTOR: Views divertor region
+  - CORE: Views plasma core
+  
+  Revision: BLESSED (standard blessed data set)
+
+special_considerations:
+  - Multi-step MDS+ fetch required (calibration → hardware map → measurements)
+  - Hardware maps stored in separate TSCAL tree, indexed by calibration number
+  - Not all systems may be active for a given shot
+  - Phi coordinate is negated and converted from degrees to radians
+  - Time stored in milliseconds, converted to seconds
+  - Uncertainties stored as separate _E signals
+
+entries:
+  thomson_scattering._calib_nums:
+    summary: Calibration numbers from Thomson header
+    description: |
+      First element indicates which TSCAL pulse contains hardware configuration.
+      Required to fetch hardware maps which define lens positions.
+    mds_path: .ts.BLESSED.header.calib_nums
+    tree: ELECTRONS
+    stage: DIRECT
+    
+  thomson_scattering._hwmap:
+    summary: Hardware map integers from TSCAL tree
+    description: |
+      Structure: hwmapints[channel, :] where column 2 contains lens number.
+      Lens number is used in channel naming convention.
+      
+      Dependency Chain:
+      1. Read calib_nums from ELECTRONS tree
+      2. Use calib_nums[0] as shot number for TSCAL tree
+      3. Fetch .{SYSTEM}.hwmapints from TSCAL for each system
+    mds_path: .{SYSTEM}.hwmapints (TANGENTIAL, DIVERTOR, CORE)
+    tree: TSCAL
+    shot: From calib_nums[0]
+    stage: DERIVED
+    depends_on:
+      - thomson_scattering._calib_nums
+      
+  thomson_scattering._system_availability:
+    summary: Position data (R, Z, PHI) for all Thomson systems
+    description: |
+      Used to determine which systems have active channels.
+      A system is considered active if its R array is non-empty and not an Exception.
+      
+      This is fetched early to avoid requesting measurement data for inactive systems.
+    mds_paths:
+      - .TS.BLESSED.{SYSTEM}:R
+      - .TS.BLESSED.{SYSTEM}:Z
+      - .TS.BLESSED.{SYSTEM}:PHI
+    tree: ELECTRONS
+    stage: DERIVED
+    depends_on:
+      - thomson_scattering._calib_nums
+      
+  thomson_scattering.channel.name:
+    summary: Channel name
+    description: |
+      Format: TS_{system}_r{lens}_{channel}
+      Examples: TS_tangential_r+2_5, TS_core_r-1_0
+      
+      Construction:
+      - system: tangential/divertor/core (lowercase)
+      - lens: from hwmapints[:, 2], with sign indicating viewing direction
+      - channel: 0-indexed channel number within system
+    format: TS_{system}_r{lens:+0d}_{channel}
+    omas_path: ods['thomson_scattering']['channel'][i]['name']
+    stage: COMPUTED
+    depends_on:
+      - thomson_scattering._hwmap
+      - thomson_scattering._system_availability
+      
+  thomson_scattering.channel.identifier:
+    summary: Short channel identifier
+    description: |
+      Format: {system_letter}{channel:02d}
+      Examples: T00, D05, C12
+      
+      System letters: T=TANGENTIAL, D=DIVERTOR, C=CORE
+      Channel numbers are 0-indexed within each system.
+    format: "{T|D|C}{channel:02d}"
+    omas_path: ods['thomson_scattering']['channel'][i]['identifier']
+    stage: COMPUTED
+    depends_on:
+      - thomson_scattering._system_availability
+      
+  thomson_scattering.channel.position.r:
+    summary: Channel R position (major radius)
+    description: |
+      Concatenated across all active systems in order: TANGENTIAL, DIVERTOR, CORE
+    mds_path: .TS.BLESSED.{SYSTEM}:R
+    units: meters
+    omas_path: ods['thomson_scattering']['channel'][i]['position']['r']
+    stage: COMPUTED
+    depends_on:
+      - thomson_scattering._system_availability
+      
+  thomson_scattering.channel.position.z:
+    summary: Channel Z position (vertical)
+    description: |
+      Concatenated across all active systems in order: TANGENTIAL, DIVERTOR, CORE
+    mds_path: .TS.BLESSED.{SYSTEM}:Z
+    units: meters
+    omas_path: ods['thomson_scattering']['channel'][i]['position']['z']
+    stage: COMPUTED
+    depends_on:
+      - thomson_scattering._system_availability
+      
+  thomson_scattering.channel.position.phi:
+    summary: Channel phi position (toroidal angle)
+    description: |
+      Special handling: negated and converted from degrees to radians
+      Formula: phi_imas = -phi_mds * π / 180
+      
+      Concatenated across all active systems in order: TANGENTIAL, DIVERTOR, CORE
+    mds_path: .TS.BLESSED.{SYSTEM}:PHI
+    units: radians
+    conversion: -PHI * π / 180
+    omas_path: ods['thomson_scattering']['channel'][i]['position']['phi']
+    stage: COMPUTED
+    depends_on:
+      - thomson_scattering._system_availability
+      
+  thomson_scattering.channel.n_e.time:
+    summary: Time base for electron density measurements
+    description: |
+      All active systems share the same time base in DIII-D Thomson.
+      Time in MDS+ is in milliseconds, converted to seconds (divide by 1000).
+    mds_path: .TS.BLESSED.{SYSTEM}:TIME
+    units: seconds
+    conversion: ms to s (divide by 1000)
+    omas_path: ods['thomson_scattering']['channel'][i]['n_e.time']
+    stage: DERIVED
+    depends_on:
+      - thomson_scattering._system_availability
+      
+  thomson_scattering.channel.n_e.data:
+    summary: Electron densit
