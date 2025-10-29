@@ -1,0 +1,16 @@
+# Static values for DIII-D ECE IDS
+# These are hardcoded values not available in MDSplus
+# Source: OMAS d3d.py::electron_cyclotron_emission_data
+
+# IDS properties
+ids_properties.homogeneous_time: 0  # ECE does not have homogeneous time across all channels
+
+# Line of sight endpoints (not in MDSplus - hardcoded geometry)
+# These represent the viewing geometry of the ECE system
+line_of_sight.first_point.r: 2.5   # meters - outer position
+line_of_sight.second_point.r: 0.8  # meters - inner position
+
+# Notes:
+# - first_point and second_point phi and z are derived from MDSplus data (ECEPHI, ECETHETA, ECEZH)
+# - These R values define the radial extent of the line of sight through the plasma
+# - Broadcasting to channel arrays happens in synthesis phase based on number of channels

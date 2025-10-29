@@ -120,17 +120,8 @@ class ThomsonScatteringMapper:
     def _add_measurement_specs(self, measurement: str, mds_quantity: str):
         """Add specs for a measurement (time, data, and data_error_upper)"""
 
-        # Time array (shared between data and error)
-        self.specs[f"thomson_scattering.channel.{measurement}.time"] = IDSEntrySpec(
-            stage=RequirementStage.DERIVED,
-            depends_on=["thomson_scattering._system_availability"],
-            derive_requirements=self._derive_time_requirements,
-            ids_path=f"thomson_scattering.channel.{measurement}.time",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Direct requirements: fetch measurement data and errors for all systems
-        # Simple approach like OMAS: just fetch DENSITY/TEMP and DENSITY_E/TEMP_E for each system
+        # Direct requirements: fetch measurement data, errors, and time for all systems
+        # See OMAS d3d.py:806-807 - simple static query dict
         measurement_reqs = []
         for system in self.SYSTEMS:
             measurement_reqs.append(
@@ -139,12 +130,28 @@ class ThomsonScatteringMapper:
             measurement_reqs.append(
                 Requirement(self._get_system_measurement_path(system, f'{mds_quantity}_E'), 0, 'ELECTRONS')
             )
+            measurement_reqs.append(
+                Requirement(self._get_system_measurement_path(system, 'TIME'), 0, 'ELECTRONS')
+            )
 
         # Internal spec: static requirements for measurement data
         self.specs[f"thomson_scattering._{measurement}_measurements"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=measurement_reqs,
             ids_path=f"thomson_scattering._{measurement}_measurements",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Time array (shared between data and error)
+        # See OMAS d3d.py:72,74 - uses tsdat[f'{system}_TIME'] / 1e3
+        self.specs[f"thomson_scattering.channel.{measurement}.time"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                f"thomson_scattering._{measurement}_measurements",
+                "thomson_scattering._system_availability"
+            ],
+            synthesize=lambda shot, raw: self._synthesize_channel_time(shot, raw),
+            ids_path=f"thomson_scattering.channel.{measurement}.time",
             docs_file=self.DOCS_PATH
         )
 
@@ -297,6 +304,46 @@ class ThomsonScatteringMapper:
             positions.extend(coord_data)
 
         return np.array(positions)
+
+    def _synthesize_channel_time(self, shot: int, raw_data: dict) -> ak.Array:
+        """
+        Synthesize time arrays across all active systems.
+
+        Implements thomson_scattering.channel.{n_e|t_e}.time
+
+        See OMAS d3d.py:72,74 - ch['n_e.time'] = tsdat[f'{system}_TIME'] / 1e3
+
+        Args:
+            shot: Shot number
+            raw_data: Raw MDS+ data
+
+        Returns:
+            Awkward array with ragged time data per channel (milliseconds)
+        """
+        all_time = []
+
+        for system in self.SYSTEMS:
+            if not self._is_system_active(system, shot, raw_data):
+                continue
+
+            time_key = Requirement(
+                self._get_system_measurement_path(system, 'TIME'), shot, 'ELECTRONS'
+            ).as_key()
+
+            # Get time for this system
+            system_time = raw_data[time_key]
+
+            # Convert from microseconds to seconds (OMAS uses / 1e3 for ms)
+            system_time = system_time / 1e3
+
+            # Get number of channels for this system
+            nc = self._get_system_channel_count(system, shot, raw_data)
+
+            # Each channel gets the same time array (but ragged across systems)
+            for _ in range(nc):
+                all_time.append(system_time)
+
+        return ak.Array(all_time)
 
     def _synthesize_channel_measurement_data(self, shot: int, raw_data: dict,
                                              measurement: str, quantity: str) -> ak.Array:

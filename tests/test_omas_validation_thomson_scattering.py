@@ -286,6 +286,50 @@ class TestThomsonOMASValidation:
                 print(f"\nMDS+ paths used: {trace['thomson_scattering.channel.position.phi']}")
                 raise
 
+    def test_n_e_time_matches(self, omas_thomson_data, ts_mapper):
+        """Verify n_e time arrays match."""
+        composer_time, trace = self._fetch_and_synthesize(ts_mapper, 'thomson_scattering.channel.n_e.time')
+
+        n_channels = len(omas_thomson_data['thomson_scattering']['channel'])
+
+        for i in range(n_channels):
+            omas_time = omas_thomson_data['thomson_scattering']['channel'][i]['n_e']['time']
+
+            # Convert awkward array element to numpy for comparison
+            composer_channel_time = np.asarray(composer_time[i])
+
+            try:
+                np.testing.assert_allclose(
+                    composer_channel_time, omas_time,
+                    rtol=1e-10, atol=1e-12,
+                    err_msg=f"Channel {i} n_e time mismatch"
+                )
+            except AssertionError as e:
+                print(f"\nMDS+ paths used: {trace['thomson_scattering.channel.n_e.time']}")
+                raise
+
+    def test_t_e_time_matches(self, omas_thomson_data, ts_mapper):
+        """Verify t_e time arrays match."""
+        composer_time, trace = self._fetch_and_synthesize(ts_mapper, 'thomson_scattering.channel.t_e.time')
+
+        n_channels = len(omas_thomson_data['thomson_scattering']['channel'])
+
+        for i in range(n_channels):
+            omas_time = omas_thomson_data['thomson_scattering']['channel'][i]['t_e']['time']
+
+            # Convert awkward array element to numpy for comparison
+            composer_channel_time = np.asarray(composer_time[i])
+
+            try:
+                np.testing.assert_allclose(
+                    composer_channel_time, omas_time,
+                    rtol=1e-10, atol=1e-12,
+                    err_msg=f"Channel {i} t_e time mismatch"
+                )
+            except AssertionError as e:
+                print(f"\nMDS+ paths used: {trace['thomson_scattering.channel.t_e.time']}")
+                raise
+
     def test_n_e_data_matches(self, omas_thomson_data, ts_mapper):
         """Verify electron density data matches."""
         composer_n_e, trace = self._fetch_and_synthesize(ts_mapper, 'thomson_scattering.channel.n_e.data')

@@ -1,0 +1,10 @@
+# Static values for DIII-D Thomson Scattering IDS
+# These are hardcoded values not available in MDSplus
+# Source: OMAS d3d.py::thomson_scattering_data
+
+# Thomson scattering currently has no static hardcoded values
+# All data comes from MDSplus ELECTRONS tree
+
+# Notes:
+# - If static values are added in the future, they should follow IMAS schema naming
+# - Broadcasting to channel arrays happens in synthesis phase based on number of channels

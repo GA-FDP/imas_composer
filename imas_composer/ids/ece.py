@@ -6,6 +6,8 @@ See OMAS: omas/machine_mappings/d3d.py::electron_cyclotron_emission_data
 
 from typing import Dict, List
 import numpy as np
+import yaml
+from pathlib import Path
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 
@@ -15,24 +17,36 @@ class ElectronCyclotronEmissionMapper:
     
     # Documentation is loaded from YAML file
     DOCS_PATH = "electron_cyclotron_emission.yaml"
-    
+    STATIC_VALUES_PATH = "ece_static_values.yaml"
+
     def __init__(self, fast_ece: bool = False):
         """
         Initialize ECE mapper.
-        
+
         Args:
             fast_ece: If True, use high-frequency sampling data (TECEF nodes)
         """
         self.fast_ece = fast_ece
         self.fast_suffix = 'F' if fast_ece else ''
-        
+
         # MDS+ path prefixes
         self.setup_node = '\\ECE::TOP.SETUP.'
         self.cal_node = f'\\ECE::TOP.CAL{self.fast_suffix}.'
         self.tece_node = f'\\ECE::TOP.TECE.TECE{self.fast_suffix}'
-        
+
+        # Load static values from YAML
+        self.static_values = self._load_static_values()
+
         self.specs: Dict[str, IDSEntrySpec] = {}
         self._build_specs()
+
+    def _load_static_values(self) -> Dict:
+        """Load static IDS values from YAML file."""
+        yaml_path = Path(__file__).parent / self.STATIC_VALUES_PATH
+        if yaml_path.exists():
+            with open(yaml_path, 'r') as f:
+                return yaml.safe_load(f) or {}
+        return {}
     
     def _get_numch_path(self) -> str:
         """Get MDS+ path for NUMCH node."""
@@ -93,7 +107,7 @@ class ElectronCyclotronEmissionMapper:
         self.specs["ece.ids_properties.homogeneous_time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            synthesize=lambda shot, raw: 0,
+            synthesize=lambda shot, raw: self.static_values.get('ids_properties.homogeneous_time', 0),
             ids_path="ece.ids_properties.homogeneous_time",
             docs_file=self.DOCS_PATH
         )
@@ -102,7 +116,7 @@ class ElectronCyclotronEmissionMapper:
         self.specs["ece.line_of_sight.first_point.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            synthesize=lambda shot, raw: 2.5,
+            synthesize=lambda shot, raw: self.static_values.get('line_of_sight.first_point.r', 2.5),
             ids_path="ece.line_of_sight.first_point.r",
             docs_file=self.DOCS_PATH
         )
@@ -126,7 +140,7 @@ class ElectronCyclotronEmissionMapper:
         self.specs["ece.line_of_sight.second_point.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            synthesize=lambda shot, raw: 0.8,
+            synthesize=lambda shot, raw: self.static_values.get('line_of_sight.second_point.r', 0.8),
             ids_path="ece.line_of_sight.second_point.r",
             docs_file=self.DOCS_PATH
         )

@@ -90,3 +90,21 @@ Each IDS mapper has a corresponding `*_omas_reference.py` file containing the OM
 - Open the OMAS reference file
 - Compare line-by-line: "What does OMAS fetch?" vs "What am I fetching?"
 - Ask: "Is this a static query dict (DIRECT) or does it depend on earlier data (DERIVED)?"
+
+## Static Values Pattern
+
+Hardcoded values (not from MDSplus) are stored in `*_static_values.yaml` files:
+- `imas_composer/ids/ece_static_values.yaml` - ECE static values (geometry, properties)
+- `imas_composer/ids/thomson_scattering_static_values.yaml` - Thomson static values (currently empty)
+
+**When implementing a mapper:**
+1. Check OMAS reference for hardcoded values (look for direct assignments, not MDSplus queries)
+2. Add them to the `*_static_values.yaml` file using IMAS schema keys
+3. Load in mapper `__init__`: `self.static_values = self._load_static_values()`
+4. Use in specs: `synthesize=lambda shot, raw: self.static_values.get('key', default_value)`
+
+**Example static values:**
+- ECE: `ids_properties.homogeneous_time: 0`, `line_of_sight.first_point.r: 2.5`
+- Thomson: (none currently - all data from MDSplus)
+
+Static values are scalar in YAML. Broadcasting to arrays happens during synthesis based on derived dimensions (e.g., number of channels).
