@@ -1,0 +1,31 @@
+# Claude Context for DIIID_IMAS Project
+
+## Data Privacy and Testing Policy
+
+**IMPORTANT**: This project works with restricted DIII-D fusion data that is NOT publicly accessible.
+
+### Testing Restrictions for AI Assistants:
+- **NEVER run pytest or any test commands** that would fetch real MDS+ data
+- **NEVER execute Python code** that calls `mdsvalue()` or connects to DIII-D databases
+- **NEVER run any integration tests** without explicit user permission for each execution
+- The user will run all tests locally - they have appropriate data access credentials
+
+### Why:
+- Running tests would expose restricted fusion research data to the AI assistant
+- Data access is controlled and requires proper authorization
+- All data remains on user's local machine with proper access controls
+
+### What you CAN do:
+- Write test code and test fixtures
+- Review and suggest improvements to test structure
+- Help debug test failures by reading error messages/logs provided by user
+- Modify source code and test files
+- Use static analysis tools that don't execute code
+
+### What you CANNOT do:
+- Execute any command that fetches MDS+ data
+- Run pytest on tests that use real data
+- Run Python scripts that import `omas.mdsvalue` and execute queries
+- Background process any data-fetching operations
+
+**If the user asks you to run tests**: Politely remind them of this policy and ask for explicit confirmation that the specific test run does not access restricted data.

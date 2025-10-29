@@ -34,14 +34,18 @@ class ElectronCyclotronEmissionMapper:
         self.specs: Dict[str, IDSEntrySpec] = {}
         self._build_specs()
     
+    def _get_numch_path(self) -> str:
+        """Get MDS+ path for NUMCH node."""
+        return f'{self.cal_node}NUMCH{self.fast_suffix}'
+
     def _build_specs(self):
         """Build all IDS entry specifications"""
-        
+
         # Internal dependencies
         self.specs["ece._numch"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.cal_node}NUMCH{self.fast_suffix}', 0, 'ELECTRONS'),
+                Requirement(self._get_numch_path(), 0, 'ELECTRONS'),
             ],
             ids_path="ece._numch",
             docs_file=self.DOCS_PATH
@@ -194,17 +198,17 @@ class ElectronCyclotronEmissionMapper:
     
     # Requirement derivation functions
     def _derive_temperature_requirements(self, shot: int, raw_data: dict) -> List[Requirement]:
-        numch_key = Requirement(f'{self.cal_node}NUMCH{self.fast_suffix}', shot, 'ELECTRONS').as_key()
+        numch_key = Requirement(self._get_numch_path(), shot, 'ELECTRONS').as_key()
         n_channels = int(raw_data[numch_key])
-        
+
         return [
             Requirement(f'{self.tece_node}{ich:02d}', shot, 'ELECTRONS')
             for ich in range(1, n_channels + 1)
         ]
-    
+
     # Synthesis functions
     def _get_numch(self, shot: int, raw_data: dict) -> int:
-        numch_key = Requirement(f'{self.cal_node}NUMCH{self.fast_suffix}', shot, 'ELECTRONS').as_key()
+        numch_key = Requirement(self._get_numch_path(), shot, 'ELECTRONS').as_key()
         return int(raw_data[numch_key])
     
     def _synthesize_first_point_phi(self, shot: int, raw_data: dict) -> float:
