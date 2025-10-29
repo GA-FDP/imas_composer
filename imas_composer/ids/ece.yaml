@@ -1,0 +1,24 @@
+# ECE IDS Configuration for DIII-D
+
+# Static values (hardcoded, not from MDSplus)
+static_values:
+  ids_properties.homogeneous_time: 0
+  line_of_sight.first_point.r: 2.5
+  line_of_sight.second_point.r: 0.8
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  - ids_properties.homogeneous_time
+  - line_of_sight.first_point.r
+  - line_of_sight.first_point.phi
+  - line_of_sight.first_point.z
+  - line_of_sight.second_point.r
+  - line_of_sight.second_point.phi
+  - line_of_sight.second_point.z
+  - channel.name
+  - channel.identifier
+  - channel.time
+  - channel.frequency.data
+  - channel.if_bandwidth
+  - channel.t_e.data
+  - channel.t_e.data_error_upper

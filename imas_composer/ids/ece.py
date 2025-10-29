@@ -6,18 +6,17 @@ See OMAS: omas/machine_mappings/d3d.py::electron_cyclotron_emission_data
 
 from typing import Dict, List
 import numpy as np
-import yaml
-from pathlib import Path
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
+from .base import IDSMapper
 
 
-class ElectronCyclotronEmissionMapper:
+class ElectronCyclotronEmissionMapper(IDSMapper):
     """Maps DIII-D ECE data to IMAS ece IDS."""
-    
-    # Documentation is loaded from YAML file
+
+    # Configuration YAML file contains static values and field ledger
     DOCS_PATH = "electron_cyclotron_emission.yaml"
-    STATIC_VALUES_PATH = "ece_static_values.yaml"
+    CONFIG_PATH = "ece.yaml"
 
     def __init__(self, fast_ece: bool = False):
         """
@@ -34,19 +33,11 @@ class ElectronCyclotronEmissionMapper:
         self.cal_node = f'\\ECE::TOP.CAL{self.fast_suffix}.'
         self.tece_node = f'\\ECE::TOP.TECE.TECE{self.fast_suffix}'
 
-        # Load static values from YAML
-        self.static_values = self._load_static_values()
+        # Initialize base class (loads config, static_values, supported_fields)
+        super().__init__()
 
-        self.specs: Dict[str, IDSEntrySpec] = {}
+        # Build IDS specs
         self._build_specs()
-
-    def _load_static_values(self) -> Dict:
-        """Load static IDS values from YAML file."""
-        yaml_path = Path(__file__).parent / self.STATIC_VALUES_PATH
-        if yaml_path.exists():
-            with open(yaml_path, 'r') as f:
-                return yaml.safe_load(f) or {}
-        return {}
     
     def _get_numch_path(self) -> str:
         """Get MDS+ path for NUMCH node."""
@@ -107,20 +98,20 @@ class ElectronCyclotronEmissionMapper:
         self.specs["ece.ids_properties.homogeneous_time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            synthesize=lambda shot, raw: self.static_values.get('ids_properties.homogeneous_time', 0),
+            synthesize=lambda shot, raw: self.static_values['ids_properties.homogeneous_time'],
             ids_path="ece.ids_properties.homogeneous_time",
             docs_file=self.DOCS_PATH
         )
-        
+
         # Line of sight geometry
         self.specs["ece.line_of_sight.first_point.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            synthesize=lambda shot, raw: self.static_values.get('line_of_sight.first_point.r', 2.5),
+            synthesize=lambda shot, raw: self.static_values['line_of_sight.first_point.r'],
             ids_path="ece.line_of_sight.first_point.r",
             docs_file=self.DOCS_PATH
         )
-        
+
         self.specs["ece.line_of_sight.first_point.phi"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._geometry_setup"],
@@ -128,7 +119,7 @@ class ElectronCyclotronEmissionMapper:
             ids_path="ece.line_of_sight.first_point.phi",
             docs_file=self.DOCS_PATH
         )
-        
+
         self.specs["ece.line_of_sight.first_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._geometry_setup"],
@@ -136,11 +127,11 @@ class ElectronCyclotronEmissionMapper:
             ids_path="ece.line_of_sight.first_point.z",
             docs_file=self.DOCS_PATH
         )
-        
+
         self.specs["ece.line_of_sight.second_point.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            synthesize=lambda shot, raw: self.static_values.get('line_of_sight.second_point.r', 0.8),
+            synthesize=lambda shot, raw: self.static_values['line_of_sight.second_point.r'],
             ids_path="ece.line_of_sight.second_point.r",
             docs_file=self.DOCS_PATH
         )

@@ -68,6 +68,15 @@ The user manages the Python environment and dependencies. Assume all standard sc
 
 Do not check for or worry about installing dependencies - focus on implementation.
 
+## Development Philosophy
+
+**This is a new application - no backwards compatibility needed:**
+- DO NOT add fallback defaults or compatibility layers
+- Tests define expected behavior - let them fail when changes are made
+- Explicit is better than implicit - avoid magic fallbacks that hide bugs
+- When making changes, we WANT to see test failures to verify behavior changes
+- Clear errors are better than silent fallbacks
+
 ## OMAS Reference Files for Debugging
 
 Each IDS mapper has a corresponding `*_omas_reference.py` file containing the OMAS implementation:
@@ -91,20 +100,36 @@ Each IDS mapper has a corresponding `*_omas_reference.py` file containing the OM
 - Compare line-by-line: "What does OMAS fetch?" vs "What am I fetching?"
 - Ask: "Is this a static query dict (DIRECT) or does it depend on earlier data (DERIVED)?"
 
-## Static Values Pattern
+## IDS Configuration YAML Files
 
-Hardcoded values (not from MDSplus) are stored in `*_static_values.yaml` files:
-- `imas_composer/ids/ece_static_values.yaml` - ECE static values (geometry, properties)
-- `imas_composer/ids/thomson_scattering_static_values.yaml` - Thomson static values (currently empty)
+Each IDS has a single YAML configuration file containing static values and a field list:
+- `imas_composer/ids/ece.yaml`
+- `imas_composer/ids/thomson_scattering.yaml`
+
+**YAML Structure (minimal):**
+```yaml
+static_values:
+  ids_properties.homogeneous_time: 0
+  line_of_sight.first_point.r: 2.5
+
+fields:
+  - ids_properties.homogeneous_time
+  - channel.name
+  - channel.t_e.data
+```
 
 **When implementing a mapper:**
-1. Check OMAS reference for hardcoded values (look for direct assignments, not MDSplus queries)
-2. Add them to the `*_static_values.yaml` file using IMAS schema keys
-3. Load in mapper `__init__`: `self.static_values = self._load_static_values()`
-4. Use in specs: `synthesize=lambda shot, raw: self.static_values.get('key', default_value)`
+1. Inherit from `IDSMapper` base class in `imas_composer/ids/base.py`
+2. Set `CONFIG_PATH` and `DOCS_PATH` class variables
+3. Call `super().__init__()` to load config (sets `self.static_values` and `self.supported_fields`)
+4. Check OMAS reference for hardcoded values → add to `static_values:` in YAML
+5. Add ALL implemented fields to `fields:` list in YAML
+6. Use in specs: `self.static_values['key']` (NO fallback defaults!)
 
-**Example static values:**
-- ECE: `ids_properties.homogeneous_time: 0`, `line_of_sight.first_point.r: 2.5`
-- Thomson: (none currently - all data from MDSplus)
+**Base class provides:**
+- `_load_config()`: Loads YAML configuration
+- `self.static_values`: Dict of hardcoded values
+- `self.supported_fields`: List of implemented IDS paths
+- `get_supported_fields()`: Returns the field list
 
-Static values are scalar in YAML. Broadcasting to arrays happens during synthesis based on derived dimensions (e.g., number of channels).
+**Keep it minimal:** IMAS schema already defines types and descriptions - don't duplicate. The field list is for test parametrization and documentation of what's implemented.

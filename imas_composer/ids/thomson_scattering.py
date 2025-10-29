@@ -9,18 +9,23 @@ import numpy as np
 import awkward as ak
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
+from .base import IDSMapper
 
 
-class ThomsonScatteringMapper:
+class ThomsonScatteringMapper(IDSMapper):
     """Maps DIII-D Thomson scattering data to IMAS thomson_scattering IDS."""
 
     SYSTEMS = ['TANGENTIAL', 'DIVERTOR', 'CORE']
     REVISION = 'BLESSED'
 
     DOCS_PATH = "thomson_scattering.yaml"
+    CONFIG_PATH = "thomson_scattering.yaml"
 
     def __init__(self):
-        self.specs: Dict[str, IDSEntrySpec] = {}
+        # Initialize base class (loads config, static_values, supported_fields)
+        super().__init__()
+
+        # Build IDS specs
         self._build_specs()
 
     def _get_calib_nums_path(self) -> str:

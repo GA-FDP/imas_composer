@@ -1,0 +1,18 @@
+# Thomson Scattering IDS Configuration for DIII-D
+
+# Static values (hardcoded, not from MDSplus)
+static_values: {}
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  - channel.name
+  - channel.identifier
+  - channel.position.r
+  - channel.position.z
+  - channel.position.phi
+  - channel.n_e.time
+  - channel.n_e.data
+  - channel.n_e.data_error_upper
+  - channel.t_e.time
+  - channel.t_e.data
+  - channel.t_e.data_error_upper
