@@ -45,7 +45,7 @@ class TestECEStaticRequirements:
 
         # Should use CALF for fast ECE
         req = spec.static_requirements[0]
-        assert req.mds_path == '\\ECE::TOP.CALF.NUMCH'
+        assert req.mds_path == '\\ECE::TOP.CALF.NUMCHF'
         assert req.treename == 'ELECTRONS'
 
     def test_geometry_setup_requirements(self, ece_mapper):

@@ -6,8 +6,25 @@ channels:
   - ga-fdp
 
 dependencies:
-  - python
+  - python==3.12
   - awkward
   - pyyaml
   - pytest
   - numpy
+  - mdsplus
+  - matplotlib
+  - cython
+  - uncertainties
+  - pint
+  - netcdf4
+  - boto3
+  - botocore
+  - pymongo
+  - dnspython
+  - xmltodict
+  - xarray
+  - pyro5
+  - scipy
+  - pyyaml
+  - h5py
+  - conda-build
