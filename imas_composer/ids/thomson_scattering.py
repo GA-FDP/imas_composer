@@ -6,6 +6,7 @@ See OMAS: omas/machine_mappings/d3d.py::thomson_scattering_data
 
 from typing import Dict, List, Tuple
 import numpy as np
+import awkward as ak
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 
@@ -117,8 +118,9 @@ class ThomsonScatteringMapper:
         self._add_measurement_specs('t_e', 'TEMP')
     
     def _add_measurement_specs(self, measurement: str, mds_quantity: str):
-        """Add specs for a measurement (both .time and .data)"""
-        
+        """Add specs for a measurement (time, data, and data_error_upper)"""
+
+        # Time array (shared between data and error)
         self.specs[f"thomson_scattering.channel.{measurement}.time"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             depends_on=["thomson_scattering._system_availability"],
@@ -126,13 +128,49 @@ class ThomsonScatteringMapper:
             ids_path=f"thomson_scattering.channel.{measurement}.time",
             docs_file=self.DOCS_PATH
         )
-        
+
+        # Direct requirements: fetch measurement data and errors for all systems
+        # Simple approach like OMAS: just fetch DENSITY/TEMP and DENSITY_E/TEMP_E for each system
+        measurement_reqs = []
+        for system in self.SYSTEMS:
+            measurement_reqs.append(
+                Requirement(self._get_system_measurement_path(system, mds_quantity), 0, 'ELECTRONS')
+            )
+            measurement_reqs.append(
+                Requirement(self._get_system_measurement_path(system, f'{mds_quantity}_E'), 0, 'ELECTRONS')
+            )
+
+        # Internal spec: static requirements for measurement data
+        self.specs[f"thomson_scattering._{measurement}_measurements"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=measurement_reqs,
+            ids_path=f"thomson_scattering._{measurement}_measurements",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Synthesized data
         self.specs[f"thomson_scattering.channel.{measurement}.data"] = IDSEntrySpec(
-            stage=RequirementStage.DERIVED,
-            depends_on=["thomson_scattering._system_availability"],
-            derive_requirements=lambda shot, raw, q=mds_quantity: 
-                self._derive_measurement_requirements(shot, raw, q),
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                f"thomson_scattering._{measurement}_measurements",
+                "thomson_scattering._system_availability"
+            ],
+            synthesize=lambda shot, raw, m=measurement, q=mds_quantity:
+                self._synthesize_channel_measurement_data(shot, raw, m, q),
             ids_path=f"thomson_scattering.channel.{measurement}.data",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Synthesized error
+        self.specs[f"thomson_scattering.channel.{measurement}.data_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                f"thomson_scattering._{measurement}_measurements",
+                "thomson_scattering._system_availability"
+            ],
+            synthesize=lambda shot, raw, m=measurement, q=mds_quantity:
+                self._synthesize_channel_measurement_data_error_upper(shot, raw, m, q),
+            ids_path=f"thomson_scattering.channel.{measurement}.data_error_upper",
             docs_file=self.DOCS_PATH
         )
     
@@ -165,20 +203,6 @@ class ThomsonScatteringMapper:
             if self._is_system_active(system, shot, raw_data):
                 requirements.append(
                     Requirement(self._get_system_measurement_path(system, 'TIME'), shot, 'ELECTRONS')
-                )
-        return requirements
-    
-    def _derive_measurement_requirements(self, shot: int, raw_data: dict,
-                                        quantity: str) -> List[Requirement]:
-        """Request measurement data and errors only for active systems"""
-        requirements = []
-        for system in self.SYSTEMS:
-            if self._is_system_active(system, shot, raw_data):
-                requirements.append(
-                    Requirement(self._get_system_measurement_path(system, quantity), shot, 'ELECTRONS')
-                )
-                requirements.append(
-                    Requirement(self._get_system_measurement_path(system, f'{quantity}_E'), shot, 'ELECTRONS')
                 )
         return requirements
     
@@ -273,6 +297,86 @@ class ThomsonScatteringMapper:
             positions.extend(coord_data)
 
         return np.array(positions)
+
+    def _synthesize_channel_measurement_data(self, shot: int, raw_data: dict,
+                                             measurement: str, quantity: str) -> ak.Array:
+        """
+        Synthesize measurement data across all active systems.
+
+        Implements thomson_scattering.channel.{n_e|t_e}.data
+
+        Args:
+            shot: Shot number
+            raw_data: Raw MDS+ data
+            measurement: IMAS measurement name (e.g., 'n_e', 't_e')
+            quantity: MDS+ quantity name (e.g., 'DENSITY', 'TEMP')
+
+        Returns:
+            Awkward array with ragged measurement data per channel
+        """
+        all_data = []
+
+        for system in self.SYSTEMS:
+            if not self._is_system_active(system, shot, raw_data):
+                continue
+
+            data_key = Requirement(
+                self._get_system_measurement_path(system, quantity), shot, 'ELECTRONS'
+            ).as_key()
+
+            # Get data for this system (shape: n_channels_this_system, n_time)
+            system_data = raw_data[data_key]
+
+            # Append each channel
+            if system_data.ndim == 1:
+                # Single channel system
+                all_data.append(system_data)
+            else:
+                # Multiple channels - add each channel (ragged time bases)
+                for channel_data in system_data:
+                    all_data.append(channel_data)
+
+        return ak.Array(all_data)
+
+    def _synthesize_channel_measurement_data_error_upper(self, shot: int, raw_data: dict,
+                                                         measurement: str, quantity: str) -> ak.Array:
+        """
+        Synthesize measurement upper uncertainties across all active systems.
+
+        Implements thomson_scattering.channel.{n_e|t_e}.data_error_upper
+
+        Args:
+            shot: Shot number
+            raw_data: Raw MDS+ data
+            measurement: IMAS measurement name (e.g., 'n_e', 't_e')
+            quantity: MDS+ quantity name (e.g., 'DENSITY', 'TEMP')
+
+        Returns:
+            Awkward array with ragged uncertainty data per channel
+        """
+        all_errors = []
+
+        for system in self.SYSTEMS:
+            if not self._is_system_active(system, shot, raw_data):
+                continue
+
+            error_key = Requirement(
+                self._get_system_measurement_path(system, f'{quantity}_E'), shot, 'ELECTRONS'
+            ).as_key()
+
+            # Get error for this system (shape: n_channels_this_system, n_time)
+            system_error = raw_data[error_key]
+
+            # Append each channel
+            if system_error.ndim == 1:
+                # Single channel system
+                all_errors.append(system_error)
+            else:
+                # Multiple channels - add each channel (ragged time bases)
+                for channel_error in system_error:
+                    all_errors.append(channel_error)
+
+        return ak.Array(all_errors)
     
     # Helper functions
     

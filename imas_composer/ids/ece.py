@@ -191,8 +191,16 @@ class ElectronCyclotronEmissionMapper:
         self.specs["ece.channel.t_e.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._temperature_data"],
-            synthesize=self._synthesize_channel_t_e,
+            synthesize=self._synthesize_channel_t_e_data,
             ids_path="ece.channel.t_e.data",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["ece.channel.t_e.data_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["ece._temperature_data"],
+            synthesize=self._synthesize_channel_t_e_data_error_upper,
+            ids_path="ece.channel.t_e.data_error_upper",
             docs_file=self.DOCS_PATH
         )
     
@@ -245,7 +253,9 @@ class ElectronCyclotronEmissionMapper:
     
     def _synthesize_channel_frequency(self, shot: int, raw_data: dict) -> np.ndarray:
         freq_key = Requirement(f'{self.setup_node}FREQ', shot, 'ELECTRONS').as_key()
-        freq_hz = raw_data[freq_key] * 1e9
+        # Convert to float64 before multiplication to preserve precision at ~1e11 Hz
+        freq_ghz = np.asarray(raw_data[freq_key], dtype=np.float64)
+        freq_hz = freq_ghz * 1e9
         time_key = Requirement(f"dim_of({self.tece_node}01)", shot, 'ELECTRONS').as_key()
         n_time = len(raw_data[time_key])
         return np.tile(freq_hz[:, np.newaxis], (1, n_time))
@@ -254,21 +264,43 @@ class ElectronCyclotronEmissionMapper:
         bw_key = Requirement(f'{self.setup_node}FLTRWID', shot, 'ELECTRONS').as_key()
         return raw_data[bw_key] * 1e9
     
-    def _synthesize_channel_t_e(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _synthesize_channel_t_e_data(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Synthesize electron temperature data (convert keV to eV).
+
+        Returns array of shape (n_channels, n_time).
+        """
         n_channels = self._get_numch(shot, raw_data)
         temps_ev = []
-        uncertainties = []
-        
+
         for ich in range(1, n_channels + 1):
             temp_key = Requirement(f'{self.tece_node}{ich:02d}', shot, 'ELECTRONS').as_key()
             t_kev = raw_data[temp_key]
-            t_ev = t_kev * 1e3
-            sigma_ev = np.sqrt(np.abs(t_kev * 1e3)) + 70 * np.abs(t_kev)
+            t_ev = t_kev * 1e3  # Convert keV to eV
             temps_ev.append(t_ev)
-            uncertainties.append(sigma_ev)
-        
-        # TODO: Combine with uncertainties according to awkward array schema
+
         return np.array(temps_ev)
+
+    def _synthesize_channel_t_e_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Synthesize electron temperature upper uncertainties (ece.channel.t_e.data_error_upper).
+
+        Uncertainty model: 7% calibration error + Poisson uncertainty
+        Returns array of shape (n_channels, n_time) in eV.
+        """
+        n_channels = self._get_numch(shot, raw_data)
+        uncertainties = []
+
+        for ich in range(1, n_channels + 1):
+            temp_key = Requirement(f'{self.tece_node}{ich:02d}', shot, 'ELECTRONS').as_key()
+            t_kev = raw_data[temp_key]
+
+            # Uncertainty in eV: sqrt(T[eV]) + 7% calibration error
+            # Note: sqrt operates on eV, so convert first
+            sigma_ev = np.sqrt(np.abs(t_kev * 1e3)) + 70 * np.abs(t_kev)
+            uncertainties.append(sigma_ev)
+
+        return np.array(uncertainties)
     
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         return self.specs

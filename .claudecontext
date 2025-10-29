@@ -29,3 +29,64 @@
 - Background process any data-fetching operations
 
 **If the user asks you to run tests**: Politely remind them of this policy and ask for explicit confirmation that the specific test run does not access restricted data.
+
+## OMAS Usage Patterns
+
+### Fetching all data for a single IDS
+To fetch everything OMAS knows how to map for a single IDS, use the glob pattern syntax:
+
+```python
+from omas import ODS
+from omas.omas_machine import machine_to_omas
+
+ods = ODS()
+machine_to_omas(ods, 'd3d', shot_number, 'ece.*')  # For ECE IDS
+machine_to_omas(ods, 'd3d', shot_number, 'thomson_scattering.*')  # For Thomson IDS
+```
+
+This pattern works for any IDS - just use `'<ids_name>.*'` to fetch all mapped data for that IDS.
+
+### Uncertainty Handling in OMAS
+While d3d.py stores `<field>.data` as `unumpy.uarray(nominal, error)` internally, when the data is accessed from the ODS it becomes a normal numpy array with the error accessible separately:
+
+- `ods['ids']['channel'][i]['field']['data']` - returns nominal values as numpy array
+- `ods['ids']['channel'][i]['field']['data_error_upper']` - returns uncertainties as numpy array
+
+**Important**: When looking at d3d.py implementation, ignore the `unumpy.uarray()` calls. Just implement:
+- `<field>.data` - nominal values
+- `<field>.data_error_upper` - uncertainties
+
+OMAS automatically handles the conversion from unumpy to separate arrays.
+
+## Python Environment
+
+The user manages the Python environment and dependencies. Assume all standard scientific Python packages are available:
+- numpy
+- awkward (awkward array library for ragged/nested data)
+- pytest and pytest plugins
+- All packages listed in requirements files
+
+Do not check for or worry about installing dependencies - focus on implementation.
+
+## OMAS Reference Files for Debugging
+
+Each IDS mapper has a corresponding `*_omas_reference.py` file containing the OMAS implementation:
+- `imas_composer/ids/ece_omas_reference.py` - OMAS electron_cyclotron_emission_data implementation
+- `imas_composer/ids/thomson_scattering_omas_reference.py` - OMAS thomson_scattering_data implementation
+
+**IMPORTANT: When debugging or stuck on a mapper implementation:**
+1. **Read the corresponding OMAS reference file first**
+2. Compare the OMAS approach (single query dict, all data upfront) with your implementation
+3. Check if you're matching the OMAS pattern for static vs dynamic data fetching
+4. Verify your MDS+ paths match the OMAS paths exactly
+
+**Common patterns from OMAS:**
+- Static data (known paths): OMAS puts in single `query` dict → use DIRECT stage in imas_composer
+- Dynamic data (depends on earlier fetch): OMAS fetches in sequence → use DERIVED stage in imas_composer
+- Unit conversions: Match OMAS exactly (e.g., TIME / 1e3, FREQ * 1e9, PHI * pi/180)
+
+**When you get lost in your own code:**
+- Stop tracing dependencies in your head
+- Open the OMAS reference file
+- Compare line-by-line: "What does OMAS fetch?" vs "What am I fetching?"
+- Ask: "Is this a static query dict (DIRECT) or does it depend on earlier data (DERIVED)?"
