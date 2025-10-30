@@ -1,0 +1,17 @@
+# Thomson Scattering Test Configuration
+#
+# Customizes test behavior for Thomson Scattering IDS fields
+
+# Fields with special test requirements
+field_exceptions:
+  # Hardware map uses calibration shot, not requested shot
+  thomson_scattering._hwmap:
+    allow_different_shot: true
+    reason: "Uses calibration shot from calib_nums, not requested shot"
+
+# Requirement validation rules
+requirement_validation:
+  # Fields that are allowed to have requirements with different shot numbers
+  # This applies to all requirements for these fields
+  allow_different_shot:
+    - thomson_scattering._hwmap

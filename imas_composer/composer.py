@@ -112,10 +112,9 @@ class ImasComposer:
                 f"Available: {list(mapper.specs.keys())}"
             )
 
-        spec = mapper.specs[ids_path]
-
         # Collect all requirements needed for this path
-        all_requirements = self._collect_requirements(mapper, ids_path, shot)
+        # Use _collect_requirements_with_data to handle DERIVED stages
+        all_requirements = self._collect_requirements_with_data(mapper, ids_path, shot, raw_data)
 
         # Filter out requirements we already have
         missing_requirements = [
@@ -127,53 +126,6 @@ class ImasComposer:
         fully_resolved = len(missing_requirements) == 0
 
         return fully_resolved, missing_requirements
-
-    def _collect_requirements(
-        self,
-        mapper,
-        ids_path: str,
-        shot: int
-    ) -> List[Requirement]:
-        """
-        Recursively collect all requirements for an IDS path.
-
-        Handles dependency chain: DIRECT → DERIVED → COMPUTED
-        """
-        requirements = []
-        visited = set()
-        to_process = [ids_path]
-
-        while to_process:
-            current_path = to_process.pop(0)
-
-            if current_path in visited:
-                continue
-            visited.add(current_path)
-
-            if current_path not in mapper.specs:
-                continue
-
-            spec = mapper.specs[current_path]
-
-            # Add dependencies to process list
-            if spec.depends_on:
-                to_process.extend(spec.depends_on)
-
-            # Collect requirements based on stage
-            if spec.stage == RequirementStage.DIRECT:
-                # DIRECT: static requirements, just update shot number
-                for req in spec.static_requirements:
-                    requirements.append(Requirement(req.mds_path, shot, req.treename))
-
-            elif spec.stage == RequirementStage.DERIVED:
-                # DERIVED: need to call derive_requirements
-                # This is tricky - we need the dependency data to derive requirements
-                # For now, we'll mark this as a placeholder that needs resolution
-                pass  # Handled in resolve() method with raw_data
-
-            # COMPUTED stage doesn't add requirements directly
-
-        return requirements
 
     def _collect_requirements_with_data(
         self,

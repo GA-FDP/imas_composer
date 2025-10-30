@@ -24,6 +24,33 @@ REFERENCE_SHOT = 200000
 # YAML Configuration Utilities
 # ============================================================================
 
+def load_test_config(ids_name):
+    """
+    Load test configuration for an IDS.
+
+    Args:
+        ids_name: IDS identifier (e.g., 'ece', 'thomson_scattering')
+
+    Returns:
+        dict: Test configuration with validation rules and exceptions
+    """
+    config_path = Path(__file__).parent / f'test_config_{ids_name}.yaml'
+
+    if not config_path.exists():
+        # Return default config if no custom config exists
+        return {
+            'field_exceptions': {},
+            'requirement_validation': {
+                'allow_different_shot': []
+            }
+        }
+
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    return config
+
+
 def load_ids_fields(ids_name):
     """
     Load field list from IDS YAML configuration file.
@@ -160,11 +187,10 @@ def get_omas_value(omas_data, ids_path):
         channel_idx = path_parts.index('channel')
         prefix = path_parts[:channel_idx]
         suffix = path_parts[channel_idx + 1:]  # Skip 'channel'
-
-        # Navigate to channel array
         value = omas_data[ids_name]
-        for key in prefix:
-            value = value[key]
+        # Navigate to channel array
+        if len(prefix) > 0:
+            value = value[prefix]
 
         # Get channel array
         channels = value['channel']
@@ -172,17 +198,12 @@ def get_omas_value(omas_data, ids_path):
         # Extract field from each channel
         result = []
         for ch in channels:
-            ch_value = ch
-            for key in suffix:
-                ch_value = ch_value[key]
-            result.append(ch_value)
+            result.append(channels[ch][suffix])
 
         return result
 
     # For non-channel fields, navigate directly
-    value = omas_data[ids_name]
-    for key in path_parts:
-        value = value[key]
+    value = omas_data[ids_name][path_parts]
 
     return value
 
@@ -267,3 +288,142 @@ def omas_data():
         return cache[ids_name]
 
     return _fetch_omas_data
+
+
+# ============================================================================
+# Generic Test Functions
+# ============================================================================
+
+def test_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_steps=10):
+    """
+    Generic test function for requirement resolution.
+
+    Iteratively resolves requirements using OMAS mdsvalue to fetch raw MDSplus data,
+    verifying that full resolution is achieved and tracking resolution depth.
+
+    Args:
+        ids_path: IDS path to test (e.g., 'ece.channel.t_e.data')
+        composer: ImasComposer instance
+        shot: Shot number (defaults to REFERENCE_SHOT)
+        max_steps: Maximum resolution iterations (defaults to 10)
+
+    Returns:
+        resolution_steps: Number of steps needed to fully resolve
+    """
+    # Load test configuration for this IDS
+    ids_name = ids_path.split('.')[0]
+    test_config = load_test_config(ids_name)
+    allow_different_shot = test_config['requirement_validation']['allow_different_shot']
+
+    raw_data = {}
+    resolution_steps = 0
+
+    # Iteratively resolve requirements
+    for step in range(max_steps):
+        fully_resolved, requirements = composer.resolve(ids_path, shot, raw_data)
+
+        if fully_resolved:
+            resolution_steps = step
+            break
+
+        # Requirements should be non-empty if not fully resolved
+        assert len(requirements) > 0, f"{ids_path} not resolved but no requirements returned"
+
+        # Validate requirement structure
+        for req in requirements:
+            assert hasattr(req, 'mds_path'), "Requirement must have mds_path"
+            assert hasattr(req, 'shot'), "Requirement must have shot"
+            assert hasattr(req, 'treename'), "Requirement must have treename"
+
+            # Track which dependency path this requirement came from
+            # by checking which unresolved dependencies could have generated it
+            current_dep = None
+            mapper, _ = composer._get_mapper_for_path(ids_path)
+            for dep_path in _get_all_dependencies(mapper, ids_path):
+                if dep_path in allow_different_shot:
+                    current_dep = dep_path
+                    break
+
+            # Check shot number (unless this dependency allows different shots)
+            if current_dep not in allow_different_shot:
+                assert req.shot == shot, (
+                    f"Requirement shot must match requested shot. "
+                    f"Got {req.shot}, expected {shot}. "
+                    f"If this is expected (e.g., calibration data), add '{current_dep or ids_path}' "
+                    f"to allow_different_shot in test_config_{ids_name}.yaml"
+                )
+
+        # Fetch data from MDSplus via OMAS mdsvalue
+        for req in requirements:
+            try:
+                mds = mdsvalue('d3d', req.treename, req.shot, req.mds_path)
+                value = mds.raw()
+                # IMPORTANT: Use tuple key (mds_path, shot, treename) to match Requirement.as_key()
+                raw_data[(req.mds_path, req.shot, req.treename)] = value
+            except Exception as e:
+                pytest.fail(f"Failed to fetch {req.mds_path} from {req.treename}: {e}")
+
+    # Should achieve full resolution within max_steps
+    assert fully_resolved, f"{ids_path} could not be fully resolved in {max_steps} steps"
+
+    return resolution_steps
+
+
+def _get_all_dependencies(mapper, ids_path):
+    """
+    Get all dependency paths for an IDS path (recursive).
+
+    Args:
+        mapper: IDS mapper instance
+        ids_path: IDS path to analyze
+
+    Returns:
+        set: All dependency paths (direct and transitive)
+    """
+    deps = set()
+    to_process = [ids_path]
+    visited = set()
+
+    while to_process:
+        current = to_process.pop(0)
+        if current in visited or current not in mapper.specs:
+            continue
+        visited.add(current)
+
+        spec = mapper.specs[current]
+        if spec.depends_on:
+            for dep in spec.depends_on:
+                deps.add(dep)
+                to_process.append(dep)
+
+    return deps
+
+
+def test_composition_against_omas(ids_path, composer, omas_data, ids_name):
+    """
+    Generic test function for composition validation against OMAS.
+
+    Compares imas_composer output with OMAS reference implementation.
+
+    Args:
+        ids_path: IDS path to test (e.g., 'ece.channel.t_e.data')
+        composer: ImasComposer instance
+        omas_data: OMAS data factory fixture
+        ids_name: IDS name (e.g., 'ece', 'thomson_scattering')
+    """
+    # Compose using imas_composer
+    composer_value = resolve_and_compose(composer, ids_path)
+
+    # Get OMAS value
+    omas_value = get_omas_value(omas_data(ids_name), ids_path)
+
+    # Compare based on type
+    if isinstance(omas_value, list):
+        # Channel field - compare each channel
+        assert len(composer_value) == len(omas_value), f"{ids_path}: length mismatch"
+
+        for i in range(len(omas_value)):
+            compare_values(composer_value[i], omas_value[i], f"{ids_path}[{i}]")
+    else:
+        # Scalar field - compare directly
+        compare_values(composer_value, omas_value, ids_path)

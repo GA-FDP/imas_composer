@@ -56,24 +56,48 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
         
-        self.specs["ece._geometry_setup"] = IDSEntrySpec(
+        self.specs["ece._ecephi"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
                 Requirement(f'{self.setup_node}ECEPHI', 0, 'ELECTRONS'),
+            ],
+            ids_path="ece._ecephi",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["ece._ecetheta"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
                 Requirement(f'{self.setup_node}ECETHETA', 0, 'ELECTRONS'),
+            ],
+            ids_path="ece._ecetheta",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["ece._ecezh"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
                 Requirement(f'{self.setup_node}ECEZH', 0, 'ELECTRONS'),
             ],
-            ids_path="ece._geometry_setup",
+            ids_path="ece._ecezh",
             docs_file=self.DOCS_PATH
         )
         
-        self.specs["ece._frequency_setup"] = IDSEntrySpec(
+        self.specs["ece._freq"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
                 Requirement(f'{self.setup_node}FREQ', 0, 'ELECTRONS'),
+            ],
+            ids_path="ece._freq",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["ece._fltrwid"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
                 Requirement(f'{self.setup_node}FLTRWID', 0, 'ELECTRONS'),
             ],
-            ids_path="ece._frequency_setup",
+            ids_path="ece._fltrwid",
             docs_file=self.DOCS_PATH
         )
         
@@ -114,7 +138,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
 
         self.specs["ece.line_of_sight.first_point.phi"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ece._geometry_setup"],
+            depends_on=["ece._ecephi"],
             compose=self._compose_first_point_phi,
             ids_path="ece.line_of_sight.first_point.phi",
             docs_file=self.DOCS_PATH
@@ -122,7 +146,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
 
         self.specs["ece.line_of_sight.first_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ece._geometry_setup"],
+            depends_on=["ece._ecezh"],
             compose=self._compose_first_point_z,
             ids_path="ece.line_of_sight.first_point.z",
             docs_file=self.DOCS_PATH
@@ -138,15 +162,15 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         
         self.specs["ece.line_of_sight.second_point.phi"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ece._geometry_setup"],
+            depends_on=["ece._ecephi"],
             compose=self._compose_second_point_phi,
             ids_path="ece.line_of_sight.second_point.phi",
             docs_file=self.DOCS_PATH
         )
-        
+
         self.specs["ece.line_of_sight.second_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ece._geometry_setup"],
+            depends_on=["ece._ecezh", "ece._ecetheta"],
             compose=self._compose_second_point_z,
             ids_path="ece.line_of_sight.second_point.z",
             docs_file=self.DOCS_PATH
@@ -179,15 +203,15 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         
         self.specs["ece.channel.frequency.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ece._frequency_setup", "ece._time_base", "ece._numch"],
+            depends_on=["ece._freq", "ece._time_base", "ece._numch"],
             compose=self._compose_channel_frequency,
             ids_path="ece.channel.frequency.data",
             docs_file=self.DOCS_PATH
         )
-        
+
         self.specs["ece.channel.if_bandwidth"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ece._frequency_setup", "ece._numch"],
+            depends_on=["ece._fltrwid", "ece._numch"],
             compose=self._compose_channel_if_bandwidth,
             ids_path="ece.channel.if_bandwidth",
             docs_file=self.DOCS_PATH

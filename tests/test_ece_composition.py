@@ -5,27 +5,12 @@ Single parametric test that verifies compose() matches OMAS for all ECE fields.
 """
 
 import pytest
-from conftest import resolve_and_compose, get_omas_value, compare_values, load_ids_fields
+from conftest import load_ids_fields, test_composition_against_omas
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_mdsplus, pytest.mark.omas_validation]
 
 
 @pytest.mark.parametrize('ids_path', load_ids_fields('ece'))
-def test_composition_matches_omas(ids_path, composer, omas_ece_data_cached):
+def test_composition_matches_omas(ids_path, composer, omas_data):
     """Test that composed data matches OMAS for each ECE field."""
-    # Compose using imas_composer
-    composer_value = resolve_and_compose(composer, ids_path)
-
-    # Get OMAS value
-    omas_value = get_omas_value(omas_ece_data_cached, ids_path)
-
-    # Compare based on type
-    if isinstance(omas_value, list):
-        # Channel field - compare each channel
-        assert len(composer_value) == len(omas_value), f"{ids_path}: length mismatch"
-
-        for i in range(len(omas_value)):
-            compare_values(composer_value[i], omas_value[i], f"{ids_path}[{i}]")
-    else:
-        # Scalar field - compare directly
-        compare_values(composer_value, omas_value, ids_path)
+    test_composition_against_omas(ids_path, composer, omas_data, 'ece')

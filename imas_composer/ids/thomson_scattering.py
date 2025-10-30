@@ -65,10 +65,37 @@ class ThomsonScatteringMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
         
+        # Split position requirements by coordinate to avoid unnecessary coupling
+        self.specs["thomson_scattering._position_r"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=["thomson_scattering._calib_nums"],
+            derive_requirements=lambda shot, raw: self._derive_position_requirements(shot, raw, 'R'),
+            ids_path="thomson_scattering._position_r",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["thomson_scattering._position_z"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=["thomson_scattering._calib_nums"],
+            derive_requirements=lambda shot, raw: self._derive_position_requirements(shot, raw, 'Z'),
+            ids_path="thomson_scattering._position_z",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["thomson_scattering._position_phi"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=["thomson_scattering._calib_nums"],
+            derive_requirements=lambda shot, raw: self._derive_position_requirements(shot, raw, 'PHI'),
+            ids_path="thomson_scattering._position_phi",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Keep _system_availability for fields that need to know which systems are active
+        # but don't need position data (e.g., channel.name, channel.identifier)
         self.specs["thomson_scattering._system_availability"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             depends_on=["thomson_scattering._calib_nums"],
-            derive_requirements=self._derive_system_position_requirements,
+            derive_requirements=lambda shot, raw: self._derive_position_requirements(shot, raw, 'R'),
             ids_path="thomson_scattering._system_availability",
             docs_file=self.DOCS_PATH
         )
@@ -96,7 +123,7 @@ class ThomsonScatteringMapper(IDSMapper):
         # Position coordinates - each independently resolvable
         self.specs["thomson_scattering.channel.position.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["thomson_scattering._system_availability"],
+            depends_on=["thomson_scattering._position_r"],
             compose=self._compose_position_r,
             ids_path="thomson_scattering.channel.position.r",
             docs_file=self.DOCS_PATH
@@ -104,7 +131,7 @@ class ThomsonScatteringMapper(IDSMapper):
 
         self.specs["thomson_scattering.channel.position.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["thomson_scattering._system_availability"],
+            depends_on=["thomson_scattering._position_z"],
             compose=self._compose_position_z,
             ids_path="thomson_scattering.channel.position.z",
             docs_file=self.DOCS_PATH
@@ -112,7 +139,7 @@ class ThomsonScatteringMapper(IDSMapper):
 
         self.specs["thomson_scattering.channel.position.phi"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["thomson_scattering._system_availability"],
+            depends_on=["thomson_scattering._position_phi"],
             compose=self._compose_position_phi,
             ids_path="thomson_scattering.channel.position.phi",
             docs_file=self.DOCS_PATH
@@ -125,25 +152,48 @@ class ThomsonScatteringMapper(IDSMapper):
     def _add_measurement_specs(self, measurement: str, mds_quantity: str):
         """Add specs for a measurement (time, data, and data_error_upper)"""
 
-        # Direct requirements: fetch measurement data, errors, and time for all systems
-        # See OMAS d3d.py:806-807 - simple static query dict
-        measurement_reqs = []
+        # Split requirements into separate specs to avoid unnecessary bundling
+        # Each field should only depend on exactly what it needs
+
+        # Time requirements: only TIME data from each system
+        time_reqs = []
         for system in self.SYSTEMS:
-            measurement_reqs.append(
-                Requirement(self._get_system_measurement_path(system, mds_quantity), 0, 'ELECTRONS')
-            )
-            measurement_reqs.append(
-                Requirement(self._get_system_measurement_path(system, f'{mds_quantity}_E'), 0, 'ELECTRONS')
-            )
-            measurement_reqs.append(
+            time_reqs.append(
                 Requirement(self._get_system_measurement_path(system, 'TIME'), 0, 'ELECTRONS')
             )
 
-        # Internal spec: static requirements for measurement data
-        self.specs[f"thomson_scattering._{measurement}_measurements"] = IDSEntrySpec(
+        self.specs[f"thomson_scattering._{measurement}_time"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=measurement_reqs,
-            ids_path=f"thomson_scattering._{measurement}_measurements",
+            static_requirements=time_reqs,
+            ids_path=f"thomson_scattering._{measurement}_time",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Data requirements: only measurement data from each system
+        data_reqs = []
+        for system in self.SYSTEMS:
+            data_reqs.append(
+                Requirement(self._get_system_measurement_path(system, mds_quantity), 0, 'ELECTRONS')
+            )
+
+        self.specs[f"thomson_scattering._{measurement}_data"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=data_reqs,
+            ids_path=f"thomson_scattering._{measurement}_data",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Error requirements: only error data from each system
+        error_reqs = []
+        for system in self.SYSTEMS:
+            error_reqs.append(
+                Requirement(self._get_system_measurement_path(system, f'{mds_quantity}_E'), 0, 'ELECTRONS')
+            )
+
+        self.specs[f"thomson_scattering._{measurement}_error"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=error_reqs,
+            ids_path=f"thomson_scattering._{measurement}_error",
             docs_file=self.DOCS_PATH
         )
 
@@ -152,7 +202,7 @@ class ThomsonScatteringMapper(IDSMapper):
         self.specs[f"thomson_scattering.channel.{measurement}.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
-                f"thomson_scattering._{measurement}_measurements",
+                f"thomson_scattering._{measurement}_time",
                 "thomson_scattering._system_availability"
             ],
             compose=lambda shot, raw: self._compose_channel_time(shot, raw),
@@ -164,7 +214,7 @@ class ThomsonScatteringMapper(IDSMapper):
         self.specs[f"thomson_scattering.channel.{measurement}.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
-                f"thomson_scattering._{measurement}_measurements",
+                f"thomson_scattering._{measurement}_data",
                 "thomson_scattering._system_availability"
             ],
             compose=lambda shot, raw, m=measurement, q=mds_quantity:
@@ -177,7 +227,7 @@ class ThomsonScatteringMapper(IDSMapper):
         self.specs[f"thomson_scattering.channel.{measurement}.data_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
-                f"thomson_scattering._{measurement}_measurements",
+                f"thomson_scattering._{measurement}_error",
                 "thomson_scattering._system_availability"
             ],
             compose=lambda shot, raw, m=measurement, q=mds_quantity:
@@ -198,64 +248,71 @@ class ThomsonScatteringMapper(IDSMapper):
             for system in self.SYSTEMS
         ]
     
-    def _derive_system_position_requirements(self, shot: int, raw_data: dict) -> List[Requirement]:
-        """Request position data for all systems"""
+    def _derive_position_requirements(self, shot: int, raw_data: dict, coordinate: str) -> List[Requirement]:
+        """Request position data for a specific coordinate across all systems"""
         requirements = []
         for system in self.SYSTEMS:
-            for quantity in ['R', 'Z', 'PHI']:
-                requirements.append(
-                    Requirement(self._get_system_coordinate_path(system, quantity), shot, 'ELECTRONS')
-                )
+            requirements.append(
+                Requirement(self._get_system_coordinate_path(system, coordinate), shot, 'ELECTRONS')
+            )
         return requirements
-    
-    def _derive_time_requirements(self, shot: int, raw_data: dict) -> List[Requirement]:
-        """Request time base only for active systems"""
-        requirements = []
-        for system in self.SYSTEMS:
-            if self._is_system_active(system, shot, raw_data):
-                requirements.append(
-                    Requirement(self._get_system_measurement_path(system, 'TIME'), shot, 'ELECTRONS')
-                )
-        return requirements
-    
+
     # Synthesis functions
     
     def _compose_channel_name(self, shot: int, raw_data: dict) -> np.ndarray:
         """Generate channel names: TS_{system}_r{lens}_{channel}"""
         names = []
-        
+
         for system in self.SYSTEMS:
-            if not self._is_system_active(system, shot, raw_data):
+            # Check if R coordinate exists (indicates active system)
+            r_key = Requirement(
+                self._get_system_coordinate_path(system, 'R'), shot, 'ELECTRONS'
+            ).as_key()
+
+            if r_key not in raw_data:
                 continue
-            
+
+            r_data = raw_data[r_key]
+            if isinstance(r_data, Exception) or len(r_data) == 0:
+                continue
+
             nc = self._get_system_channel_count(system, shot, raw_data)
             hwmap_key = self._get_hwmap_key(system, shot, raw_data)
             ints = raw_data[hwmap_key]
-            
+
             if len(np.shape(ints)) < 2:
                 ints = ints.reshape(1, -1)
             lenses = ints[:, 2]
-            
+
             for j in range(nc):
                 lens_idx = min(j, len(lenses) - 1)
                 names.append(f'TS_{system.lower()}_r{lenses[lens_idx]:+0d}_{j}')
-        
+
         return np.array(names)
     
     def _compose_channel_identifier(self, shot: int, raw_data: dict) -> np.ndarray:
         """Generate short identifiers: {T|D|C}{channel:02d}"""
         identifiers = []
-        
+
         for system in self.SYSTEMS:
-            if not self._is_system_active(system, shot, raw_data):
+            # Check if R coordinate exists (indicates active system)
+            r_key = Requirement(
+                self._get_system_coordinate_path(system, 'R'), shot, 'ELECTRONS'
+            ).as_key()
+
+            if r_key not in raw_data:
                 continue
-            
+
+            r_data = raw_data[r_key]
+            if isinstance(r_data, Exception) or len(r_data) == 0:
+                continue
+
             nc = self._get_system_channel_count(system, shot, raw_data)
             system_letter = system[0]
-            
+
             for j in range(nc):
                 identifiers.append(f'{system_letter}{j:02d}')
-        
+
         return np.array(identifiers)
     
     def _compose_position_r(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -263,14 +320,15 @@ class ThomsonScatteringMapper(IDSMapper):
         positions = []
 
         for system in self.SYSTEMS:
-            if not self._is_system_active(system, shot, raw_data):
-                continue
-
             coord_key = Requirement(
                 self._get_system_coordinate_path(system, 'R'), shot, 'ELECTRONS'
             ).as_key()
-            coord_data = raw_data[coord_key]
-            positions.extend(coord_data)
+
+            # Only extend if data exists and is non-empty
+            if coord_key in raw_data:
+                coord_data = raw_data[coord_key]
+                if len(coord_data) > 0:
+                    positions.extend(coord_data)
 
         return np.array(positions)
 
@@ -279,14 +337,15 @@ class ThomsonScatteringMapper(IDSMapper):
         positions = []
 
         for system in self.SYSTEMS:
-            if not self._is_system_active(system, shot, raw_data):
-                continue
-
             coord_key = Requirement(
                 self._get_system_coordinate_path(system, 'Z'), shot, 'ELECTRONS'
             ).as_key()
-            coord_data = raw_data[coord_key]
-            positions.extend(coord_data)
+
+            # Only extend if data exists and is non-empty
+            if coord_key in raw_data:
+                coord_data = raw_data[coord_key]
+                if len(coord_data) > 0:
+                    positions.extend(coord_data)
 
         return np.array(positions)
 
@@ -295,18 +354,17 @@ class ThomsonScatteringMapper(IDSMapper):
         positions = []
 
         for system in self.SYSTEMS:
-            if not self._is_system_active(system, shot, raw_data):
-                continue
-
             coord_key = Requirement(
                 self._get_system_coordinate_path(system, 'PHI'), shot, 'ELECTRONS'
             ).as_key()
-            coord_data = raw_data[coord_key]
 
-            # Convert to IMAS convention: negative radians
-            coord_data = -coord_data * np.pi / 180.0
-
-            positions.extend(coord_data)
+            # Only extend if data exists and is non-empty
+            if coord_key in raw_data:
+                coord_data = raw_data[coord_key]
+                if len(coord_data) > 0:
+                    # Convert to IMAS convention: negative radians
+                    coord_data = -coord_data * np.pi / 180.0
+                    positions.extend(coord_data)
 
         return np.array(positions)
 
@@ -328,15 +386,18 @@ class ThomsonScatteringMapper(IDSMapper):
         all_time = []
 
         for system in self.SYSTEMS:
-            if not self._is_system_active(system, shot, raw_data):
-                continue
-
             time_key = Requirement(
                 self._get_system_measurement_path(system, 'TIME'), shot, 'ELECTRONS'
             ).as_key()
 
+            # Only process if data exists and is non-empty
+            if time_key not in raw_data:
+                continue
+
             # Get time for this system
             system_time = raw_data[time_key]
+            if len(system_time) == 0:
+                continue
 
             # Convert from microseconds to seconds (OMAS uses / 1e3 for ms)
             system_time = system_time / 1e3
@@ -369,24 +430,27 @@ class ThomsonScatteringMapper(IDSMapper):
         all_data = []
 
         for system in self.SYSTEMS:
-            if not self._is_system_active(system, shot, raw_data):
-                continue
-
             data_key = Requirement(
                 self._get_system_measurement_path(system, quantity), shot, 'ELECTRONS'
             ).as_key()
 
+            # Only process if data exists
+            if data_key not in raw_data:
+                continue
+
             # Get data for this system (shape: n_channels_this_system, n_time)
             system_data = raw_data[data_key]
 
-            # Append each channel
+            # Append each channel (skip if empty)
             if system_data.ndim == 1:
                 # Single channel system
-                all_data.append(system_data)
+                if len(system_data) > 0:
+                    all_data.append(system_data)
             else:
                 # Multiple channels - add each channel (ragged time bases)
                 for channel_data in system_data:
-                    all_data.append(channel_data)
+                    if len(channel_data) > 0:
+                        all_data.append(channel_data)
 
         return ak.Array(all_data)
 
@@ -409,43 +473,31 @@ class ThomsonScatteringMapper(IDSMapper):
         all_errors = []
 
         for system in self.SYSTEMS:
-            if not self._is_system_active(system, shot, raw_data):
-                continue
-
             error_key = Requirement(
                 self._get_system_measurement_path(system, f'{quantity}_E'), shot, 'ELECTRONS'
             ).as_key()
 
+            # Only process if data exists
+            if error_key not in raw_data:
+                continue
+
             # Get error for this system (shape: n_channels_this_system, n_time)
             system_error = raw_data[error_key]
 
-            # Append each channel
+            # Append each channel (skip if empty)
             if system_error.ndim == 1:
                 # Single channel system
-                all_errors.append(system_error)
+                if len(system_error) > 0:
+                    all_errors.append(system_error)
             else:
                 # Multiple channels - add each channel (ragged time bases)
                 for channel_error in system_error:
-                    all_errors.append(channel_error)
+                    if len(channel_error) > 0:
+                        all_errors.append(channel_error)
 
         return ak.Array(all_errors)
     
     # Helper functions
-    
-    def _is_system_active(self, system: str, shot: int, raw_data: dict) -> bool:
-        """Check if a Thomson system has active channels"""
-        r_key = Requirement(
-            self._get_system_coordinate_path(system, 'R'), shot, 'ELECTRONS'
-        ).as_key()
-
-        if r_key not in raw_data:
-            return False
-
-        r_data = raw_data[r_key]
-        if isinstance(r_data, Exception):
-            return False
-
-        return len(r_data) > 0
 
     def _get_system_channel_count(self, system: str, shot: int, raw_data: dict) -> int:
         """Get number of channels in a system"""
