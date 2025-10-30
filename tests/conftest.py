@@ -256,7 +256,7 @@ def compare_values(composer_val, omas_val, label="value"):
 @pytest.fixture(scope='module')
 def composer():
     """Create ImasComposer instance once per module."""
-    return ImasComposer()
+    return ImasComposer(efit_tree='EFIT01')
 
 
 @pytest.fixture(scope='session')
@@ -264,28 +264,42 @@ def omas_data():
     """
     Factory fixture to fetch OMAS data for any IDS.
 
-    Returns a function that takes an IDS name and returns cached OMAS data.
-    Data is cached per IDS to avoid redundant fetches.
+    Returns a function that takes an IDS name and optionally a specific field path.
+    Data is cached per unique (ids_name, ids_path) combination.
 
     Usage:
-        @pytest.fixture(scope='session')
-        def omas_ece(omas_data):
-            return omas_data('ece')
+        # Fetch entire IDS (ECE, Thomson)
+        omas_ece = omas_data('ece')
+
+        # Fetch specific field (Equilibrium - avoids fetching huge 2D grids)
+        omas_eq_time = omas_data('equilibrium', 'equilibrium.time')
 
     Args:
-        ids_name: IDS identifier (e.g., 'ece', 'thomson_scattering')
+        ids_name: IDS identifier (e.g., 'ece', 'thomson_scattering', 'equilibrium')
+        ids_path: Optional specific IDS path to fetch (defaults to '{ids_name}.*')
+                  Special case for equilibrium to avoid fetching all fields.
 
     Returns:
         ODS object with fetched data
     """
     cache = {}
 
-    def _fetch_omas_data(ids_name):
-        if ids_name not in cache:
+    def _fetch_omas_data(ids_name, ids_path=None):
+        # Default to wildcard fetch for non-equilibrium IDS
+        if ids_path is None:
+            ids_path = f'{ids_name}.*'
+
+        # Use (ids_name, ids_path) as cache key to handle partial fetches
+        cache_key = (ids_name, ids_path)
+
+        if cache_key not in cache:
             ods = ODS()
-            machine_to_omas(ods, 'd3d', REFERENCE_SHOT, f'{ids_name}.*')
-            cache[ids_name] = ods
-        return cache[ids_name]
+            # For equilibrium with specific path, fetch only that field
+            # For others, use wildcard
+            machine_to_omas(ods, 'd3d', REFERENCE_SHOT, ids_path, options={'EFIT_tree': 'EFIT01'})
+            cache[cache_key] = ods
+
+        return cache[cache_key]
 
     return _fetch_omas_data
 
@@ -294,9 +308,9 @@ def omas_data():
 # Generic Test Functions
 # ============================================================================
 
-def test_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_steps=10):
+def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_steps=10):
     """
-    Generic test function for requirement resolution.
+    Generic helper function for requirement resolution testing.
 
     Iteratively resolves requirements using OMAS mdsvalue to fetch raw MDSplus data,
     verifying that full resolution is achieved and tracking resolution depth.
@@ -399,9 +413,9 @@ def _get_all_dependencies(mapper, ids_path):
     return deps
 
 
-def test_composition_against_omas(ids_path, composer, omas_data, ids_name):
+def run_composition_against_omas(ids_path, composer, omas_data, ids_name):
     """
-    Generic test function for composition validation against OMAS.
+    Generic helper function for composition validation against OMAS.
 
     Compares imas_composer output with OMAS reference implementation.
 
@@ -415,7 +429,12 @@ def test_composition_against_omas(ids_path, composer, omas_data, ids_name):
     composer_value = resolve_and_compose(composer, ids_path)
 
     # Get OMAS value
-    omas_value = get_omas_value(omas_data(ids_name), ids_path)
+    # For equilibrium, fetch only the specific field to avoid loading entire IDS
+    if ids_name == 'equilibrium':
+        omas_value = get_omas_value(omas_data(ids_name, ids_path), ids_path)
+    else:
+        # For other IDS, fetch entire IDS with wildcard
+        omas_value = get_omas_value(omas_data(ids_name), ids_path)
 
     # Compare based on type
     if isinstance(omas_value, list):

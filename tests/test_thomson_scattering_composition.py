@@ -5,7 +5,7 @@ Single parametric test that verifies compose() matches OMAS for all Thomson fiel
 """
 
 import pytest
-from conftest import load_ids_fields, test_composition_against_omas
+from conftest import load_ids_fields, run_composition_against_omas
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_mdsplus, pytest.mark.omas_validation]
 
@@ -13,4 +13,4 @@ pytestmark = [pytest.mark.integration, pytest.mark.requires_mdsplus, pytest.mark
 @pytest.mark.parametrize('ids_path', load_ids_fields('thomson_scattering'))
 def test_composition_matches_omas(ids_path, composer, omas_data):
     """Test that composed data matches OMAS for each Thomson field."""
-    test_composition_against_omas(ids_path, composer, omas_data, 'thomson_scattering')
+    run_composition_against_omas(ids_path, composer, omas_data, 'thomson_scattering')

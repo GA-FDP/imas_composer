@@ -1,0 +1,28 @@
+# Equilibrium IDS Path Translation Map
+#
+# Maps imas_composer notation to OMAS notation for OMAS validation tests.
+# Only needed for equilibrium due to array notation differences.
+#
+# imas_composer: Uses clean paths (e.g., equilibrium.time_slice.time)
+# OMAS: Uses array markers with .: notation (e.g., equilibrium.time_slice.:.time)
+#
+# This map is ONLY used for fetching OMAS reference data, not in the mapper itself.
+
+# Time arrays
+equilibrium.time: equilibrium.time
+equilibrium.time_slice.time: equilibrium.time_slice.:.time
+
+# Code metadata
+equilibrium.code.name: equilibrium.code.name
+equilibrium.code.version: equilibrium.code.version
+
+# IDS properties
+equilibrium.ids_properties.homogeneous_time: equilibrium.ids_properties.homogeneous_time
+
+# Boundary outline (ragged arrays)
+equilibrium.time_slice.boundary.outline.r: equilibrium.time_slice.:.boundary.outline.r
+equilibrium.time_slice.boundary.outline.z: equilibrium.time_slice.:.boundary.outline.z
+
+# X-points (fixed size arrays)
+equilibrium.time_slice.boundary.x_point.r: equilibrium.time_slice.:.boundary.x_point.:.r
+equilibrium.time_slice.boundary.x_point.z: equilibrium.time_slice.:.boundary.x_point.:.z

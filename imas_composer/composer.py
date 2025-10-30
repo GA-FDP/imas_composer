@@ -8,6 +8,7 @@ from typing import Dict, List, Tuple, Any, Optional
 from .core import Requirement, RequirementStage
 from .ids.ece import ElectronCyclotronEmissionMapper
 from .ids.thomson_scattering import ThomsonScatteringMapper
+from .ids.equilibrium import EquilibriumMapper
 
 
 class ImasComposer:
@@ -31,19 +32,22 @@ class ImasComposer:
         result = composer.compose('ece.channel.t_e.data', 180000, raw_data)
     """
 
-    def __init__(self, device: str = 'd3d'):
+    def __init__(self, device: str = 'd3d', efit_tree: str = 'EFIT01'):
         """
         Initialize ImasComposer.
 
         Args:
             device: Device identifier (currently only 'd3d' supported)
+            efit_tree: EFIT tree to use for equilibrium data (e.g., 'EFIT01', 'EFIT02')
         """
         self.device = device
+        self.efit_tree = efit_tree
         self._mappers = {}
 
         # Register available mappers
         self._register_mapper('ece', ElectronCyclotronEmissionMapper(fast_ece=False))
         self._register_mapper('thomson_scattering', ThomsonScatteringMapper())
+        self._register_mapper('equilibrium', EquilibriumMapper(efit_tree=efit_tree))
 
     def _register_mapper(self, ids_name: str, mapper):
         """Register an IDS mapper."""

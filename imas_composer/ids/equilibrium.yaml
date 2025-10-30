@@ -1,0 +1,33 @@
+# Equilibrium IDS Configuration for DIII-D
+#
+# Based on OMAS mappings in machine_mappings/_efit.json
+# Implements first 10 fields for validation
+
+# Static values (hardcoded, not from MDSplus)
+static_values:
+  ids_properties.homogeneous_time: 1
+  time_slice.boundary.x_point.: 2  # DIII-D has up to 2 X-points
+
+# EFIT tree configuration
+# Note: EFIT01, EFIT02, etc. are different equilibrium reconstructions
+# Default to EFIT01 for now
+default_efit_tree: EFIT01
+
+# Supported fields (first 10 for initial implementation)
+# Note: Uses clean IMAS notation without .: array markers
+fields:
+  - code.name
+  - code.version
+  - ids_properties.homogeneous_time
+  - time
+  - time_slice.time
+  - time_slice.boundary.outline.r
+  - time_slice.boundary.outline.z
+  - time_slice.boundary.x_point.r
+  - time_slice.boundary.x_point.z
+
+# Notes:
+# - time_slice.: notation means array of time slices
+# - Each time slice corresponds to one EFIT time point
+# - boundary.outline is ragged (different number of points per time)
+# - x_point.: has fixed size of 2 (primary and secondary X-point)

@@ -69,7 +69,11 @@ self.specs["_position_z"] = IDSEntrySpec(
 Users interact with `ImasComposer` public API, never with mapper internals.
 
 ```python
+# Basic usage
 composer = ImasComposer()
+
+# With configuration options
+composer = ImasComposer(efit_tree='EFIT01')  # Specify equilibrium tree
 
 # Resolve requirements iteratively
 raw_data = {}
@@ -83,6 +87,23 @@ while True:
 # Compose final data
 result = composer.compose(ids_path, shot, raw_data)
 ```
+
+### Tree/Source Selection Pattern
+
+Some IDS types have multiple data sources (e.g., different equilibrium reconstructions):
+
+**Equilibrium**: Multiple EFIT trees (`EFIT01`, `EFIT02`, etc.)
+```python
+# Use EFIT01 (default)
+composer = ImasComposer()
+
+# Use specific tree
+composer = ImasComposer(efit_tree='EFIT02')
+```
+
+**Pattern**: Tree/source selection happens at `ImasComposer` initialization, not per-field.
+
+**Testing**: Tests use default configuration (e.g., `EFIT01`) for consistency.
 
 ## Test Configuration System
 
@@ -112,6 +133,43 @@ requirement_validation:
 - Document the `reason` in `field_exceptions` for clarity
 
 **Default behavior**: If no config file exists, `load_test_config()` returns empty exceptions and standard validation rules apply
+
+## OMAS Integration Special Cases
+
+### Equilibrium IDS - Field-by-Field Fetching
+
+**Problem**: Equilibrium IDS contains huge 2D grids. Fetching `equilibrium.*` loads thousands of points unnecessarily.
+
+**Solution**: For equilibrium only, fetch each field individually in tests.
+
+```python
+# conftest.py - omas_data fixture supports optional ids_path parameter
+def _fetch_omas_data(ids_name, ids_path=None):
+    # For equilibrium, pass specific field path
+    # For others, use wildcard '{ids_name}.*'
+    if ids_path is None:
+        ids_path = f'{ids_name}.*'
+    machine_to_omas(ods, 'd3d', shot, ids_path, options={'EFIT_tree': 'EFIT01'})
+```
+
+**Usage**:
+```python
+# ECE/Thomson - fetch entire IDS
+omas_ece = omas_data('ece')
+
+# Equilibrium - fetch specific field
+omas_eq_time = omas_data('equilibrium', 'equilibrium.time')
+```
+
+**Implementation**: `run_composition_against_omas` automatically uses field-by-field fetching for equilibrium:
+```python
+if ids_name == 'equilibrium':
+    omas_value = get_omas_value(omas_data(ids_name, ids_path), ids_path)
+else:
+    omas_value = get_omas_value(omas_data(ids_name), ids_path)
+```
+
+**Note**: This is the ONLY IDS that requires field-by-field fetching. All others use wildcard.
 
 ## Test Structure
 
