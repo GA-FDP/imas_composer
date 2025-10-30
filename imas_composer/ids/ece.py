@@ -98,7 +98,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.ids_properties.homogeneous_time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            synthesize=lambda shot, raw: self.static_values['ids_properties.homogeneous_time'],
+            compose=lambda shot, raw: self.static_values['ids_properties.homogeneous_time'],
             ids_path="ece.ids_properties.homogeneous_time",
             docs_file=self.DOCS_PATH
         )
@@ -107,7 +107,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.line_of_sight.first_point.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            synthesize=lambda shot, raw: self.static_values['line_of_sight.first_point.r'],
+            compose=lambda shot, raw: self.static_values['line_of_sight.first_point.r'],
             ids_path="ece.line_of_sight.first_point.r",
             docs_file=self.DOCS_PATH
         )
@@ -115,7 +115,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.line_of_sight.first_point.phi"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._geometry_setup"],
-            synthesize=self._synthesize_first_point_phi,
+            compose=self._compose_first_point_phi,
             ids_path="ece.line_of_sight.first_point.phi",
             docs_file=self.DOCS_PATH
         )
@@ -123,7 +123,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.line_of_sight.first_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._geometry_setup"],
-            synthesize=self._synthesize_first_point_z,
+            compose=self._compose_first_point_z,
             ids_path="ece.line_of_sight.first_point.z",
             docs_file=self.DOCS_PATH
         )
@@ -131,7 +131,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.line_of_sight.second_point.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            synthesize=lambda shot, raw: self.static_values['line_of_sight.second_point.r'],
+            compose=lambda shot, raw: self.static_values['line_of_sight.second_point.r'],
             ids_path="ece.line_of_sight.second_point.r",
             docs_file=self.DOCS_PATH
         )
@@ -139,7 +139,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.line_of_sight.second_point.phi"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._geometry_setup"],
-            synthesize=self._synthesize_second_point_phi,
+            compose=self._compose_second_point_phi,
             ids_path="ece.line_of_sight.second_point.phi",
             docs_file=self.DOCS_PATH
         )
@@ -147,7 +147,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.line_of_sight.second_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._geometry_setup"],
-            synthesize=self._synthesize_second_point_z,
+            compose=self._compose_second_point_z,
             ids_path="ece.line_of_sight.second_point.z",
             docs_file=self.DOCS_PATH
         )
@@ -156,7 +156,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.channel.name"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._numch"],
-            synthesize=self._synthesize_channel_name,
+            compose=self._compose_channel_name,
             ids_path="ece.channel.name",
             docs_file=self.DOCS_PATH
         )
@@ -164,7 +164,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.channel.identifier"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._numch"],
-            synthesize=self._synthesize_channel_identifier,
+            compose=self._compose_channel_identifier,
             ids_path="ece.channel.identifier",
             docs_file=self.DOCS_PATH
         )
@@ -172,7 +172,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.channel.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._time_base", "ece._numch"],
-            synthesize=self._synthesize_channel_time,
+            compose=self._compose_channel_time,
             ids_path="ece.channel.time",
             docs_file=self.DOCS_PATH
         )
@@ -180,7 +180,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.channel.frequency.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._frequency_setup", "ece._time_base", "ece._numch"],
-            synthesize=self._synthesize_channel_frequency,
+            compose=self._compose_channel_frequency,
             ids_path="ece.channel.frequency.data",
             docs_file=self.DOCS_PATH
         )
@@ -188,7 +188,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.channel.if_bandwidth"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._frequency_setup", "ece._numch"],
-            synthesize=self._synthesize_channel_if_bandwidth,
+            compose=self._compose_channel_if_bandwidth,
             ids_path="ece.channel.if_bandwidth",
             docs_file=self.DOCS_PATH
         )
@@ -196,7 +196,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.channel.t_e.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._temperature_data"],
-            synthesize=self._synthesize_channel_t_e_data,
+            compose=self._compose_channel_t_e_data,
             ids_path="ece.channel.t_e.data",
             docs_file=self.DOCS_PATH
         )
@@ -204,7 +204,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.specs["ece.channel.t_e.data_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["ece._temperature_data"],
-            synthesize=self._synthesize_channel_t_e_data_error_upper,
+            compose=self._compose_channel_t_e_data_error_upper,
             ids_path="ece.channel.t_e.data_error_upper",
             docs_file=self.DOCS_PATH
         )
@@ -224,39 +224,39 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         numch_key = Requirement(self._get_numch_path(), shot, 'ELECTRONS').as_key()
         return int(raw_data[numch_key])
     
-    def _synthesize_first_point_phi(self, shot: int, raw_data: dict) -> float:
+    def _compose_first_point_phi(self, shot: int, raw_data: dict) -> float:
         phi_key = Requirement(f'{self.setup_node}ECEPHI', shot, 'ELECTRONS').as_key()
         return np.deg2rad(raw_data[phi_key])
     
-    def _synthesize_first_point_z(self, shot: int, raw_data: dict) -> float:
+    def _compose_first_point_z(self, shot: int, raw_data: dict) -> float:
         z_key = Requirement(f'{self.setup_node}ECEZH', shot, 'ELECTRONS').as_key()
         return raw_data[z_key]
     
-    def _synthesize_second_point_phi(self, shot: int, raw_data: dict) -> float:
-        return self._synthesize_first_point_phi(shot, raw_data)
+    def _compose_second_point_phi(self, shot: int, raw_data: dict) -> float:
+        return self._compose_first_point_phi(shot, raw_data)
     
-    def _synthesize_second_point_z(self, shot: int, raw_data: dict) -> float:
+    def _compose_second_point_z(self, shot: int, raw_data: dict) -> float:
         z_key = Requirement(f'{self.setup_node}ECEZH', shot, 'ELECTRONS').as_key()
         theta_key = Requirement(f'{self.setup_node}ECETHETA', shot, 'ELECTRONS').as_key()
         z_first = raw_data[z_key]
         theta_rad = np.deg2rad(raw_data[theta_key])
         return z_first + np.sin(theta_rad)
     
-    def _synthesize_channel_name(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_channel_name(self, shot: int, raw_data: dict) -> np.ndarray:
         n_channels = self._get_numch(shot, raw_data)
         return np.array([f'ECE{ich}' for ich in range(1, n_channels + 1)])
     
-    def _synthesize_channel_identifier(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_channel_identifier(self, shot: int, raw_data: dict) -> np.ndarray:
         n_channels = self._get_numch(shot, raw_data)
         return np.array([f'{self.tece_node}{ich:02d}' for ich in range(1, n_channels + 1)])
     
-    def _synthesize_channel_time(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_channel_time(self, shot: int, raw_data: dict) -> np.ndarray:
         time_key = Requirement(f"dim_of({self.tece_node}01)", shot, 'ELECTRONS').as_key()
         time_s = raw_data[time_key] * 1e-3
         n_channels = self._get_numch(shot, raw_data)
         return np.tile(time_s, (n_channels, 1))
     
-    def _synthesize_channel_frequency(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_channel_frequency(self, shot: int, raw_data: dict) -> np.ndarray:
         freq_key = Requirement(f'{self.setup_node}FREQ', shot, 'ELECTRONS').as_key()
         # Convert to float64 before multiplication to preserve precision at ~1e11 Hz
         freq_ghz = np.asarray(raw_data[freq_key], dtype=np.float64)
@@ -265,11 +265,11 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         n_time = len(raw_data[time_key])
         return np.tile(freq_hz[:, np.newaxis], (1, n_time))
     
-    def _synthesize_channel_if_bandwidth(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_channel_if_bandwidth(self, shot: int, raw_data: dict) -> np.ndarray:
         bw_key = Requirement(f'{self.setup_node}FLTRWID', shot, 'ELECTRONS').as_key()
         return raw_data[bw_key] * 1e9
     
-    def _synthesize_channel_t_e_data(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_channel_t_e_data(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Synthesize electron temperature data (convert keV to eV).
 
@@ -286,7 +286,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
 
         return np.array(temps_ev)
 
-    def _synthesize_channel_t_e_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_channel_t_e_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Synthesize electron temperature upper uncertainties (ece.channel.t_e.data_error_upper).
 

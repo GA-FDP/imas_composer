@@ -80,7 +80,7 @@ class ThomsonScatteringMapper(IDSMapper):
                 "thomson_scattering._hwmap",
                 "thomson_scattering._system_availability"
             ],
-            synthesize=self._synthesize_channel_name,
+            compose=self._compose_channel_name,
             ids_path="thomson_scattering.channel.name",
             docs_file=self.DOCS_PATH
         )
@@ -88,7 +88,7 @@ class ThomsonScatteringMapper(IDSMapper):
         self.specs["thomson_scattering.channel.identifier"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["thomson_scattering._system_availability"],
-            synthesize=self._synthesize_channel_identifier,
+            compose=self._compose_channel_identifier,
             ids_path="thomson_scattering.channel.identifier",
             docs_file=self.DOCS_PATH
         )
@@ -97,7 +97,7 @@ class ThomsonScatteringMapper(IDSMapper):
         self.specs["thomson_scattering.channel.position.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["thomson_scattering._system_availability"],
-            synthesize=self._synthesize_position_r,
+            compose=self._compose_position_r,
             ids_path="thomson_scattering.channel.position.r",
             docs_file=self.DOCS_PATH
         )
@@ -105,7 +105,7 @@ class ThomsonScatteringMapper(IDSMapper):
         self.specs["thomson_scattering.channel.position.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["thomson_scattering._system_availability"],
-            synthesize=self._synthesize_position_z,
+            compose=self._compose_position_z,
             ids_path="thomson_scattering.channel.position.z",
             docs_file=self.DOCS_PATH
         )
@@ -113,7 +113,7 @@ class ThomsonScatteringMapper(IDSMapper):
         self.specs["thomson_scattering.channel.position.phi"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["thomson_scattering._system_availability"],
-            synthesize=self._synthesize_position_phi,
+            compose=self._compose_position_phi,
             ids_path="thomson_scattering.channel.position.phi",
             docs_file=self.DOCS_PATH
         )
@@ -155,7 +155,7 @@ class ThomsonScatteringMapper(IDSMapper):
                 f"thomson_scattering._{measurement}_measurements",
                 "thomson_scattering._system_availability"
             ],
-            synthesize=lambda shot, raw: self._synthesize_channel_time(shot, raw),
+            compose=lambda shot, raw: self._compose_channel_time(shot, raw),
             ids_path=f"thomson_scattering.channel.{measurement}.time",
             docs_file=self.DOCS_PATH
         )
@@ -167,8 +167,8 @@ class ThomsonScatteringMapper(IDSMapper):
                 f"thomson_scattering._{measurement}_measurements",
                 "thomson_scattering._system_availability"
             ],
-            synthesize=lambda shot, raw, m=measurement, q=mds_quantity:
-                self._synthesize_channel_measurement_data(shot, raw, m, q),
+            compose=lambda shot, raw, m=measurement, q=mds_quantity:
+                self._compose_channel_measurement_data(shot, raw, m, q),
             ids_path=f"thomson_scattering.channel.{measurement}.data",
             docs_file=self.DOCS_PATH
         )
@@ -180,8 +180,8 @@ class ThomsonScatteringMapper(IDSMapper):
                 f"thomson_scattering._{measurement}_measurements",
                 "thomson_scattering._system_availability"
             ],
-            synthesize=lambda shot, raw, m=measurement, q=mds_quantity:
-                self._synthesize_channel_measurement_data_error_upper(shot, raw, m, q),
+            compose=lambda shot, raw, m=measurement, q=mds_quantity:
+                self._compose_channel_measurement_data_error_upper(shot, raw, m, q),
             ids_path=f"thomson_scattering.channel.{measurement}.data_error_upper",
             docs_file=self.DOCS_PATH
         )
@@ -220,7 +220,7 @@ class ThomsonScatteringMapper(IDSMapper):
     
     # Synthesis functions
     
-    def _synthesize_channel_name(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_channel_name(self, shot: int, raw_data: dict) -> np.ndarray:
         """Generate channel names: TS_{system}_r{lens}_{channel}"""
         names = []
         
@@ -242,7 +242,7 @@ class ThomsonScatteringMapper(IDSMapper):
         
         return np.array(names)
     
-    def _synthesize_channel_identifier(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_channel_identifier(self, shot: int, raw_data: dict) -> np.ndarray:
         """Generate short identifiers: {T|D|C}{channel:02d}"""
         identifiers = []
         
@@ -258,7 +258,7 @@ class ThomsonScatteringMapper(IDSMapper):
         
         return np.array(identifiers)
     
-    def _synthesize_position_r(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_position_r(self, shot: int, raw_data: dict) -> np.ndarray:
         """Synthesize R coordinate across all active systems"""
         positions = []
 
@@ -274,7 +274,7 @@ class ThomsonScatteringMapper(IDSMapper):
 
         return np.array(positions)
 
-    def _synthesize_position_z(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_position_z(self, shot: int, raw_data: dict) -> np.ndarray:
         """Synthesize Z coordinate across all active systems"""
         positions = []
 
@@ -290,7 +290,7 @@ class ThomsonScatteringMapper(IDSMapper):
 
         return np.array(positions)
 
-    def _synthesize_position_phi(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_position_phi(self, shot: int, raw_data: dict) -> np.ndarray:
         """Synthesize phi coordinate across all active systems"""
         positions = []
 
@@ -310,7 +310,7 @@ class ThomsonScatteringMapper(IDSMapper):
 
         return np.array(positions)
 
-    def _synthesize_channel_time(self, shot: int, raw_data: dict) -> ak.Array:
+    def _compose_channel_time(self, shot: int, raw_data: dict) -> ak.Array:
         """
         Synthesize time arrays across all active systems.
 
@@ -350,7 +350,7 @@ class ThomsonScatteringMapper(IDSMapper):
 
         return ak.Array(all_time)
 
-    def _synthesize_channel_measurement_data(self, shot: int, raw_data: dict,
+    def _compose_channel_measurement_data(self, shot: int, raw_data: dict,
                                              measurement: str, quantity: str) -> ak.Array:
         """
         Synthesize measurement data across all active systems.
@@ -390,7 +390,7 @@ class ThomsonScatteringMapper(IDSMapper):
 
         return ak.Array(all_data)
 
-    def _synthesize_channel_measurement_data_error_upper(self, shot: int, raw_data: dict,
+    def _compose_channel_measurement_data_error_upper(self, shot: int, raw_data: dict,
                                                          measurement: str, quantity: str) -> ak.Array:
         """
         Synthesize measurement upper uncertainties across all active systems.

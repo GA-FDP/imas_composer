@@ -26,7 +26,7 @@ class IDSEntrySpec:
     stage: RequirementStage
     static_requirements: list[Requirement] = field(default_factory=list)
     derive_requirements: Optional[Callable[[int, dict], list[Requirement]]] = None
-    synthesize: Optional[Callable[[int, dict], Any]] = None
+    compose: Optional[Callable[[int, dict], Any]] = None
     depends_on: list[str] = field(default_factory=list)
     ids_path: Optional[str] = None
     docs_file: Optional[str] = None
