@@ -245,23 +245,31 @@ def omas_data():
     """
     Factory fixture to fetch OMAS data for any IDS.
 
-    Returns a function that takes an IDS name and optionally a specific field path.
-    Data is cached per unique (ids_name, ids_path) combination.
+    Returns a function that takes an IDS name, optional field path, and optional shot number.
+    Data is cached per shot number - all fetches for the same shot accumulate in the same ODS.
+    This allows multiple fetch calls to build up a single ODS incrementally.
 
     Usage:
-        # Fetch entire IDS (ECE, Thomson)
+        # Fetch entire IDS (ECE, Thomson) for default shot
         omas_ece = omas_data('ece')
 
         # Fetch specific field (Equilibrium - avoids fetching huge 2D grids)
         omas_eq_time = omas_data('equilibrium', 'equilibrium.time')
 
+        # Fetch time first, then gaps (both go to same ODS via cache)
+        omas_data('equilibrium', 'equilibrium.time_slice.:.time')
+        ods = omas_data('equilibrium', 'equilibrium.time_slice.:.boundary_separatrix.gap.*')
+
+        # Fetch for different shot
+        omas_data('equilibrium', 'equilibrium.time', shot=200001)
+
     Args:
         ids_name: IDS identifier (e.g., 'ece', 'thomson_scattering', 'equilibrium')
         ids_path: Optional specific IDS path to fetch (defaults to '{ids_name}.*')
-                  Special case for equilibrium to avoid fetching all fields.
+        shot: Optional shot number (defaults to REFERENCE_SHOT=200000)
 
     Returns:
-        ODS object with fetched data
+        ODS object with fetched data (cached per shot, accumulates across calls)
     """
     cache = {}
 
