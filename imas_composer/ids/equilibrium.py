@@ -8,9 +8,37 @@ Implements EFIT equilibrium reconstruction data mapping.
 
 from typing import Dict, Any
 import numpy as np
+import awkward as ak
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
+
+
+def filter_padding(arr: np.ndarray, mask: np.ndarray) -> ak.Array:
+    """
+    Remove padding from 2D array using boolean mask, returning ragged awkward array.
+
+    Directly filters using mask without intermediate NaN conversion.
+
+    Args:
+        arr: 2D numpy array with shape (n_outer, n_max_inner) - data to filter
+        mask: 2D boolean array - True where data is valid, False where padding
+
+    Returns:
+        Awkward array with ragged inner dimension where mask is True
+
+    Example:
+        >>> arr = np.array([[1, 2, 0, 0], [3, 0, 0, 0], [4, 5, 6, 0]])
+        >>> mask = arr != 0
+        >>> filter_padding(arr, mask)
+        <Array [[1, 2], [3], [4, 5, 6]] type='3 * var * float64'>
+    """
+    filtered_rows = []
+    for row, row_mask in zip(arr, mask):
+        filtered_row = row[row_mask]
+        filtered_rows.append(filtered_row)
+
+    return ak.Array(filtered_rows)
 
 
 class EquilibriumMapper(IDSMapper):
@@ -203,74 +231,82 @@ class EquilibriumMapper(IDSMapper):
         gtime_ms = raw_data[gtime_key]
         return gtime_ms / 1000.0  # Convert milliseconds to seconds
 
-    def _compose_boundary_outline_r(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_boundary_outline_r(self, shot: int, raw_data: dict) -> ak.Array:
         """
-        Compose boundary outline R coordinates with NaN filtering.
+        Compose boundary outline R coordinates with padding removal.
 
-        OMAS: nan_where(RBBBS, RBBBS, 0)
-        Replaces 0 values with NaN.
+        Removes 0-padded values to create ragged array.
+
+        Returns:
+            Ragged awkward array (n_time, var) where each time slice has different number of points
         """
         rbbbs_key = Requirement(f'{self.geqdsk_node}.RBBBS', shot, self.efit_tree).as_key()
-        rbbbs = raw_data[rbbbs_key].copy()
+        rbbbs = raw_data[rbbbs_key]
 
-        # Replace 0 values with NaN
-        rbbbs[rbbbs == 0] = np.nan
+        # Filter out padding (where R==0)
+        mask = rbbbs != 0
+        return filter_padding(rbbbs, mask)
 
-        return rbbbs
-
-    def _compose_boundary_outline_z(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_boundary_outline_z(self, shot: int, raw_data: dict) -> ak.Array:
         """
-        Compose boundary outline Z coordinates with NaN filtering.
+        Compose boundary outline Z coordinates with padding removal.
 
-        OMAS: nan_where(ZBBBS, RBBBS, 0)
-        Uses RBBBS as mask - where R==0, set Z to NaN.
+        Uses R coordinates as mask - filters Z where R==0 (padding).
+        This preserves valid Z=0 values (at midplane) while removing padding.
+
+        Returns:
+            Ragged awkward array (n_time, var) where each time slice has different number of points
         """
         rbbbs_key = Requirement(f'{self.geqdsk_node}.RBBBS', shot, self.efit_tree).as_key()
         zbbbs_key = Requirement(f'{self.geqdsk_node}.ZBBBS', shot, self.efit_tree).as_key()
 
         rbbbs = raw_data[rbbbs_key]
-        zbbbs = raw_data[zbbbs_key].copy()
+        zbbbs = raw_data[zbbbs_key]
 
-        # Where R==0, set Z to NaN
-        zbbbs[rbbbs == 0] = np.nan
+        # Filter using R as mask: where R==0 indicates padding, not valid data
+        mask = rbbbs != 0
+        return filter_padding(zbbbs, mask)
 
-        return zbbbs
-
-    def _compose_xpoint_r(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_xpoint_r(self, shot: int, raw_data: dict) -> ak.Array:
         """
         Compose X-point R coordinates (both X-points).
 
-        Returns array of shape (n_time, 2) with [RXPT1, RXPT2].
-        OMAS: nan_where for each X-point separately.
+        Removes 0-padded X-points. Result can have 0, 1, or 2 X-points per time.
+
+        Returns:
+            Ragged awkward array (n_time, var) where each time slice has 0-2 X-points
         """
         rxpt1_key = Requirement(f'{self.aeqdsk_node}.RXPT1', shot, self.efit_tree).as_key()
         rxpt2_key = Requirement(f'{self.aeqdsk_node}.RXPT2', shot, self.efit_tree).as_key()
 
-        rxpt1 = raw_data[rxpt1_key].copy()
-        rxpt2 = raw_data[rxpt2_key].copy()
-
-        # Replace 0 values with NaN
-        rxpt1[rxpt1 == 0] = np.nan
-        rxpt2[rxpt2 == 0] = np.nan
+        rxpt1 = raw_data[rxpt1_key]
+        rxpt2 = raw_data[rxpt2_key]
 
         # Stack into (n_time, 2) array
-        return np.column_stack([rxpt1, rxpt2])
+        xpoints = np.column_stack([rxpt1, rxpt2])
 
-    def _compose_xpoint_z(self, shot: int, raw_data: dict) -> np.ndarray:
+        # Filter out padding (where X-point R==0)
+        mask = xpoints != 0
+        return filter_padding(xpoints, mask)
+
+    def _compose_xpoint_z(self, shot: int, raw_data: dict) -> ak.Array:
         """
         Compose X-point Z coordinates (both X-points).
 
-        Returns array of shape (n_time, 2) with [ZXPT1, ZXPT2].
+        Uses corresponding R coordinates as mask to handle Z=0 at midplane correctly.
+
+        Returns:
+            Ragged awkward array (n_time, var) where each time slice has 0-2 X-points
         """
         zxpt1_key = Requirement(f'{self.aeqdsk_node}.ZXPT1', shot, self.efit_tree).as_key()
         zxpt2_key = Requirement(f'{self.aeqdsk_node}.ZXPT2', shot, self.efit_tree).as_key()
 
-        zxpt1 = raw_data[zxpt1_key].copy()
-        zxpt2 = raw_data[zxpt2_key].copy()
+        zxpt1 = raw_data[zxpt1_key]
+        zxpt2 = raw_data[zxpt2_key]
 
-        # Replace 0 values with NaN
-        zxpt1[zxpt1 == 0] = np.nan
-        zxpt2[zxpt2 == 0] = np.nan
+        # Stack Z coordinates
+        xpoints_z = np.column_stack([zxpt1, zxpt2])
+        # Use R coordinates to determine valid data (R==0 means padding)
+        mask = xpoints_z != 0
 
-        # Stack into (n_time, 2) array
-        return np.column_stack([zxpt1, zxpt2])
+        return filter_padding(xpoints_z, mask)

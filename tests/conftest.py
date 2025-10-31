@@ -8,7 +8,9 @@ to all test files in this directory.
 import pytest
 import numpy as np
 import yaml
+import awkward as ak
 from pathlib import Path
+
 from omas import ODS, mdsvalue
 from omas.omas_machine import machine_to_omas
 
@@ -32,7 +34,7 @@ def load_test_config(ids_name):
         ids_name: IDS identifier (e.g., 'ece', 'thomson_scattering')
 
     Returns:
-        dict: Test configuration with validation rules and exceptions
+        dict: Test configuration with validation rules, exceptions, and OMAS path mapping
     """
     config_path = Path(__file__).parent / f'test_config_{ids_name}.yaml'
 
@@ -42,7 +44,8 @@ def load_test_config(ids_name):
             'field_exceptions': {},
             'requirement_validation': {
                 'allow_different_shot': []
-            }
+            },
+            'omas_path_map': {}
         }
 
     with open(config_path, 'r') as f:
@@ -128,6 +131,17 @@ def fetch_requirements(requirements: list[Requirement]) -> dict:
     return raw_data
 
 
+def get_ndim(arr):
+    """
+    Extract shape information from awkward or numpy arrays.
+
+    Returns dimensionality of the data. Returns 0 for scalars.
+    """
+    if hasattr(arr, "ndim"):
+        return arr.ndim
+    else:
+        return 0 # scalar
+
 def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
     """
     Resolve requirements and compose data using ImasComposer public API.
@@ -159,55 +173,6 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
     # Compose final data
     return composer.compose(ids_path, shot, raw_data)
 
-
-def get_omas_value(omas_data, ids_path):
-    """
-    Navigate OMAS nested structure to get value for IDS path.
-
-    Handles both scalar and channel fields generically.
-
-    Args:
-        omas_data: ODS object from OMAS
-        ids_path: Full IDS path (e.g., 'ece.channel.t_e.data')
-
-    Returns:
-        Value from OMAS (scalar or list for channel fields)
-
-    Examples:
-        'ece.channel.t_e.data' -> [channel[0]['t_e']['data'], channel[1]['t_e']['data'], ...]
-        'ece.ids_properties.homogeneous_time' -> scalar value
-    """
-    # Split path and extract IDS name
-    parts = ids_path.split('.')
-    ids_name = parts[0]  # 'ece' or 'thomson_scattering'
-    path_parts = parts[1:]  # Rest of path
-
-    # For channel fields, return list of channel values
-    if 'channel' in path_parts:
-        channel_idx = path_parts.index('channel')
-        prefix = path_parts[:channel_idx]
-        suffix = path_parts[channel_idx + 1:]  # Skip 'channel'
-        value = omas_data[ids_name]
-        # Navigate to channel array
-        if len(prefix) > 0:
-            value = value[prefix]
-
-        # Get channel array
-        channels = value['channel']
-
-        # Extract field from each channel
-        result = []
-        for ch in channels:
-            result.append(channels[ch][suffix])
-
-        return result
-
-    # For non-channel fields, navigate directly
-    value = omas_data[ids_name][path_parts]
-
-    return value
-
-
 def compare_values(composer_val, omas_val, label="value"):
     """
     Compare composer and OMAS values with appropriate method based on type.
@@ -237,7 +202,7 @@ def compare_values(composer_val, omas_val, label="value"):
         # Convert awkward arrays to numpy if needed (for Thomson ragged data)
         if not isinstance(composer_val, np.ndarray):
             composer_val = np.asarray(composer_val)
-
+        assert len(composer_val) == len(omas_val)
         np.testing.assert_allclose(
             composer_val, omas_val,
             rtol=1e-10, atol=1e-6,
@@ -413,11 +378,53 @@ def _get_all_dependencies(mapper, ids_path):
     return deps
 
 
+def _compare_recursive(composer_value, ods, omas_path):
+    """
+    Recursively compare composer value with OMAS data.
+
+    Uses ndim to determine when to stop recursion and compare 1D arrays.
+    Handles ragged arrays by slicing OMAS NaN-padded data to match composer length.
+
+    Args:
+        composer_value: Value from imas_composer
+        ods: OMAS ODS object
+        omas_path: OMAS path with .: or indices (e.g., 'ece.channel.:.t_e.data' or 'ece.channel.0.t_e.data')
+    """
+    if hasattr(composer_value, "ndim"):
+        ndim = composer_value.ndim
+    else:
+        # Scalar
+        ndim = 0
+
+    # Base case: 0D (scalar) or 1D array - do comparison
+    if ndim <= 1:
+        # Compare
+        compare_values(composer_value, ods[omas_path], omas_path)
+
+    else:
+        # Recursive case: ndim > 1, iterate over outer dimension
+        n_outer = len(composer_value)
+
+        for i in range(n_outer):
+            # Recurse into next level
+            composer_elem = composer_value[i]
+
+            # Replace first occurrence of ':' with the index for OMAS-style path
+            # e.g., 'thomson_scattering.channel.:.n_e.time' -> 'thomson_scattering.channel.0.n_e.time'
+            new_omas_path = omas_path.replace(':', str(i), 1)
+
+            _compare_recursive(composer_elem, ods, new_omas_path)
+
+
 def run_composition_against_omas(ids_path, composer, omas_data, ids_name):
     """
     Generic helper function for composition validation against OMAS.
 
     Compares imas_composer output with OMAS reference implementation.
+    Uses test config's omas_path_map to translate imas_composer paths to OMAS paths.
+
+    For multi-dimensional data (especially ragged arrays from Thomson), recursively
+    compares element-by-element, handling OMAS's NaN padding for ragged arrays.
 
     Args:
         ids_path: IDS path to test (e.g., 'ece.channel.t_e.data')
@@ -428,21 +435,24 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name):
     # Compose using imas_composer
     composer_value = resolve_and_compose(composer, ids_path)
 
-    # Get OMAS value
-    # For equilibrium, fetch only the specific field to avoid loading entire IDS
+    # Load test config to get OMAS path mapping
+    test_config = load_test_config(ids_name)
+    omas_path_map = test_config.get('omas_path_map', {})
+    omas_fetch_map = test_config.get('omas_fetch_map', {})
+
+    # Determine fetch and access paths
+    # omas_fetch_map overrides omas_path_map for machine_to_omas calls (supports wildcards)
+    # omas_path_map is used for ODS access (standard array notation)
+    omas_fetch_path = omas_fetch_map.get(ids_path, omas_path_map.get(ids_path, ids_path))
+    omas_access_path = omas_path_map.get(ids_path, ids_path)
+
+    # Fetch OMAS ODS object
+    # For equilibrium, fetch only the specific field to avoid loading entire IDS (slow)
+    # For other IDS, still fetch entire IDS with wildcard for backward compatibility
     if ids_name == 'equilibrium':
-        omas_value = get_omas_value(omas_data(ids_name, ids_path), ids_path)
+        ods = omas_data(ids_name, omas_fetch_path)
     else:
-        # For other IDS, fetch entire IDS with wildcard
-        omas_value = get_omas_value(omas_data(ids_name), ids_path)
+        ods = omas_data(ids_name)
 
-    # Compare based on type
-    if isinstance(omas_value, list):
-        # Channel field - compare each channel
-        assert len(composer_value) == len(omas_value), f"{ids_path}: length mismatch"
-
-        for i in range(len(omas_value)):
-            compare_values(composer_value[i], omas_value[i], f"{ids_path}[{i}]")
-    else:
-        # Scalar field - compare directly
-        compare_values(composer_value, omas_value, ids_path)
+    # Recursively compare using ndim-based logic
+    _compare_recursive(composer_value, ods, omas_access_path)

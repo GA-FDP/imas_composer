@@ -1,0 +1,30 @@
+# Test configuration for ECE IDS
+
+# Field-level exceptions for validation
+field_exceptions: {}
+
+# Requirement validation settings
+requirement_validation:
+  allow_different_shot: []
+
+# OMAS path mapping
+# Maps imas_composer notation to OMAS notation for fetching reference data
+# For channel fields, OMAS uses .: to index all channels at once
+omas_path_map:
+  # Scalar fields (no change)
+  ece.ids_properties.homogeneous_time: ece.ids_properties.homogeneous_time
+  ece.line_of_sight.first_point.r: ece.line_of_sight.first_point.r
+  ece.line_of_sight.first_point.phi: ece.line_of_sight.first_point.phi
+  ece.line_of_sight.first_point.z: ece.line_of_sight.first_point.z
+  ece.line_of_sight.second_point.r: ece.line_of_sight.second_point.r
+  ece.line_of_sight.second_point.phi: ece.line_of_sight.second_point.phi
+  ece.line_of_sight.second_point.z: ece.line_of_sight.second_point.z
+
+  # Channel fields (add .: to fetch all channels)
+  ece.channel.name: ece.channel.:.name
+  ece.channel.identifier: ece.channel.:.identifier
+  ece.channel.time: ece.channel.:.time
+  ece.channel.frequency.data: ece.channel.:.frequency.data
+  ece.channel.if_bandwidth: ece.channel.:.if_bandwidth
+  ece.channel.t_e.data: ece.channel.:.t_e.data
+  ece.channel.t_e.data_error_upper: ece.channel.:.t_e.data_error_upper

@@ -5,7 +5,7 @@ Single parametric test that verifies compose() matches OMAS for all ECE fields.
 """
 
 import pytest
-from conftest import load_ids_fields, run_composition_against_omas
+from tests.conftest import load_ids_fields, run_composition_against_omas
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_mdsplus, pytest.mark.omas_validation]
 

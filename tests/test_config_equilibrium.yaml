@@ -1,0 +1,41 @@
+# Test configuration for Equilibrium IDS
+
+# Field-level exceptions for validation
+field_exceptions: {}
+
+# Requirement validation settings
+requirement_validation:
+  allow_different_shot: []
+
+# OMAS path mapping for comparison (ODS access)
+# Maps imas_composer notation to OMAS ODS access paths
+# imas_composer uses clean paths (e.g., equilibrium.time_slice.time)
+# OMAS uses array markers with .: notation (e.g., equilibrium.time_slice.:.time)
+omas_path_map:
+  # Code metadata
+  equilibrium.code.name: equilibrium.code.name
+  equilibrium.code.version: equilibrium.code.version
+
+  # IDS properties
+  equilibrium.ids_properties.homogeneous_time: equilibrium.ids_properties.homogeneous_time
+
+  # Time arrays
+  equilibrium.time: equilibrium.time
+  equilibrium.time_slice.time: equilibrium.time_slice.:.time
+
+  # Boundary outline (ragged arrays)
+  equilibrium.time_slice.boundary.outline.r: equilibrium.time_slice.:.boundary.outline.r
+  equilibrium.time_slice.boundary.outline.z: equilibrium.time_slice.:.boundary.outline.z
+
+  # X-points - nested array notation for ODS access
+  equilibrium.time_slice.boundary.x_point.r: equilibrium.time_slice.:.boundary.x_point.:.r
+  equilibrium.time_slice.boundary.x_point.z: equilibrium.time_slice.:.boundary.x_point.:.z
+
+# OMAS fetch mapping (machine_to_omas)
+# Overrides omas_path_map entries when fetching data via machine_to_omas
+# machine_to_omas supports wildcards (.*) that ODS class doesn't understand
+# Only specify entries that differ from omas_path_map
+omas_fetch_map:
+  # X-points - use wildcard for fetching, but array notation for access
+  equilibrium.time_slice.boundary.x_point.r: equilibrium.time_slice.:.boundary.x_point.*
+  equilibrium.time_slice.boundary.x_point.z: equilibrium.time_slice.:.boundary.x_point.*

@@ -1,17 +1,25 @@
-# Thomson Scattering Test Configuration
-#
-# Customizes test behavior for Thomson Scattering IDS fields
+# Test configuration for Thomson Scattering IDS
 
-# Fields with special test requirements
-field_exceptions:
-  # Hardware map uses calibration shot, not requested shot
-  thomson_scattering._hwmap:
-    allow_different_shot: true
-    reason: "Uses calibration shot from calib_nums, not requested shot"
+# Field-level exceptions for validation
+field_exceptions: {}
 
-# Requirement validation rules
+# Requirement validation settings
 requirement_validation:
-  # Fields that are allowed to have requirements with different shot numbers
-  # This applies to all requirements for these fields
-  allow_different_shot:
-    - thomson_scattering._hwmap
+  allow_different_shot: []
+
+# OMAS path mapping
+# Maps imas_composer notation to OMAS notation for fetching reference data
+# For channel fields, OMAS uses .: to index all channels at once
+omas_path_map:
+  # Channel fields (add .: to fetch all channels)
+  thomson_scattering.channel.name: thomson_scattering.channel.:.name
+  thomson_scattering.channel.identifier: thomson_scattering.channel.:.identifier
+  thomson_scattering.channel.position.r: thomson_scattering.channel.:.position.r
+  thomson_scattering.channel.position.z: thomson_scattering.channel.:.position.z
+  thomson_scattering.channel.position.phi: thomson_scattering.channel.:.position.phi
+  thomson_scattering.channel.n_e.time: thomson_scattering.channel.:.n_e.time
+  thomson_scattering.channel.n_e.data: thomson_scattering.channel.:.n_e.data
+  thomson_scattering.channel.n_e.data_error_upper: thomson_scattering.channel.:.n_e.data_error_upper
+  thomson_scattering.channel.t_e.time: thomson_scattering.channel.:.t_e.time
+  thomson_scattering.channel.t_e.data: thomson_scattering.channel.:.t_e.data
+  thomson_scattering.channel.t_e.data_error_upper: thomson_scattering.channel.:.t_e.data_error_upper

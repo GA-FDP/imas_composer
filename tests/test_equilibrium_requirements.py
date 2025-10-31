@@ -4,13 +4,11 @@ Test Equilibrium IDS requirement resolution.
 Single parametric test that verifies resolve() can fully resolve all requirements
 for each Equilibrium field, tracking resolution depth.
 """
-
 import pytest
-from conftest import REFERENCE_SHOT, load_ids_fields, run_requirements_resolution
+
+from tests.conftest import REFERENCE_SHOT, load_ids_fields, run_requirements_resolution
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_mdsplus]
-
-
 @pytest.mark.parametrize('ids_path', load_ids_fields('equilibrium'))
 def test_can_resolve_requirements(ids_path, composer):
     """Test that resolve() can fully resolve requirements for each Equilibrium field."""
