@@ -2,6 +2,29 @@
 Base class for IDS mappers.
 
 Provides common functionality shared across all IDS implementations.
+
+IMPORTANT: All user-facing IDS fields must be RequirementStage.COMPUTED
+-------------------------------------------------------------------
+The ImasComposer.compose() method requires all fields to be COMPUTED stage.
+Only internal dependency fields (conventionally prefixed with _) should be DIRECT.
+
+Pattern for simple pass-through fields:
+    # Internal dependency
+    self.specs["ids._internal_field"] = IDSEntrySpec(
+        stage=RequirementStage.DIRECT,
+        static_requirements=[Requirement('path.to.data', 0, tree)],
+        ids_path="ids._internal_field",
+        docs_file=self.DOCS_PATH
+    )
+
+    # User-facing field (COMPUTED with passthrough lambda)
+    self.specs["ids.user.field"] = IDSEntrySpec(
+        stage=RequirementStage.COMPUTED,
+        depends_on=["ids._internal_field"],
+        compose=lambda shot, raw: raw[Requirement('path.to.data', shot, tree).as_key()],
+        ids_path="ids.user.field",
+        docs_file=self.DOCS_PATH
+    )
 """
 
 from typing import Dict, List
