@@ -27,15 +27,55 @@ omas_path_map:
   equilibrium.time_slice.boundary.outline.r: equilibrium.time_slice.:.boundary.outline.r
   equilibrium.time_slice.boundary.outline.z: equilibrium.time_slice.:.boundary.outline.z
 
-  # X-points - nested array notation for ODS access
+  # Boundary X-points - nested array notation for ODS access
   equilibrium.time_slice.boundary.x_point.r: equilibrium.time_slice.:.boundary.x_point.:.r
   equilibrium.time_slice.boundary.x_point.z: equilibrium.time_slice.:.boundary.x_point.:.z
+
+  # Boundary separatrix outline (ragged arrays, same as boundary for EFIT)
+  equilibrium.time_slice.boundary_separatrix.outline.r: equilibrium.time_slice.:.boundary_separatrix.outline.r
+  equilibrium.time_slice.boundary_separatrix.outline.z: equilibrium.time_slice.:.boundary_separatrix.outline.z
+
+  # Boundary separatrix X-points
+  equilibrium.time_slice.boundary_separatrix.x_point.r: equilibrium.time_slice.:.boundary_separatrix.x_point.:.r
+  equilibrium.time_slice.boundary_separatrix.x_point.z: equilibrium.time_slice.:.boundary_separatrix.x_point.:.z
+
+  # Boundary separatrix geometric axis
+  equilibrium.time_slice.boundary_separatrix.geometric_axis.r: equilibrium.time_slice.:.boundary_separatrix.geometric_axis.r
+  equilibrium.time_slice.boundary_separatrix.geometric_axis.z: equilibrium.time_slice.:.boundary_separatrix.geometric_axis.z
+
+  # Boundary separatrix closest wall point
+  equilibrium.time_slice.boundary_separatrix.closest_wall_point.distance: equilibrium.time_slice.:.boundary_separatrix.closest_wall_point.distance
+
+  # Boundary separatrix gaps (4 gaps)
+  equilibrium.time_slice.boundary_separatrix.gap.name: equilibrium.time_slice.:.boundary_separatrix.gap.:.name
+  equilibrium.time_slice.boundary_separatrix.gap.value: equilibrium.time_slice.:.boundary_separatrix.gap.:.value
+
+  # Boundary separatrix strike points (ragged, 0-4 points)
+  equilibrium.time_slice.boundary_separatrix.strike_point.r: equilibrium.time_slice.:.boundary_separatrix.strike_point.:.r
+  equilibrium.time_slice.boundary_separatrix.strike_point.z: equilibrium.time_slice.:.boundary_separatrix.strike_point.:.z
 
 # OMAS fetch mapping (machine_to_omas)
 # Overrides omas_path_map entries when fetching data via machine_to_omas
 # machine_to_omas supports wildcards (.*) that ODS class doesn't understand
 # Only specify entries that differ from omas_path_map
 omas_fetch_map:
-  # X-points - use wildcard for fetching, but array notation for access
+  # Boundary X-points - use wildcard for fetching, but array notation for access
   equilibrium.time_slice.boundary.x_point.r: equilibrium.time_slice.:.boundary.x_point.*
   equilibrium.time_slice.boundary.x_point.z: equilibrium.time_slice.:.boundary.x_point.*
+
+  # Boundary separatrix X-points - use wildcard for fetching
+  equilibrium.time_slice.boundary_separatrix.x_point.r: equilibrium.time_slice.:.boundary_separatrix.x_point.*
+  equilibrium.time_slice.boundary_separatrix.x_point.z: equilibrium.time_slice.:.boundary_separatrix.x_point.*
+
+  # Boundary separatrix strike points - use wildcard for fetching
+  equilibrium.time_slice.boundary_separatrix.strike_point.r: equilibrium.time_slice.:.boundary_separatrix.strike_point.*
+  equilibrium.time_slice.boundary_separatrix.strike_point.z: equilibrium.time_slice.:.boundary_separatrix.strike_point.*
+
+  # Gap - fetch time first (establishes all time slices), then gap data
+  # Once time axis is populated, OMAS correctly broadcasts static gap names
+  equilibrium.time_slice.boundary_separatrix.gap.name:
+    - equilibrium.time_slice.:.time
+    - equilibrium.time_slice.:.boundary_separatrix.gap.*
+  equilibrium.time_slice.boundary_separatrix.gap.value:
+    - equilibrium.time_slice.:.time
+    - equilibrium.time_slice.:.boundary_separatrix.gap.*

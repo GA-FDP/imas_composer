@@ -1,33 +1,54 @@
 # Equilibrium IDS Configuration for DIII-D
 #
 # Based on OMAS mappings in machine_mappings/_efit.json
-# Implements first 10 fields for validation
 
 # Static values (hardcoded, not from MDSplus)
 static_values:
   ids_properties.homogeneous_time: 1
-  time_slice.boundary.x_point.: 2  # DIII-D has up to 2 X-points
 
 # EFIT tree configuration
 # Note: EFIT01, EFIT02, etc. are different equilibrium reconstructions
 # Default to EFIT01 for now
 default_efit_tree: EFIT01
 
-# Supported fields (first 10 for initial implementation)
+# Supported fields
 # Note: Uses clean IMAS notation without .: array markers
 fields:
+  # Code metadata
   - code.name
   - code.version
+
+  # IDS properties
   - ids_properties.homogeneous_time
+
+  # Time arrays
   - time
   - time_slice.time
+
+  # Boundary (plasma boundary)
   - time_slice.boundary.outline.r
   - time_slice.boundary.outline.z
   - time_slice.boundary.x_point.r
   - time_slice.boundary.x_point.z
+
+  # Boundary separatrix (same as boundary for EFIT)
+  - time_slice.boundary_separatrix.outline.r
+  - time_slice.boundary_separatrix.outline.z
+  - time_slice.boundary_separatrix.x_point.r
+  - time_slice.boundary_separatrix.x_point.z
+  - time_slice.boundary_separatrix.geometric_axis.r
+  - time_slice.boundary_separatrix.geometric_axis.z
+  - time_slice.boundary_separatrix.closest_wall_point.distance
+  - time_slice.boundary_separatrix.gap.name
+  - time_slice.boundary_separatrix.gap.value
+  - time_slice.boundary_separatrix.strike_point.r
+  - time_slice.boundary_separatrix.strike_point.z
 
 # Notes:
 # - time_slice.: notation means array of time slices
 # - Each time slice corresponds to one EFIT time point
 # - boundary.outline is ragged (different number of points per time)
 # - x_point.: has fixed size of 2 (primary and secondary X-point)
+# - For EFIT, boundary and boundary_separatrix are identical (both use RBBBS/ZBBBS)
+# - gap.: has 4 entries (inboard, outboard, top, bottom)
+# - strike_point.: has up to 4 entries (vsid, vsod, vsiu, vsou), ragged array

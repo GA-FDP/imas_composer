@@ -1,20 +1,52 @@
-# Equilibrium IDS Implementation - First 10 Fields
+# Equilibrium IDS Implementation
 
 ## Summary
 
-Implemented first 10 fields from OMAS `_efit.json` to validate our approach for equilibrium data mapping.
+Implemented 29 fields from OMAS `_efit.json` for equilibrium data mapping.
 
-## Implemented Fields
+## Implementation Policy
 
+**Skipped Fields**: We do NOT implement fields that are incomplete size declarations (ending with `.:` only).
+These are metadata fields that specify array sizes in OMAS but don't contain actual data:
+- `equilibrium.time_slice.:` - Size declaration only
+- `equilibrium.time_slice.:.boundary.x_point.:` - Size declaration only
+- `equilibrium.time_slice.:.boundary_separatrix.x_point.:` - Size declaration only
+- `equilibrium.time_slice.:.boundary_separatrix.gap.:` - Size declaration only
+- `equilibrium.time_slice.:.boundary_separatrix.strike_point.:` - Size declaration only
+
+Our system handles array sizes automatically through the data itself.
+
+## Implemented Fields (29 total)
+
+### Code Metadata (2 fields)
 1. **equilibrium.code.name** - EFIT tree name (static)
 2. **equilibrium.code.version** - EFIT tree name (static)
+
+### IDS Properties (1 field)
 3. **equilibrium.ids_properties.homogeneous_time** - Always 1 (static)
+
+### Time Arrays (2 fields)
 4. **equilibrium.time** - Time array in seconds
-5. **equilibrium.time_slice.:.time** - Same as equilibrium.time
-6. **equilibrium.time_slice.:.boundary.outline.r** - Boundary R coordinates (ragged)
-7. **equilibrium.time_slice.:.boundary.outline.z** - Boundary Z coordinates (ragged)
-8. **equilibrium.time_slice.:.boundary.x_point.:.r** - X-point R (2 per time)
-9. **equilibrium.time_slice.:.boundary.x_point.:.z** - X-point Z (2 per time)
+5. **equilibrium.time_slice.time** - Same as equilibrium.time
+
+### Boundary (4 fields)
+6. **equilibrium.time_slice.boundary.outline.r** - Boundary R coordinates (ragged)
+7. **equilibrium.time_slice.boundary.outline.z** - Boundary Z coordinates (ragged)
+8. **equilibrium.time_slice.boundary.x_point.r** - X-point R (ragged, 0-2 per time)
+9. **equilibrium.time_slice.boundary.x_point.z** - X-point Z (ragged, 0-2 per time)
+
+### Boundary Separatrix (11 fields)
+10. **equilibrium.time_slice.boundary_separatrix.outline.r** - Same as boundary.outline.r
+11. **equilibrium.time_slice.boundary_separatrix.outline.z** - Same as boundary.outline.z
+12. **equilibrium.time_slice.boundary_separatrix.x_point.r** - Same as boundary.x_point.r
+13. **equilibrium.time_slice.boundary_separatrix.x_point.z** - Same as boundary.x_point.z
+14. **equilibrium.time_slice.boundary_separatrix.geometric_axis.r** - Geometric center R
+15. **equilibrium.time_slice.boundary_separatrix.geometric_axis.z** - Geometric center Z
+16. **equilibrium.time_slice.boundary_separatrix.closest_wall_point.distance** - Distance to wall
+17. **equilibrium.time_slice.boundary_separatrix.gap.name** - Gap names array
+18. **equilibrium.time_slice.boundary_separatrix.gap.value** - Gap values (4 per time)
+19. **equilibrium.time_slice.boundary_separatrix.strike_point.r** - Strike point R (ragged, 0-4 per time)
+20. **equilibrium.time_slice.boundary_separatrix.strike_point.z** - Strike point Z (ragged, 0-4 per time)
 
 ## Architecture
 
@@ -46,27 +78,52 @@ All COMPUTED stage - transform data from internal dependencies.
 
 ## Key Implementation Patterns
 
-### 1. NaN Filtering
+### 1. Padding Filtering with Awkward Arrays
 
-OMAS uses TDI expression: `py2tdi(nan_where, data, mask, value)`
+We use awkward arrays for ragged data (variable-length inner dimension) and filter out padding.
 
-Our Python implementation:
+**Pattern 1: R-coordinates as mask (for outline)**
 ```python
 def _compose_boundary_outline_r(self, shot, raw_data):
-    rbbbs = raw_data[rbbbs_key].copy()
-    rbbbs[rbbbs == 0] = np.nan  # Replace 0 with NaN
-    return rbbbs
+    rbbbs = raw_data[rbbbs_key]
+    mask = rbbbs != 0  # R==0 means padding
+    return filter_padding(rbbbs, mask)
 
 def _compose_boundary_outline_z(self, shot, raw_data):
     rbbbs = raw_data[rbbbs_key]
-    zbbbs = raw_data[zbbbs_key].copy()
-    zbbbs[rbbbs == 0] = np.nan  # Use R as mask
-    return zbbbs
+    zbbbs = raw_data[zbbbs_key]
+    mask = rbbbs != 0  # Use R as mask (preserves valid Z==0 at midplane)
+    return filter_padding(zbbbs, mask)
+```
+
+**Pattern 2: Self-filtering for X-point Z (physics constraint)**
+```python
+def _compose_xpoint_z(self, shot, raw_data):
+    zxpt1 = raw_data[zxpt1_key]
+    zxpt2 = raw_data[zxpt2_key]
+    xpoints_z = np.column_stack([zxpt1, zxpt2])
+
+    # X-points are NEVER at Z==0 (physics: X-points at top/bottom, not midplane)
+    # DIII-D Z range: ~-1.2 to ~1.2 m, X-points typically at Z ≈ ±0.3 to ±1.0 m
+    mask = xpoints_z != 0
+    return filter_padding(xpoints_z, mask)
+```
+
+**Pattern 3: Sentinel value filtering (strike points)**
+```python
+def _compose_strike_point_r(self, shot, raw_data):
+    # Stack all 4 strike points and convert cm → m
+    strike_points_m = np.column_stack([rvsid, rvsod, rvsiu, rvsou]) / 100.0
+
+    # OMAS uses -0.89 cm (-0.0089 m) as sentinel for invalid strike point
+    mask = strike_points_m != -0.0089
+    return filter_padding(strike_points_m, mask)
 ```
 
 **Requirement isolation**:
 - `outline.r` only needs RBBBS
 - `outline.z` needs both RBBBS and ZBBBS (for masking)
+- `x_point.z` only needs ZXPT1/ZXPT2 (self-filtering works due to physics)
 
 ### 2. Unit Conversion
 

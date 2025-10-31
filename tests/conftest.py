@@ -202,12 +202,28 @@ def compare_values(composer_val, omas_val, label="value"):
         # Convert awkward arrays to numpy if needed (for Thomson ragged data)
         if not isinstance(composer_val, np.ndarray):
             composer_val = np.asarray(composer_val)
-        assert len(composer_val) == len(omas_val)
-        np.testing.assert_allclose(
-            composer_val, omas_val,
-            rtol=1e-10, atol=1e-6,
-            err_msg=f"{label}: array mismatch"
-        )
+        assert len(composer_val) == len(omas_val), f"{label}: array length mismatch"
+
+        # Check dtype - handle strings and ints separately from floats
+        if np.issubdtype(omas_val.dtype, np.str_) or np.issubdtype(omas_val.dtype, np.unicode_):
+            # String arrays - use exact comparison
+            np.testing.assert_array_equal(
+                composer_val, omas_val,
+                err_msg=f"{label}: string array mismatch"
+            )
+        elif np.issubdtype(omas_val.dtype, np.integer):
+            # Integer arrays - use exact comparison
+            np.testing.assert_array_equal(
+                composer_val, omas_val,
+                err_msg=f"{label}: int array mismatch"
+            )
+        else:
+            # Float arrays - use tolerance-based comparison
+            np.testing.assert_allclose(
+                composer_val, omas_val,
+                rtol=1e-10, atol=1e-6,
+                err_msg=f"{label}: float array mismatch"
+            )
 
     else:
         # Fallback for other types
@@ -249,22 +265,22 @@ def omas_data():
     """
     cache = {}
 
-    def _fetch_omas_data(ids_name, ids_path=None):
+    def _fetch_omas_data(ids_name, ids_path=None, shot=REFERENCE_SHOT):
         # Default to wildcard fetch for non-equilibrium IDS
         if ids_path is None:
             ids_path = f'{ids_name}.*'
 
-        # Use (ids_name, ids_path) as cache key to handle partial fetches
-        cache_key = (ids_name, ids_path)
-
-        if cache_key not in cache:
+        # Use shot as cache key to handle future tests that iterate over several shots
+        if shot in cache:
+            ods = cache[shot]
+        else:
             ods = ODS()
-            # For equilibrium with specific path, fetch only that field
-            # For others, use wildcard
-            machine_to_omas(ods, 'd3d', REFERENCE_SHOT, ids_path, options={'EFIT_tree': 'EFIT01'})
-            cache[cache_key] = ods
+        # For equilibrium with specific path, fetch only that field
+        # For others, use wildcard
+        machine_to_omas(ods, 'd3d', REFERENCE_SHOT, ids_path, options={'EFIT_tree': 'EFIT01'})
+        cache[shot] = ods
 
-        return cache[cache_key]
+        return cache[shot]
 
     return _fetch_omas_data
 
@@ -314,21 +330,16 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
             assert hasattr(req, 'shot'), "Requirement must have shot"
             assert hasattr(req, 'treename'), "Requirement must have treename"
 
-            # Track which dependency path this requirement came from
-            # by checking which unresolved dependencies could have generated it
-            current_dep = None
-            mapper, _ = composer._get_mapper_for_path(ids_path)
-            for dep_path in _get_all_dependencies(mapper, ids_path):
-                if dep_path in allow_different_shot:
-                    current_dep = dep_path
-                    break
+            # Check if this specific MDS+ path is in the allow_different_shot list
+            # allow_different_shot contains MDS+ paths (e.g., '.ts.BLESSED.header.calib_nums')
+            is_calibration_data = req.mds_path in allow_different_shot
 
-            # Check shot number (unless this dependency allows different shots)
-            if current_dep not in allow_different_shot:
+            # Check shot number (unless this MDS+ path is marked as calibration data)
+            if not is_calibration_data:
                 assert req.shot == shot, (
                     f"Requirement shot must match requested shot. "
-                    f"Got {req.shot}, expected {shot}. "
-                    f"If this is expected (e.g., calibration data), add '{current_dep or ids_path}' "
+                    f"Got {req.shot}, expected {shot} for MDS+ path '{req.mds_path}'. "
+                    f"If this is expected (e.g., calibration data), add '{req.mds_path}' "
                     f"to allow_different_shot in test_config_{ids_name}.yaml"
                 )
 
@@ -347,35 +358,6 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
 
     return resolution_steps
 
-
-def _get_all_dependencies(mapper, ids_path):
-    """
-    Get all dependency paths for an IDS path (recursive).
-
-    Args:
-        mapper: IDS mapper instance
-        ids_path: IDS path to analyze
-
-    Returns:
-        set: All dependency paths (direct and transitive)
-    """
-    deps = set()
-    to_process = [ids_path]
-    visited = set()
-
-    while to_process:
-        current = to_process.pop(0)
-        if current in visited or current not in mapper.specs:
-            continue
-        visited.add(current)
-
-        spec = mapper.specs[current]
-        if spec.depends_on:
-            for dep in spec.depends_on:
-                deps.add(dep)
-                to_process.append(dep)
-
-    return deps
 
 
 def _compare_recursive(composer_value, ods, omas_path):
@@ -441,16 +423,23 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name):
     omas_fetch_map = test_config.get('omas_fetch_map', {})
 
     # Determine fetch and access paths
-    # omas_fetch_map overrides omas_path_map for machine_to_omas calls (supports wildcards)
+    # omas_fetch_map overrides omas_path_map for machine_to_omas calls (supports wildcards and lists)
     # omas_path_map is used for ODS access (standard array notation)
-    omas_fetch_path = omas_fetch_map.get(ids_path, omas_path_map.get(ids_path, ids_path))
+    omas_fetch_spec = omas_fetch_map.get(ids_path, omas_path_map.get(ids_path, ids_path))
     omas_access_path = omas_path_map.get(ids_path, ids_path)
 
     # Fetch OMAS ODS object
     # For equilibrium, fetch only the specific field to avoid loading entire IDS (slow)
     # For other IDS, still fetch entire IDS with wildcard for backward compatibility
     if ids_name == 'equilibrium':
-        ods = omas_data(ids_name, omas_fetch_path)
+        # Handle list of paths (for fetch order control) or single path
+        if isinstance(omas_fetch_spec, list):
+            # Fetch each path in order (important for OMAS broadcasting)
+            ods = omas_data(ids_name, omas_fetch_spec[0])
+            for fetch_path in omas_fetch_spec[1:]:
+                omas_data(ids_name, fetch_path)  # Additional fetches to same ODS
+        else:
+            ods = omas_data(ids_name, omas_fetch_spec)
     else:
         ods = omas_data(ids_name)
 
