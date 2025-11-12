@@ -51,25 +51,25 @@ fields:
 
   # Constraints
   - time_slice.constraints.ip.measured
-  - time_slice.constraints.ip.sigma
-  - time_slice.constraints.ip.filtered_weight_value
-  - time_slice.constraints.ip.calculated
-  - time_slice.constraints.ip.residual
+  - time_slice.constraints.ip.measured_error_upper
+  - time_slice.constraints.ip.weight
+  - time_slice.constraints.ip.reconstructed
+  - time_slice.constraints.ip.chi_squared
   - time_slice.constraints.bpol_probe.measured
-  - time_slice.constraints.bpol_probe.sigma
-  - time_slice.constraints.bpol_probe.filtered_weight_value
-  - time_slice.constraints.bpol_probe.calculated
-  - time_slice.constraints.bpol_probe.residual
+  - time_slice.constraints.bpol_probe.measured_error_upper
+  - time_slice.constraints.bpol_probe.weight
+  - time_slice.constraints.bpol_probe.reconstructed
+  - time_slice.constraints.bpol_probe.chi_squared
   - time_slice.constraints.diamagnetic_flux.measured
-  - time_slice.constraints.diamagnetic_flux.sigma
-  - time_slice.constraints.diamagnetic_flux.filtered_weight_value
-  - time_slice.constraints.diamagnetic_flux.calculated
-  - time_slice.constraints.diamagnetic_flux.residual
+  - time_slice.constraints.diamagnetic_flux.measured_error_upper
+  - time_slice.constraints.diamagnetic_flux.weight
+  - time_slice.constraints.diamagnetic_flux.reconstructed
+  - time_slice.constraints.diamagnetic_flux.chi_squared
   - time_slice.constraints.flux_loop.measured
-  - time_slice.constraints.flux_loop.sigma
-  - time_slice.constraints.flux_loop.filtered_weight_value
-  - time_slice.constraints.flux_loop.calculated
-  - time_slice.constraints.flux_loop.residual
+  - time_slice.constraints.flux_loop.measured_error_upper
+  - time_slice.constraints.flux_loop.weight
+  - time_slice.constraints.flux_loop.reconstructed
+  - time_slice.constraints.flux_loop.chi_squared
   - time_slice.constraints.mse_polarisation_angle.measured
   - time_slice.constraints.mse_polarisation_angle.measured_error_upper
   - time_slice.constraints.mse_polarisation_angle.weight

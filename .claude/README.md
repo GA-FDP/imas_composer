@@ -11,21 +11,21 @@ Claude will read this index and know where to find detailed information when nee
 
 ## Context Files Index
 
-### Core Guidelines
+### Core Guidelines (Read First)
 
-- **`.claudecontext`** - Critical rules and policies
-  - **TESTING POLICY**: Never run tests that access restricted MDS+ data
-  - OMAS usage patterns (fetching, uncertainty handling)
-  - Development philosophy (no backwards compatibility needed)
+- **`.claudecontext`** (~66 lines) - Critical policies and quick reference
+  - ⚠️ **NEVER EXECUTE CODE** - Data privacy policy
+  - OMAS quick reference (fetching, uncertainty)
   - OMAS reference files for debugging
-  - IDS configuration YAML structure
+  - Links to detailed architecture docs
 
-- **`DEVELOPMENT_PRINCIPLES.md`** - Architecture and design patterns
-  - Requirement resolution system
-  - Stage-based dependency management (DIRECT → DERIVED → COMPUTED)
-  - Tree/source selection pattern
-  - OMAS integration patterns
-  - Testing infrastructure
+- **`DEVELOPMENT_PRINCIPLES.md`** (~297 lines) - Complete architecture reference
+  - DRY principle and requirement isolation
+  - Three-stage system (DIRECT → DERIVED → COMPUTED)
+  - Public API and tree selection patterns
+  - Test structure and configuration
+  - YAML configuration system
+  - Adding new IDS guide
 
 ### IDS-Specific Documentation
 
@@ -43,11 +43,11 @@ Claude will read this index and know where to find detailed information when nee
 
 ## When to Read What
 
-- **Starting a new session**: Read this file to get oriented
-- **Implementing a new IDS mapper**: Read `.claudecontext` (OMAS patterns), then IDS-specific analysis if it exists
-- **Debugging tests**: Read `.claudecontext` (testing policy and OMAS reference files)
-- **Architectural questions**: Read `DEVELOPMENT_PRINCIPLES.md`
-- **Equilibrium-specific questions**: Read `EQUILIBRIUM_ANALYSIS.md` or `EQUILIBRIUM_IMPLEMENTATION.md`
+- **Starting a session**: Read `.claudecontext` (~66 lines) - gets you 80% of what you need
+- **Implementing new IDS**: `.claudecontext` first, then `DEVELOPMENT_PRINCIPLES.md` for details
+- **Debugging**: `.claudecontext` points to OMAS reference files
+- **Architecture deep-dive**: `DEVELOPMENT_PRINCIPLES.md`
+- **Equilibrium-specific**: `EQUILIBRIUM_IMPLEMENTATION.md` (COCOS, ragged arrays)
 
 ## File Organization
 

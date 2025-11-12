@@ -63,31 +63,31 @@ omas_path_map:
 
   # Constraints - Plasma current
   equilibrium.time_slice.constraints.ip.measured: equilibrium.time_slice.:.constraints.ip.measured
-  equilibrium.time_slice.constraints.ip.sigma: equilibrium.time_slice.:.constraints.ip.sigma
-  equilibrium.time_slice.constraints.ip.filtered_weight_value: equilibrium.time_slice.:.constraints.ip.filtered_weight_value
-  equilibrium.time_slice.constraints.ip.calculated: equilibrium.time_slice.:.constraints.ip.calculated
-  equilibrium.time_slice.constraints.ip.residual: equilibrium.time_slice.:.constraints.ip.residual
+  equilibrium.time_slice.constraints.ip.measured_error_upper: equilibrium.time_slice.:.constraints.ip.measured_error_upper
+  equilibrium.time_slice.constraints.ip.weight: equilibrium.time_slice.:.constraints.ip.weight
+  equilibrium.time_slice.constraints.ip.reconstructed: equilibrium.time_slice.:.constraints.ip.reconstructed
+  equilibrium.time_slice.constraints.ip.chi_squared: equilibrium.time_slice.:.constraints.ip.chi_squared
 
   # Constraints - Poloidal field probe
   equilibrium.time_slice.constraints.bpol_probe.measured: equilibrium.time_slice.:.constraints.bpol_probe.:.measured
-  equilibrium.time_slice.constraints.bpol_probe.sigma: equilibrium.time_slice.:.constraints.bpol_probe.:.sigma
-  equilibrium.time_slice.constraints.bpol_probe.filtered_weight_value: equilibrium.time_slice.:.constraints.bpol_probe.:.filtered_weight_value
-  equilibrium.time_slice.constraints.bpol_probe.calculated: equilibrium.time_slice.:.constraints.bpol_probe.:.calculated
-  equilibrium.time_slice.constraints.bpol_probe.residual: equilibrium.time_slice.:.constraints.bpol_probe.:.residual
+  equilibrium.time_slice.constraints.bpol_probe.measured_error_upper: equilibrium.time_slice.:.constraints.bpol_probe.:.measured_error_upper
+  equilibrium.time_slice.constraints.bpol_probe.weight: equilibrium.time_slice.:.constraints.bpol_probe.:.weight
+  equilibrium.time_slice.constraints.bpol_probe.reconstructed: equilibrium.time_slice.:.constraints.bpol_probe.:.reconstructed
+  equilibrium.time_slice.constraints.bpol_probe.chi_squared: equilibrium.time_slice.:.constraints.bpol_probe.:.chi_squared
 
   # Constraints - Diamagnetic flux
   equilibrium.time_slice.constraints.diamagnetic_flux.measured: equilibrium.time_slice.:.constraints.diamagnetic_flux.measured
-  equilibrium.time_slice.constraints.diamagnetic_flux.sigma: equilibrium.time_slice.:.constraints.diamagnetic_flux.sigma
-  equilibrium.time_slice.constraints.diamagnetic_flux.filtered_weight_value: equilibrium.time_slice.:.constraints.diamagnetic_flux.filtered_weight_value
-  equilibrium.time_slice.constraints.diamagnetic_flux.calculated: equilibrium.time_slice.:.constraints.diamagnetic_flux.calculated
-  equilibrium.time_slice.constraints.diamagnetic_flux.residual: equilibrium.time_slice.:.constraints.diamagnetic_flux.residual
+  equilibrium.time_slice.constraints.diamagnetic_flux.measured_error_upper: equilibrium.time_slice.:.constraints.diamagnetic_flux.measured_error_upper
+  equilibrium.time_slice.constraints.diamagnetic_flux.weight: equilibrium.time_slice.:.constraints.diamagnetic_flux.weight
+  equilibrium.time_slice.constraints.diamagnetic_flux.reconstructed: equilibrium.time_slice.:.constraints.diamagnetic_flux.reconstructed
+  equilibrium.time_slice.constraints.diamagnetic_flux.chi_squared: equilibrium.time_slice.:.constraints.diamagnetic_flux.chi_squared
 
   # Constraints - Flux loop
   equilibrium.time_slice.constraints.flux_loop.measured: equilibrium.time_slice.:.constraints.flux_loop.:.measured
-  equilibrium.time_slice.constraints.flux_loop.sigma: equilibrium.time_slice.:.constraints.flux_loop.:.sigma
-  equilibrium.time_slice.constraints.flux_loop.filtered_weight_value: equilibrium.time_slice.:.constraints.flux_loop.:.filtered_weight_value
-  equilibrium.time_slice.constraints.flux_loop.calculated: equilibrium.time_slice.:.constraints.flux_loop.:.calculated
-  equilibrium.time_slice.constraints.flux_loop.residual: equilibrium.time_slice.:.constraints.flux_loop.:.residual
+  equilibrium.time_slice.constraints.flux_loop.measured_error_upper: equilibrium.time_slice.:.constraints.flux_loop.:.measured_error_upper
+  equilibrium.time_slice.constraints.flux_loop.weight: equilibrium.time_slice.:.constraints.flux_loop.:.weight
+  equilibrium.time_slice.constraints.flux_loop.reconstructed: equilibrium.time_slice.:.constraints.flux_loop.:.reconstructed
+  equilibrium.time_slice.constraints.flux_loop.chi_squared: equilibrium.time_slice.:.constraints.flux_loop.:.chi_squared
 
   # Constraints - MSE polarisation angle
   equilibrium.time_slice.constraints.mse_polarisation_angle.measured: equilibrium.time_slice.:.constraints.mse_polarisation_angle.:.measured
@@ -131,16 +131,16 @@ omas_fetch_map:
 
   # Constraints arrays - use wildcard for fetching
   equilibrium.time_slice.constraints.bpol_probe.measured: equilibrium.time_slice.:.constraints.bpol_probe.*
-  equilibrium.time_slice.constraints.bpol_probe.sigma: equilibrium.time_slice.:.constraints.bpol_probe.*
-  equilibrium.time_slice.constraints.bpol_probe.filtered_weight_value: equilibrium.time_slice.:.constraints.bpol_probe.*
-  equilibrium.time_slice.constraints.bpol_probe.calculated: equilibrium.time_slice.:.constraints.bpol_probe.*
-  equilibrium.time_slice.constraints.bpol_probe.residual: equilibrium.time_slice.:.constraints.bpol_probe.*
+  equilibrium.time_slice.constraints.bpol_probe.measured_error_upper: equilibrium.time_slice.:.constraints.bpol_probe.*
+  equilibrium.time_slice.constraints.bpol_probe.weight: equilibrium.time_slice.:.constraints.bpol_probe.*
+  equilibrium.time_slice.constraints.bpol_probe.reconstructed: equilibrium.time_slice.:.constraints.bpol_probe.*
+  equilibrium.time_slice.constraints.bpol_probe.chi_squared: equilibrium.time_slice.:.constraints.bpol_probe.*
 
   equilibrium.time_slice.constraints.flux_loop.measured: equilibrium.time_slice.:.constraints.flux_loop.*
-  equilibrium.time_slice.constraints.flux_loop.sigma: equilibrium.time_slice.:.constraints.flux_loop.*
-  equilibrium.time_slice.constraints.flux_loop.filtered_weight_value: equilibrium.time_slice.:.constraints.flux_loop.*
-  equilibrium.time_slice.constraints.flux_loop.calculated: equilibrium.time_slice.:.constraints.flux_loop.*
-  equilibrium.time_slice.constraints.flux_loop.residual: equilibrium.time_slice.:.constraints.flux_loop.*
+  equilibrium.time_slice.constraints.flux_loop.measured_error_upper: equilibrium.time_slice.:.constraints.flux_loop.*
+  equilibrium.time_slice.constraints.flux_loop.weight: equilibrium.time_slice.:.constraints.flux_loop.*
+  equilibrium.time_slice.constraints.flux_loop.reconstructed: equilibrium.time_slice.:.constraints.flux_loop.*
+  equilibrium.time_slice.constraints.flux_loop.chi_squared: equilibrium.time_slice.:.constraints.flux_loop.*
 
   equilibrium.time_slice.constraints.mse_polarisation_angle.measured: equilibrium.time_slice.:.constraints.mse_polarisation_angle.*
   equilibrium.time_slice.constraints.mse_polarisation_angle.measured_error_upper: equilibrium.time_slice.:.constraints.mse_polarisation_angle.*

@@ -6,12 +6,13 @@ Based on OMAS: omas/machine_mappings/_efit.json
 Implements EFIT equilibrium reconstruction data mapping.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import numpy as np
 import awkward as ak
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
+from ..cocos import COCOSTransform, get_cocos_transform_type
 
 
 def filter_padding(arr: np.ndarray, mask: np.ndarray) -> ak.Array:
@@ -59,6 +60,11 @@ class EquilibriumMapper(IDSMapper):
         # MDS+ path prefixes
         self.geqdsk_node = f'\\{efit_tree}::TOP.RESULTS.GEQDSK'
         self.aeqdsk_node = f'\\{efit_tree}::TOP.RESULTS.AEQDSK'
+        self.measurements_node = f'\\{efit_tree}::TOP.MEASUREMENTS'
+
+        # COCOS transformer
+        self.cocos = COCOSTransform()
+        self._cocos_cache: Dict[int, int] = {}  # shot -> cocos mapping
 
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
@@ -68,6 +74,26 @@ class EquilibriumMapper(IDSMapper):
 
     def _build_specs(self):
         """Build all IDS entry specifications"""
+
+        # Internal dependency: BCENTR (for COCOS identification)
+        self.specs["equilibrium._bcentr"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'{self.geqdsk_node}.BCENTR', 0, self.efit_tree),
+            ],
+            ids_path="equilibrium._bcentr",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Internal dependency: CPASMA (for COCOS identification)
+        self.specs["equilibrium._cpasma_cocos"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'{self.geqdsk_node}.CPASMA', 0, self.efit_tree),
+            ],
+            ids_path="equilibrium._cpasma_cocos",
+            docs_file=self.DOCS_PATH
+        )
 
         # Internal dependency: GTIME (time base)
         self.specs["equilibrium._gtime"] = IDSEntrySpec(
@@ -537,8 +563,8 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.boundary_separatrix.psi"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._ssibry"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._ssibry", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_psi,
             ids_path="equilibrium.time_slice.boundary_separatrix.psi",
             docs_file=self.DOCS_PATH
         )
@@ -546,284 +572,284 @@ class EquilibriumMapper(IDSMapper):
         # Constraints - Plasma current (ip)
         self.specs["equilibrium._plasma"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.PLASMA', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.PLASMA', 0, self.efit_tree)],
             ids_path="equilibrium._plasma",
             docs_file=self.DOCS_PATH
         )
         self.specs["equilibrium.time_slice.constraints.ip.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._plasma"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.PLASMA', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._plasma", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_ip_measured,
             ids_path="equilibrium.time_slice.constraints.ip.measured",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._sigpasma"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGPASMA', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.SIGPASMA', 0, self.efit_tree)],
             ids_path="equilibrium._sigpasma",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.ip.sigma"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.ip.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._sigpasma"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGPASMA', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.ip.sigma",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.SIGPASMA', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.ip.measured_error_upper",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._fwtpasma"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTPASMA', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.FWTPASMA', 0, self.efit_tree)],
             ids_path="equilibrium._fwtpasma",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.ip.filtered_weight_value"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.ip.weight"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._fwtpasma"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTPASMA', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.ip.filtered_weight_value",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.FWTPASMA', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.ip.weight",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._cpasma"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CPASMA', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.CPASMA', 0, self.efit_tree)],
             ids_path="equilibrium._cpasma",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.ip.calculated"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.ip.reconstructed"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._cpasma"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CPASMA', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.ip.calculated",
+            depends_on=["equilibrium._cpasma", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_ip_reconstructed,
+            ids_path="equilibrium.time_slice.constraints.ip.reconstructed",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._chipasma"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CHIPASMA', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.CHIPASMA', 0, self.efit_tree)],
             ids_path="equilibrium._chipasma",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.ip.residual"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.ip.chi_squared"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._chipasma"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CHIPASMA', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.ip.residual",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CHIPASMA', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.ip.chi_squared",
             docs_file=self.DOCS_PATH
         )
 
         # Constraints - Poloidal field probe array (bpol_probe)
         self.specs["equilibrium._expmpi"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.EXPMPI', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.EXPMPI', 0, self.efit_tree)],
             ids_path="equilibrium._expmpi",
             docs_file=self.DOCS_PATH
         )
         self.specs["equilibrium.time_slice.constraints.bpol_probe.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._expmpi"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.EXPMPI', shot, self.efit_tree).as_key()],
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.EXPMPI', shot, self.efit_tree).as_key()],
             ids_path="equilibrium.time_slice.constraints.bpol_probe.measured",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._sigmpi"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGMPI', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.SIGMPI', 0, self.efit_tree)],
             ids_path="equilibrium._sigmpi",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.bpol_probe.sigma"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.bpol_probe.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._sigmpi"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGMPI', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.bpol_probe.sigma",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.SIGMPI', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.bpol_probe.measured_error_upper",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._fwtmp2"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTMP2', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.FWTMP2', 0, self.efit_tree)],
             ids_path="equilibrium._fwtmp2",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.bpol_probe.filtered_weight_value"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.bpol_probe.weight"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._fwtmp2"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTMP2', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.bpol_probe.filtered_weight_value",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.FWTMP2', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.bpol_probe.weight",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._cmpr2"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CMPR2', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.CMPR2', 0, self.efit_tree)],
             ids_path="equilibrium._cmpr2",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.bpol_probe.calculated"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.bpol_probe.reconstructed"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._cmpr2"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CMPR2', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.bpol_probe.calculated",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CMPR2', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.bpol_probe.reconstructed",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._saimpi"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SAIMPI', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.SAIMPI', 0, self.efit_tree)],
             ids_path="equilibrium._saimpi",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.bpol_probe.residual"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.bpol_probe.chi_squared"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._saimpi"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SAIMPI', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.bpol_probe.residual",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.SAIMPI', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.bpol_probe.chi_squared",
             docs_file=self.DOCS_PATH
         )
 
         # Constraints - Diamagnetic flux (diamagnetic_flux)
         self.specs["equilibrium._diamag"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.DIAMAG', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.DIAMAG', 0, self.efit_tree)],
             ids_path="equilibrium._diamag",
             docs_file=self.DOCS_PATH
         )
         self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._diamag"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.DIAMAG', shot, self.efit_tree).as_key()],
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.DIAMAG', shot, self.efit_tree).as_key()],
             ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.measured",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._sigdia"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGDIA', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.SIGDIA', 0, self.efit_tree)],
             ids_path="equilibrium._sigdia",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.sigma"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._sigdia"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGDIA', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.sigma",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.SIGDIA', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.measured_error_upper",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._fwtdia"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTDIA', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.FWTDIA', 0, self.efit_tree)],
             ids_path="equilibrium._fwtdia",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.filtered_weight_value"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.weight"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._fwtdia"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTDIA', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.filtered_weight_value",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.FWTDIA', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.weight",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._cdflux"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CDFLUX', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.CDFLUX', 0, self.efit_tree)],
             ids_path="equilibrium._cdflux",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.calculated"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.reconstructed"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._cdflux"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CDFLUX', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.calculated",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CDFLUX', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.reconstructed",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._chidflux"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CHIDFLUX', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.CHIDFLUX', 0, self.efit_tree)],
             ids_path="equilibrium._chidflux",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.residual"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.chi_squared"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._chidflux"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CHIDFLUX', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.residual",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CHIDFLUX', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.chi_squared",
             docs_file=self.DOCS_PATH
         )
 
         # Constraints - Flux loop array (flux_loop)
         self.specs["equilibrium._silopt"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SILOPT', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.SILOPT', 0, self.efit_tree)],
             ids_path="equilibrium._silopt",
             docs_file=self.DOCS_PATH
         )
         self.specs["equilibrium.time_slice.constraints.flux_loop.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._silopt"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SILOPT', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._silopt", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_flux_loop_measured,
             ids_path="equilibrium.time_slice.constraints.flux_loop.measured",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._sigsil"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGSIL', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.SIGSIL', 0, self.efit_tree)],
             ids_path="equilibrium._sigsil",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.flux_loop.sigma"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.flux_loop.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._sigsil"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGSIL', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.flux_loop.sigma",
+            depends_on=["equilibrium._sigsil", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_flux_loop_measured_error_upper,
+            ids_path="equilibrium.time_slice.constraints.flux_loop.measured_error_upper",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._fwtsi"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTSI', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.FWTSI', 0, self.efit_tree)],
             ids_path="equilibrium._fwtsi",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.flux_loop.filtered_weight_value"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.flux_loop.weight"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._fwtsi"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTSI', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.flux_loop.filtered_weight_value",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.FWTSI', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.flux_loop.weight",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._csilop"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CSILOP', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.CSILOP', 0, self.efit_tree)],
             ids_path="equilibrium._csilop",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.flux_loop.calculated"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.flux_loop.reconstructed"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._csilop"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CSILOP', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.flux_loop.calculated",
+            depends_on=["equilibrium._csilop", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_flux_loop_reconstructed,
+            ids_path="equilibrium.time_slice.constraints.flux_loop.reconstructed",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._saisil"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SAISIL', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.SAISIL', 0, self.efit_tree)],
             ids_path="equilibrium._saisil",
             docs_file=self.DOCS_PATH
         )
-        self.specs["equilibrium.time_slice.constraints.flux_loop.residual"] = IDSEntrySpec(
+        self.specs["equilibrium.time_slice.constraints.flux_loop.chi_squared"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._saisil"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SAISIL', shot, self.efit_tree).as_key()],
-            ids_path="equilibrium.time_slice.constraints.flux_loop.residual",
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.SAISIL', shot, self.efit_tree).as_key()],
+            ids_path="equilibrium.time_slice.constraints.flux_loop.chi_squared",
             docs_file=self.DOCS_PATH
         )
 
@@ -832,7 +858,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._tangam"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.TANGAM', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.TANGAM', 0, self.efit_tree),
             ],
             ids_path="equilibrium._tangam",
             docs_file=self.DOCS_PATH
@@ -849,7 +875,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._siggam"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGGAM', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.SIGGAM', 0, self.efit_tree),
             ],
             ids_path="equilibrium._siggam",
             docs_file=self.DOCS_PATH
@@ -865,42 +891,42 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium._fwtgam"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTGAM', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.FWTGAM', 0, self.efit_tree)],
             ids_path="equilibrium._fwtgam",
             docs_file=self.DOCS_PATH
         )
         self.specs["equilibrium.time_slice.constraints.mse_polarisation_angle.weight"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._fwtgam"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTGAM', shot, self.efit_tree).as_key()],
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.FWTGAM', shot, self.efit_tree).as_key()],
             ids_path="equilibrium.time_slice.constraints.mse_polarisation_angle.weight",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._cmgam"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CMGAM', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.CMGAM', 0, self.efit_tree)],
             ids_path="equilibrium._cmgam",
             docs_file=self.DOCS_PATH
         )
         self.specs["equilibrium.time_slice.constraints.mse_polarisation_angle.reconstructed"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._cmgam"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CMGAM', shot, self.efit_tree).as_key()],
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CMGAM', shot, self.efit_tree).as_key()],
             ids_path="equilibrium.time_slice.constraints.mse_polarisation_angle.reconstructed",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["equilibrium._chigam"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CHIGAM', 0, self.efit_tree)],
+            static_requirements=[Requirement(f'{self.measurements_node}.CHIGAM', 0, self.efit_tree)],
             ids_path="equilibrium._chigam",
             docs_file=self.DOCS_PATH
         )
         self.specs["equilibrium.time_slice.constraints.mse_polarisation_angle.chi_squared"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._chigam"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CHIGAM', shot, self.efit_tree).as_key()],
+            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CHIGAM', shot, self.efit_tree).as_key()],
             ids_path="equilibrium.time_slice.constraints.mse_polarisation_angle.chi_squared",
             docs_file=self.DOCS_PATH
         )
@@ -910,7 +936,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._eccurt"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.ECCURT', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.ECCURT', 0, self.efit_tree),
             ],
             ids_path="equilibrium._eccurt",
             docs_file=self.DOCS_PATH
@@ -919,7 +945,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._fccurt"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FCCURT', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.FCCURT', 0, self.efit_tree),
             ],
             ids_path="equilibrium._fccurt",
             docs_file=self.DOCS_PATH
@@ -936,7 +962,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._sigecc"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGECC', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.SIGECC', 0, self.efit_tree),
             ],
             ids_path="equilibrium._sigecc",
             docs_file=self.DOCS_PATH
@@ -945,7 +971,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._sigfcc"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGFCC', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.SIGFCC', 0, self.efit_tree),
             ],
             ids_path="equilibrium._sigfcc",
             docs_file=self.DOCS_PATH
@@ -962,7 +988,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._fwtec"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTEC', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.FWTEC', 0, self.efit_tree),
             ],
             ids_path="equilibrium._fwtec",
             docs_file=self.DOCS_PATH
@@ -971,7 +997,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._fwtfc"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTFC', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.FWTFC', 0, self.efit_tree),
             ],
             ids_path="equilibrium._fwtfc",
             docs_file=self.DOCS_PATH
@@ -988,7 +1014,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._cecurr"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CECURR', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.CECURR', 0, self.efit_tree),
             ],
             ids_path="equilibrium._cecurr",
             docs_file=self.DOCS_PATH
@@ -997,7 +1023,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._ccbrsp"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CCBRSP', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.CCBRSP', 0, self.efit_tree),
             ],
             ids_path="equilibrium._ccbrsp",
             docs_file=self.DOCS_PATH
@@ -1014,7 +1040,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._chiecc"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CHIECC', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.CHIECC', 0, self.efit_tree),
             ],
             ids_path="equilibrium._chiecc",
             docs_file=self.DOCS_PATH
@@ -1023,7 +1049,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._chifcc"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CHIFCC', 0, self.efit_tree),
+                Requirement(f'{self.measurements_node}.CHIFCC', 0, self.efit_tree),
             ],
             ids_path="equilibrium._chifcc",
             docs_file=self.DOCS_PATH
@@ -1282,7 +1308,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: ATAN(data(\\EFIT::TOP.MEASUREMENTS.TANGAM))
         """
-        tangam_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.TANGAM', shot, self.efit_tree).as_key()
+        tangam_key = Requirement(f'{self.measurements_node}.TANGAM', shot, self.efit_tree).as_key()
         tangam = raw_data[tangam_key]
         return np.arctan(tangam)
 
@@ -1292,7 +1318,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: ATAN(data(\\EFIT::TOP.MEASUREMENTS.SIGGAM))
         """
-        siggam_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGGAM', shot, self.efit_tree).as_key()
+        siggam_key = Requirement(f'{self.measurements_node}.SIGGAM', shot, self.efit_tree).as_key()
         siggam = raw_data[siggam_key]
         return np.arctan(siggam)
 
@@ -1304,8 +1330,8 @@ class EquilibriumMapper(IDSMapper):
 
         Stacks ECCURT and FCCURT along outer dimension.
         """
-        eccurt_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.ECCURT', shot, self.efit_tree).as_key()
-        fccurt_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FCCURT', shot, self.efit_tree).as_key()
+        eccurt_key = Requirement(f'{self.measurements_node}.ECCURT', shot, self.efit_tree).as_key()
+        fccurt_key = Requirement(f'{self.measurements_node}.FCCURT', shot, self.efit_tree).as_key()
         eccurt = raw_data[eccurt_key]
         fccurt = raw_data[fccurt_key]
 
@@ -1319,8 +1345,8 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.SIGECC','\\EFIT::TOP.MEASUREMENTS.SIGFCC')
         """
-        sigecc_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGECC', shot, self.efit_tree).as_key()
-        sigfcc_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.SIGFCC', shot, self.efit_tree).as_key()
+        sigecc_key = Requirement(f'{self.measurements_node}.SIGECC', shot, self.efit_tree).as_key()
+        sigfcc_key = Requirement(f'{self.measurements_node}.SIGFCC', shot, self.efit_tree).as_key()
         sigecc = raw_data[sigecc_key]
         sigfcc = raw_data[sigfcc_key]
         return np.concatenate([sigecc, sigfcc], axis=1)
@@ -1331,8 +1357,8 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.FWTEC','\\EFIT::TOP.MEASUREMENTS.FWTFC')
         """
-        fwtec_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTEC', shot, self.efit_tree).as_key()
-        fwtfc_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.FWTFC', shot, self.efit_tree).as_key()
+        fwtec_key = Requirement(f'{self.measurements_node}.FWTEC', shot, self.efit_tree).as_key()
+        fwtfc_key = Requirement(f'{self.measurements_node}.FWTFC', shot, self.efit_tree).as_key()
         fwtec = raw_data[fwtec_key]
         fwtfc = raw_data[fwtfc_key]
         return np.concatenate([fwtec, fwtfc], axis=1)
@@ -1343,8 +1369,8 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.CECURR','\\EFIT::TOP.MEASUREMENTS.CCBRSP')
         """
-        cecurr_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CECURR', shot, self.efit_tree).as_key()
-        ccbrsp_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CCBRSP', shot, self.efit_tree).as_key()
+        cecurr_key = Requirement(f'{self.measurements_node}.CECURR', shot, self.efit_tree).as_key()
+        ccbrsp_key = Requirement(f'{self.measurements_node}.CCBRSP', shot, self.efit_tree).as_key()
         cecurr = raw_data[cecurr_key]
         ccbrsp = raw_data[ccbrsp_key]
         return np.concatenate([cecurr, ccbrsp], axis=1)
@@ -1355,8 +1381,135 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.CHIECC','\\EFIT::TOP.MEASUREMENTS.CHIFCC')
         """
-        chiecc_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CHIECC', shot, self.efit_tree).as_key()
-        chifcc_key = Requirement(f'{self.aeqdsk_node}.MEASUREMENTS.CHIFCC', shot, self.efit_tree).as_key()
+        chiecc_key = Requirement(f'{self.measurements_node}.CHIECC', shot, self.efit_tree).as_key()
+        chifcc_key = Requirement(f'{self.measurements_node}.CHIFCC', shot, self.efit_tree).as_key()
         chiecc = raw_data[chiecc_key]
         chifcc = raw_data[chifcc_key]
         return np.concatenate([chiecc, chifcc], axis=1)
+
+    def _compose_psi(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose boundary separatrix psi with COCOS transformation.
+
+        OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY)
+        Transform: PSI (requires COCOS conversion)
+        """
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+        psi = raw_data[ssibry_key]
+        return self._apply_cocos_transform(psi, shot, raw_data, "equilibrium.time_slice.boundary_separatrix.psi")
+
+    def _compose_ip_measured(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose measured plasma current with COCOS transformation.
+
+        OMAS: data(\\EFIT::TOP.MEASUREMENTS.PLASMA)
+        Transform: TOR (requires COCOS conversion)
+        """
+        plasma_key = Requirement(f'{self.measurements_node}.PLASMA', shot, self.efit_tree).as_key()
+        ip = raw_data[plasma_key]
+        return self._apply_cocos_transform(ip, shot, raw_data, "equilibrium.time_slice.constraints.ip.measured")
+
+    def _compose_ip_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose reconstructed plasma current with COCOS transformation.
+
+        OMAS: data(\\EFIT::TOP.MEASUREMENTS.CPASMA)
+        Transform: TOR (requires COCOS conversion)
+        """
+        cpasma_key = Requirement(f'{self.measurements_node}.CPASMA', shot, self.efit_tree).as_key()
+        ip = raw_data[cpasma_key]
+        return self._apply_cocos_transform(ip, shot, raw_data, "equilibrium.time_slice.constraints.ip.reconstructed")
+
+    def _compose_flux_loop_measured(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose measured flux loop data with COCOS transformation.
+
+        OMAS: data(\\EFIT::TOP.MEASUREMENTS.SILOPT)
+        Transform: PSI (magnetic flux requires COCOS conversion, factor of 2π for COCOS 1→11)
+        """
+        silopt_key = Requirement(f'{self.measurements_node}.SILOPT', shot, self.efit_tree).as_key()
+        flux = raw_data[silopt_key]
+        return self._apply_cocos_transform(flux, shot, raw_data, "equilibrium.time_slice.constraints.flux_loop.measured")
+
+    def _compose_flux_loop_measured_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose flux loop measurement error with COCOS transformation.
+
+        OMAS: data(\\EFIT::TOP.MEASUREMENTS.SIGSIL)
+        Transform: PSI (error on magnetic flux requires same COCOS conversion as flux)
+        """
+        sigsil_key = Requirement(f'{self.measurements_node}.SIGSIL', shot, self.efit_tree).as_key()
+        error = raw_data[sigsil_key]
+        return self._apply_cocos_transform(error, shot, raw_data, "equilibrium.time_slice.constraints.flux_loop.measured_error_upper")
+
+    def _compose_flux_loop_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose reconstructed flux loop data with COCOS transformation.
+
+        OMAS: data(\\EFIT::TOP.MEASUREMENTS.CSILOP)
+        Transform: PSI (magnetic flux requires COCOS conversion, factor of 2π for COCOS 1→11)
+        """
+        csilop_key = Requirement(f'{self.measurements_node}.CSILOP', shot, self.efit_tree).as_key()
+        flux = raw_data[csilop_key]
+        return self._apply_cocos_transform(flux, shot, raw_data, "equilibrium.time_slice.constraints.flux_loop.reconstructed")
+
+    # COCOS transformation methods
+
+    def _get_cocos_for_shot(self, shot: int, raw_data: dict) -> int:
+        """
+        Identify COCOS convention for a given shot.
+
+        Uses Bt and Ip signs from GEQDSK to determine COCOS, following OMAS logic.
+        Results are cached per shot.
+
+        Args:
+            shot: Shot number
+            raw_data: Dictionary containing fetched MDS+ data
+
+        Returns:
+            COCOS number (1, 3, 5, or 7 typically)
+
+        Note:
+            This implements the same logic as OMAS MDS_gEQDSK_COCOS_identify
+        """
+        if shot in self._cocos_cache:
+            return self._cocos_cache[shot]
+
+        # Get Bt and Ip from GEQDSK data
+        # Use mean values like OMAS does
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+        cpasma_key = Requirement(f'{self.geqdsk_node}.CPASMA', shot, self.efit_tree).as_key()
+
+        bt = raw_data[bcentr_key]
+        ip = raw_data[cpasma_key]
+
+        # Take mean if arrays (OMAS does this for time-dependent data)
+        bt_mean = np.mean(bt) if hasattr(bt, '__len__') else bt
+        ip_mean = np.mean(ip) if hasattr(ip, '__len__') else ip
+
+        # Identify COCOS
+        cocos = self.cocos.identify_cocos(bt_mean, ip_mean)
+        self._cocos_cache[shot] = cocos
+
+        return cocos
+
+    def _apply_cocos_transform(self, data: np.ndarray, shot: int, raw_data: dict,
+                               ids_path: str) -> np.ndarray:
+        """
+        Apply COCOS transformation to data if needed.
+
+        Args:
+            data: Data to transform
+            shot: Shot number
+            raw_data: Dictionary containing fetched MDS+ data (for COCOS identification)
+            ids_path: IDS path to determine transformation type
+
+        Returns:
+            Transformed data (or original if no transform needed)
+        """
+        transform_type = get_cocos_transform_type(ids_path)
+        if transform_type is None:
+            return data
+
+        source_cocos = self._get_cocos_for_shot(shot, raw_data)
+        return self.cocos.transform(data, source_cocos, transform_type)

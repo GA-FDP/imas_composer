@@ -153,6 +153,10 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
 
     Returns:
         Composed value from imas_composer
+
+    Raises:
+        RuntimeError: If requirements cannot be resolved within max iterations
+        Exception: If any requirement fetch fails (re-raises the fetch exception)
     """
     raw_data = {}
 
@@ -165,10 +169,16 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
 
         # Fetch requirements
         fetched = fetch_requirements(requirements)
+
+        # Check if any fetched values are exceptions (from failed MDS+ access)
+        for key, value in fetched.items():
+            if isinstance(value, Exception):
+                raise RuntimeError(f"Failed to fetch requirement {key} for {ids_path}: {value}") from value
+
         raw_data.update(fetched)
 
     if not fully_resolved:
-        raise RuntimeError(f"Could not resolve {ids_path}")
+        raise RuntimeError(f"Could not resolve {ids_path} within 10 iterations")
 
     # Compose final data
     return composer.compose(ids_path, shot, raw_data)
