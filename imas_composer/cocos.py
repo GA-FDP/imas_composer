@@ -227,6 +227,17 @@ EQUILIBRIUM_COCOS_MAP = {
     'equilibrium.time_slice.constraints.flux_loop.measured_error_upper': 'PSI',
     'equilibrium.time_slice.constraints.flux_loop.reconstructed': 'PSI',
 
+    # Constraints - Toroidal current density (j_tor)
+    'equilibrium.time_slice.constraints.j_tor.position.psi': 'PSI',
+
+    # Global quantities
+    'equilibrium.time_slice.global_quantities.ip': 'TOR',
+    'equilibrium.time_slice.global_quantities.psi_axis': 'PSI',
+    'equilibrium.time_slice.global_quantities.psi_boundary': 'PSI',
+    'equilibrium.time_slice.global_quantities.q_95': 'Q',
+    'equilibrium.time_slice.global_quantities.q_axis': 'Q',
+    'equilibrium.time_slice.global_quantities.q_min.value': 'Q',
+
     # Note: Most other equilibrium quantities we're implementing don't need COCOS transforms:
     # - Geometric quantities (R, Z coordinates, triangularity, elongation, etc.) are COCOS-independent
     # - Gap values, strike points are geometric

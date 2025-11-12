@@ -103,6 +103,34 @@ omas_path_map:
   equilibrium.time_slice.constraints.pf_current.reconstructed: equilibrium.time_slice.:.constraints.pf_current.:.reconstructed
   equilibrium.time_slice.constraints.pf_current.chi_squared: equilibrium.time_slice.:.constraints.pf_current.:.chi_squared
 
+  # Constraints - Pressure
+  equilibrium.time_slice.constraints.pressure.measured: equilibrium.time_slice.:.constraints.pressure.:.measured
+  equilibrium.time_slice.constraints.pressure.measured_error_upper: equilibrium.time_slice.:.constraints.pressure.:.measured_error_upper
+  equilibrium.time_slice.constraints.pressure.weight: equilibrium.time_slice.:.constraints.pressure.:.weight
+  equilibrium.time_slice.constraints.pressure.reconstructed: equilibrium.time_slice.:.constraints.pressure.:.reconstructed
+  equilibrium.time_slice.constraints.pressure.chi_squared: equilibrium.time_slice.:.constraints.pressure.:.chi_squared
+ 
+  equilibrium.time_slice.constraints.j_tor.position.psi: equilibrium.time_slice.:.constraints.j_tor.:.position.psi
+  equilibrium.time_slice.constraints.j_tor.measured: equilibrium.time_slice.:.constraints.j_tor.:.measured
+
+  # Global quantities
+  equilibrium.time_slice.global_quantities.ip: equilibrium.time_slice.:.global_quantities.ip
+  equilibrium.time_slice.global_quantities.li_3: equilibrium.time_slice.:.global_quantities.li_3
+  equilibrium.time_slice.global_quantities.magnetic_axis.r: equilibrium.time_slice.:.global_quantities.magnetic_axis.r
+  equilibrium.time_slice.global_quantities.magnetic_axis.z: equilibrium.time_slice.:.global_quantities.magnetic_axis.z
+  equilibrium.time_slice.global_quantities.magnetic_axis.b_field_tor: equilibrium.time_slice.:.global_quantities.magnetic_axis.b_field_tor
+  equilibrium.time_slice.global_quantities.psi_axis: equilibrium.time_slice.:.global_quantities.psi_axis
+  equilibrium.time_slice.global_quantities.psi_boundary: equilibrium.time_slice.:.global_quantities.psi_boundary
+  equilibrium.time_slice.global_quantities.area: equilibrium.time_slice.:.global_quantities.area
+  equilibrium.time_slice.global_quantities.surface: equilibrium.time_slice.:.global_quantities.surface
+  equilibrium.time_slice.global_quantities.volume: equilibrium.time_slice.:.global_quantities.volume
+  equilibrium.time_slice.global_quantities.beta_pol: equilibrium.time_slice.:.global_quantities.beta_pol
+  equilibrium.time_slice.global_quantities.beta_tor: equilibrium.time_slice.:.global_quantities.beta_tor
+  equilibrium.time_slice.global_quantities.beta_normal: equilibrium.time_slice.:.global_quantities.beta_normal
+  equilibrium.time_slice.global_quantities.q_95: equilibrium.time_slice.:.global_quantities.q_95
+  equilibrium.time_slice.global_quantities.q_axis: equilibrium.time_slice.:.global_quantities.q_axis
+  equilibrium.time_slice.global_quantities.q_min.value: equilibrium.time_slice.:.global_quantities.q_min.value
+
 # OMAS fetch mapping (machine_to_omas)
 # Overrides omas_path_map entries when fetching data via machine_to_omas
 # machine_to_omas supports wildcards (.*) that ODS class doesn't understand
@@ -136,11 +164,11 @@ omas_fetch_map:
   equilibrium.time_slice.constraints.bpol_probe.reconstructed: equilibrium.time_slice.:.constraints.bpol_probe.*
   equilibrium.time_slice.constraints.bpol_probe.chi_squared: equilibrium.time_slice.:.constraints.bpol_probe.*
 
-  equilibrium.time_slice.constraints.flux_loop.measured: equilibrium.time_slice.:.constraints.flux_loop.*
-  equilibrium.time_slice.constraints.flux_loop.measured_error_upper: equilibrium.time_slice.:.constraints.flux_loop.*
-  equilibrium.time_slice.constraints.flux_loop.weight: equilibrium.time_slice.:.constraints.flux_loop.*
-  equilibrium.time_slice.constraints.flux_loop.reconstructed: equilibrium.time_slice.:.constraints.flux_loop.*
-  equilibrium.time_slice.constraints.flux_loop.chi_squared: equilibrium.time_slice.:.constraints.flux_loop.*
+  # equilibrium.time_slice.constraints.flux_loop.measured: equilibrium.time_slice.:.constraints.flux_loop.*
+  # equilibrium.time_slice.constraints.flux_loop.measured_error_upper: equilibrium.time_slice.:.constraints.flux_loop.*
+  # equilibrium.time_slice.constraints.flux_loop.weight: equilibrium.time_slice.:.constraints.flux_loop.*
+  # equilibrium.time_slice.constraints.flux_loop.reconstructed: equilibrium.time_slice.:.constraints.flux_loop.*
+  # equilibrium.time_slice.constraints.flux_loop.chi_squared: equilibrium.time_slice.:.constraints.flux_loop.*
 
   equilibrium.time_slice.constraints.mse_polarisation_angle.measured: equilibrium.time_slice.:.constraints.mse_polarisation_angle.*
   equilibrium.time_slice.constraints.mse_polarisation_angle.measured_error_upper: equilibrium.time_slice.:.constraints.mse_polarisation_angle.*
@@ -153,3 +181,12 @@ omas_fetch_map:
   equilibrium.time_slice.constraints.pf_current.weight: equilibrium.time_slice.:.constraints.pf_current.*
   equilibrium.time_slice.constraints.pf_current.reconstructed: equilibrium.time_slice.:.constraints.pf_current.*
   equilibrium.time_slice.constraints.pf_current.chi_squared: equilibrium.time_slice.:.constraints.pf_current.*
+
+  equilibrium.time_slice.constraints.pressure.measured: equilibrium.time_slice.:.constraints.pressure.*
+  equilibrium.time_slice.constraints.pressure.measured_error_upper: equilibrium.time_slice.:.constraints.pressure.*
+  equilibrium.time_slice.constraints.pressure.weight: equilibrium.time_slice.:.constraints.pressure.*
+  equilibrium.time_slice.constraints.pressure.reconstructed: equilibrium.time_slice.:.constraints.pressure.*
+  equilibrium.time_slice.constraints.pressure.chi_squared: equilibrium.time_slice.:.constraints.pressure.*
+
+  equilibrium.time_slice.constraints.j_tor.position.psi: equilibrium.time_slice.:.constraints.j_tor.:.position.psi
+  equilibrium.time_slice.constraints.j_tor.measured: equilibrium.time_slice.:.constraints.j_tor.:.measured

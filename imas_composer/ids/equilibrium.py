@@ -1063,6 +1063,343 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # Constraints - Pressure array (pressure)
+        self.specs["equilibrium._pressr"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.PRESSR', 0, self.efit_tree)],
+            ids_path="equilibrium._pressr",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.pressure.measured"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._pressr"],
+            compose=self._compose_pressure_measured,
+            ids_path="equilibrium.time_slice.constraints.pressure.measured",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium._sigpre"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.SIGPRE', 0, self.efit_tree)],
+            ids_path="equilibrium._sigpre",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.pressure.measured_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._sigpre"],
+            compose=self._compose_pressure_error,
+            ids_path="equilibrium.time_slice.constraints.pressure.measured_error_upper",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium._fwtpre"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.FWTPRE', 0, self.efit_tree)],
+            ids_path="equilibrium._fwtpre",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.pressure.weight"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._fwtpre"],
+            compose=self._compose_pressure_weight,
+            ids_path="equilibrium.time_slice.constraints.pressure.weight",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium._cpress"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.CPRESS', 0, self.efit_tree)],
+            ids_path="equilibrium._cpress",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.pressure.reconstructed"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._cpress"],
+            compose=self._compose_pressure_reconstructed,
+            ids_path="equilibrium.time_slice.constraints.pressure.reconstructed",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium._saipre"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.SAIPRE', 0, self.efit_tree)],
+            ids_path="equilibrium._saipre",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.pressure.chi_squared"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._saipre"],
+            compose=self._compose_pressure_chi_squared,
+            ids_path="equilibrium.time_slice.constraints.pressure.chi_squared",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Constraints - Toroidal current density array (j_tor)
+        # Note: j_tor only has position.psi and measured (no error, weight, reconstructed, chi_squared)
+        self.specs["equilibrium._sizeroj"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.SIZEROJ', 0, self.efit_tree)],
+            ids_path="equilibrium._sizeroj",
+            docs_file=self.DOCS_PATH
+        )
+        # Need SSIMAG and SSIBRY for psi transformation
+        self.specs["equilibrium._ssimag"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.geqdsk_node}.SSIMAG', 0, self.efit_tree)],
+            ids_path="equilibrium._ssimag",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium._ssibry"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.geqdsk_node}.SSIBRY', 0, self.efit_tree)],
+            ids_path="equilibrium._ssibry",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.j_tor.position.psi"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._sizeroj", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_j_tor_position_psi,
+            ids_path="equilibrium.time_slice.constraints.j_tor.position.psi",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium._vzeroj"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.VZEROJ', 0, self.efit_tree)],
+            ids_path="equilibrium._vzeroj",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.j_tor.measured"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._vzeroj"],
+            compose=self._compose_j_tor_measured,
+            ids_path="equilibrium.time_slice.constraints.j_tor.measured",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Global quantities
+        # ip - plasma current (needs COCOS TOR transformation)
+        self.specs["equilibrium.time_slice.global_quantities.ip"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._cpasma", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_global_ip,
+            ids_path="equilibrium.time_slice.global_quantities.ip",
+            docs_file=self.DOCS_PATH
+        )
+
+        # li_3 - internal inductance
+        self.specs["equilibrium._li3"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.LI3', 0, self.efit_tree)],
+            ids_path="equilibrium._li3",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.li_3"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._li3"],
+            compose=self._compose_global_li_3,
+            ids_path="equilibrium.time_slice.global_quantities.li_3",
+            docs_file=self.DOCS_PATH
+        )
+
+        # magnetic_axis.r - R position
+        self.specs["equilibrium._rmaxis"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.geqdsk_node}.RMAXIS', 0, self.efit_tree)],
+            ids_path="equilibrium._rmaxis",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.magnetic_axis.r"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._rmaxis"],
+            compose=self._compose_global_magnetic_axis_r,
+            ids_path="equilibrium.time_slice.global_quantities.magnetic_axis.r",
+            docs_file=self.DOCS_PATH
+        )
+
+        # magnetic_axis.z - Z position
+        self.specs["equilibrium._zmaxis"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.geqdsk_node}.ZMAXIS', 0, self.efit_tree)],
+            ids_path="equilibrium._zmaxis",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.magnetic_axis.z"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._zmaxis"],
+            compose=self._compose_global_magnetic_axis_z,
+            ids_path="equilibrium.time_slice.global_quantities.magnetic_axis.z",
+            docs_file=self.DOCS_PATH
+        )
+
+        # magnetic_axis.b_field_tor - toroidal field at axis
+        self.specs["equilibrium._bt0"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.BT0', 0, self.efit_tree)],
+            ids_path="equilibrium._bt0",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.magnetic_axis.b_field_tor"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._bt0"],
+            compose=self._compose_global_magnetic_axis_b_field_tor,
+            ids_path="equilibrium.time_slice.global_quantities.magnetic_axis.b_field_tor",
+            docs_file=self.DOCS_PATH
+        )
+
+        # psi_axis - psi at magnetic axis (needs COCOS PSI transformation)
+        self.specs["equilibrium.time_slice.global_quantities.psi_axis"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._ssimag", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_global_psi_axis,
+            ids_path="equilibrium.time_slice.global_quantities.psi_axis",
+            docs_file=self.DOCS_PATH
+        )
+
+        # psi_boundary - psi at boundary (needs COCOS PSI transformation)
+        self.specs["equilibrium.time_slice.global_quantities.psi_boundary"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._ssibry", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_global_psi_boundary,
+            ids_path="equilibrium.time_slice.global_quantities.psi_boundary",
+            docs_file=self.DOCS_PATH
+        )
+
+        # area - plasma cross-sectional area (unit conversion cm²→m²)
+        self.specs["equilibrium._area"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.AREA', 0, self.efit_tree)],
+            ids_path="equilibrium._area",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.area"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._area"],
+            compose=self._compose_global_area,
+            ids_path="equilibrium.time_slice.global_quantities.area",
+            docs_file=self.DOCS_PATH
+        )
+
+        # surface - plasma surface area
+        self.specs["equilibrium._psurfa"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.PSURFA', 0, self.efit_tree)],
+            ids_path="equilibrium._psurfa",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.surface"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._psurfa"],
+            compose=self._compose_global_surface,
+            ids_path="equilibrium.time_slice.global_quantities.surface",
+            docs_file=self.DOCS_PATH
+        )
+
+        # volume - plasma volume
+        self.specs["equilibrium._volume"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.VOLUME', 0, self.efit_tree)],
+            ids_path="equilibrium._volume",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.volume"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._volume"],
+            compose=self._compose_global_volume,
+            ids_path="equilibrium.time_slice.global_quantities.volume",
+            docs_file=self.DOCS_PATH
+        )
+
+        # beta_pol - poloidal beta
+        self.specs["equilibrium._betap"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.BETAP', 0, self.efit_tree)],
+            ids_path="equilibrium._betap",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.beta_pol"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._betap"],
+            compose=self._compose_global_beta_pol,
+            ids_path="equilibrium.time_slice.global_quantities.beta_pol",
+            docs_file=self.DOCS_PATH
+        )
+
+        # beta_tor - toroidal beta
+        self.specs["equilibrium._betat"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.BETAT', 0, self.efit_tree)],
+            ids_path="equilibrium._betat",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.beta_tor"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._betat"],
+            compose=self._compose_global_beta_tor,
+            ids_path="equilibrium.time_slice.global_quantities.beta_tor",
+            docs_file=self.DOCS_PATH
+        )
+
+        # beta_normal - normalized beta
+        self.specs["equilibrium._betan"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.BETAN', 0, self.efit_tree)],
+            ids_path="equilibrium._betan",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.beta_normal"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._betan"],
+            compose=self._compose_global_beta_normal,
+            ids_path="equilibrium.time_slice.global_quantities.beta_normal",
+            docs_file=self.DOCS_PATH
+        )
+
+        # q_95 - safety factor at 95% flux (needs COCOS Q transformation)
+        self.specs["equilibrium._q95"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.Q95', 0, self.efit_tree)],
+            ids_path="equilibrium._q95",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.q_95"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._q95", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_global_q_95,
+            ids_path="equilibrium.time_slice.global_quantities.q_95",
+            docs_file=self.DOCS_PATH
+        )
+
+        # q_axis - safety factor at axis (needs COCOS Q transformation)
+        self.specs["equilibrium._q0"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.Q0', 0, self.efit_tree)],
+            ids_path="equilibrium._q0",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.q_axis"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._q0", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_global_q_axis,
+            ids_path="equilibrium.time_slice.global_quantities.q_axis",
+            docs_file=self.DOCS_PATH
+        )
+
+        # q_min.value - minimum safety factor (needs COCOS Q transformation)
+        self.specs["equilibrium._qmin"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.QMIN', 0, self.efit_tree)],
+            ids_path="equilibrium._qmin",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.global_quantities.q_min.value"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._qmin", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_global_q_min_value,
+            ids_path="equilibrium.time_slice.global_quantities.q_min.value",
+            docs_file=self.DOCS_PATH
+        )
+
     # Compose functions
 
     def _compose_time(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -1452,6 +1789,215 @@ class EquilibriumMapper(IDSMapper):
         csilop_key = Requirement(f'{self.measurements_node}.CSILOP', shot, self.efit_tree).as_key()
         flux = raw_data[csilop_key]
         return self._apply_cocos_transform(flux, shot, raw_data, "equilibrium.time_slice.constraints.flux_loop.reconstructed")
+
+    def _compose_pressure_measured(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose measured pressure with ensure_2d transformation.
+
+        OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.PRESSR')
+        Transform: ensure_2d (adds dimension if 1D)
+        """
+        pressr_key = Requirement(f'{self.measurements_node}.PRESSR', shot, self.efit_tree).as_key()
+        pressure = raw_data[pressr_key]
+        return np.atleast_2d(pressure)
+
+    def _compose_pressure_error(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose pressure measurement error with ensure_2d transformation.
+
+        OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.SIGPRE')
+        Transform: ensure_2d (adds dimension if 1D)
+        """
+        sigpre_key = Requirement(f'{self.measurements_node}.SIGPRE', shot, self.efit_tree).as_key()
+        error = raw_data[sigpre_key]
+        return np.atleast_2d(error)
+
+    def _compose_pressure_weight(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose pressure weight with ensure_2d transformation.
+
+        OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.FWTPRE')
+        Transform: ensure_2d (adds dimension if 1D)
+        """
+        fwtpre_key = Requirement(f'{self.measurements_node}.FWTPRE', shot, self.efit_tree).as_key()
+        weight = raw_data[fwtpre_key]
+        return np.atleast_2d(weight)
+
+    def _compose_pressure_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose reconstructed pressure with ensure_2d transformation.
+
+        OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.CPRESS')
+        Transform: ensure_2d (adds dimension if 1D)
+        """
+        cpress_key = Requirement(f'{self.measurements_node}.CPRESS', shot, self.efit_tree).as_key()
+        pressure = raw_data[cpress_key]
+        return np.atleast_2d(pressure)
+
+    def _compose_pressure_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose pressure chi squared with ensure_2d and negative sign.
+
+        OMAS: py2tdi(ensure_2d,'-\\EFIT::TOP.MEASUREMENTS.SAIPRE')
+        Transform: ensure_2d + negate
+        """
+        saipre_key = Requirement(f'{self.measurements_node}.SAIPRE', shot, self.efit_tree).as_key()
+        chi_sq = raw_data[saipre_key]
+        return -np.atleast_2d(chi_sq)
+
+    def _compose_j_tor_position_psi(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose j_tor position psi using efit_psi_to_real_psi_2d transformation with COCOS.
+
+        OMAS: py2tdi(efit_psi_to_real_psi_2d,'\\EFIT::TOP.MEASUREMENTS.SIZEROJ',
+                     '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY')
+        Transform: (SIZEROJ.T * (SSIBRY - SSIMAG) + SSIMAG).T with COCOS PSI conversion
+        """
+        sizeroj_key = Requirement(f'{self.measurements_node}.SIZEROJ', shot, self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+
+        sizeroj = raw_data[sizeroj_key]
+        ssimag = raw_data[ssimag_key]
+        ssibry = raw_data[ssibry_key]
+
+        # Convert normalized psi to real psi, then apply COCOS transform
+        sizeroj_2d = np.atleast_2d(sizeroj)
+        psi = (sizeroj_2d.T * (ssibry - ssimag) + ssimag).T
+        return self._apply_cocos_transform(psi, shot, raw_data, "equilibrium.time_slice.constraints.j_tor.position.psi")
+
+    def _compose_j_tor_measured(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose j_tor measured values with ensure_2d transformation.
+
+        OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.VZEROJ')
+        Transform: ensure_2d (convert to 2D array)
+        """
+        vzeroj_key = Requirement(f'{self.measurements_node}.VZEROJ', shot, self.efit_tree).as_key()
+        j_tor = raw_data[vzeroj_key]
+        return np.atleast_2d(j_tor)
+
+    def _compose_global_ip(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose global plasma current with COCOS TOR transformation.
+
+        OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.CPASMA)
+        Transform: COCOS TOR (toroidal current)
+        """
+        cpasma_key = Requirement(f'{self.geqdsk_node}.CPASMA', shot, self.efit_tree).as_key()
+        ip = raw_data[cpasma_key]
+        return self._apply_cocos_transform(ip, shot, raw_data, "equilibrium.time_slice.global_quantities.ip")
+
+    def _compose_global_psi_axis(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose psi at magnetic axis with COCOS PSI transformation.
+
+        OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG)
+        Transform: COCOS PSI (magnetic flux)
+        """
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
+        psi_axis = raw_data[ssimag_key]
+        return self._apply_cocos_transform(psi_axis, shot, raw_data, "equilibrium.time_slice.global_quantities.psi_axis")
+
+    def _compose_global_psi_boundary(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose psi at boundary with COCOS PSI transformation.
+
+        OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY)
+        Transform: COCOS PSI (magnetic flux)
+        """
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+        psi_boundary = raw_data[ssibry_key]
+        return self._apply_cocos_transform(psi_boundary, shot, raw_data, "equilibrium.time_slice.global_quantities.psi_boundary")
+
+    def _compose_global_area(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose plasma cross-sectional area with unit conversion.
+
+        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.AREA)/10000.
+        Transform: cm² to m² (divide by 10000)
+        """
+        area_key = Requirement(f'{self.aeqdsk_node}.AREA', shot, self.efit_tree).as_key()
+        area_cm2 = raw_data[area_key]
+        return area_cm2 / 10000.0
+
+    def _compose_global_li_3(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for li_3."""
+        li3_key = Requirement(f'{self.aeqdsk_node}.LI3', shot, self.efit_tree).as_key()
+        return raw_data[li3_key]
+
+    def _compose_global_magnetic_axis_r(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for magnetic_axis.r."""
+        rmaxis_key = Requirement(f'{self.geqdsk_node}.RMAXIS', shot, self.efit_tree).as_key()
+        return raw_data[rmaxis_key]
+
+    def _compose_global_magnetic_axis_z(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for magnetic_axis.z."""
+        zmaxis_key = Requirement(f'{self.geqdsk_node}.ZMAXIS', shot, self.efit_tree).as_key()
+        return raw_data[zmaxis_key]
+
+    def _compose_global_magnetic_axis_b_field_tor(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for magnetic_axis.b_field_tor."""
+        bt0_key = Requirement(f'{self.aeqdsk_node}.BT0', shot, self.efit_tree).as_key()
+        return raw_data[bt0_key]
+
+    def _compose_global_surface(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for surface."""
+        psurfa_key = Requirement(f'{self.aeqdsk_node}.PSURFA', shot, self.efit_tree).as_key()
+        return raw_data[psurfa_key]
+
+    def _compose_global_volume(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for volume."""
+        volume_key = Requirement(f'{self.aeqdsk_node}.VOLUME', shot, self.efit_tree).as_key()
+        return raw_data[volume_key]
+
+    def _compose_global_beta_pol(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for beta_pol."""
+        betap_key = Requirement(f'{self.aeqdsk_node}.BETAP', shot, self.efit_tree).as_key()
+        return raw_data[betap_key]
+
+    def _compose_global_beta_tor(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for beta_tor."""
+        betat_key = Requirement(f'{self.aeqdsk_node}.BETAT', shot, self.efit_tree).as_key()
+        return raw_data[betat_key]
+
+    def _compose_global_beta_normal(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for beta_normal."""
+        betan_key = Requirement(f'{self.aeqdsk_node}.BETAN', shot, self.efit_tree).as_key()
+        return raw_data[betan_key]
+
+    def _compose_global_q_95(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose q_95 with COCOS Q transformation.
+
+        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.Q95)
+        Transform: COCOS Q (safety factor)
+        """
+        q95_key = Requirement(f'{self.aeqdsk_node}.Q95', shot, self.efit_tree).as_key()
+        q95 = raw_data[q95_key]
+        return self._apply_cocos_transform(q95, shot, raw_data, "equilibrium.time_slice.global_quantities.q_95")
+
+    def _compose_global_q_axis(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose q_axis with COCOS Q transformation.
+
+        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.Q0)
+        Transform: COCOS Q (safety factor)
+        """
+        q0_key = Requirement(f'{self.aeqdsk_node}.Q0', shot, self.efit_tree).as_key()
+        q_axis = raw_data[q0_key]
+        return self._apply_cocos_transform(q_axis, shot, raw_data, "equilibrium.time_slice.global_quantities.q_axis")
+
+    def _compose_global_q_min_value(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose q_min.value with COCOS Q transformation.
+
+        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.QMIN)
+        Transform: COCOS Q (safety factor)
+        """
+        qmin_key = Requirement(f'{self.aeqdsk_node}.QMIN', shot, self.efit_tree).as_key()
+        q_min = raw_data[qmin_key]
+        return self._apply_cocos_transform(q_min, shot, raw_data, "equilibrium.time_slice.global_quantities.q_min.value")
 
     # COCOS transformation methods
 

@@ -80,6 +80,29 @@ fields:
   - time_slice.constraints.pf_current.weight
   - time_slice.constraints.pf_current.reconstructed
   - time_slice.constraints.pf_current.chi_squared
+  - time_slice.constraints.pressure.measured
+  - time_slice.constraints.pressure.measured_error_upper
+  - time_slice.constraints.pressure.weight
+  - time_slice.constraints.pressure.reconstructed
+  - time_slice.constraints.pressure.chi_squared
+  - time_slice.constraints.j_tor.position.psi
+  - time_slice.constraints.j_tor.measured
+  - time_slice.global_quantities.ip
+  - time_slice.global_quantities.li_3
+  - time_slice.global_quantities.magnetic_axis.r
+  - time_slice.global_quantities.magnetic_axis.z
+  - time_slice.global_quantities.magnetic_axis.b_field_tor
+  - time_slice.global_quantities.psi_axis
+  - time_slice.global_quantities.psi_boundary
+  - time_slice.global_quantities.area
+  - time_slice.global_quantities.surface
+  - time_slice.global_quantities.volume
+  - time_slice.global_quantities.beta_pol
+  - time_slice.global_quantities.beta_tor
+  - time_slice.global_quantities.beta_normal
+  - time_slice.global_quantities.q_95
+  - time_slice.global_quantities.q_axis
+  - time_slice.global_quantities.q_min.value
 
 # Notes:
 # - time_slice.: notation means array of time slices
