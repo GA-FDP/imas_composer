@@ -103,6 +103,24 @@ fields:
   - time_slice.global_quantities.q_95
   - time_slice.global_quantities.q_axis
   - time_slice.global_quantities.q_min.value
+  - time_slice.profiles_1d.dpressure_dpsi
+  - time_slice.profiles_1d.f
+  - time_slice.profiles_1d.f_df_dpsi
+  - time_slice.profiles_1d.pressure
+  - time_slice.profiles_1d.psi
+  - time_slice.profiles_1d.q
+  - time_slice.profiles_1d.rho_tor_norm
+  - time_slice.profiles_1d.j_tor
+  - time_slice.profiles_1d.volume
+  - time_slice.profiles_2d.grid.dim1
+  - time_slice.profiles_2d.grid.dim2
+  - time_slice.profiles_2d.grid_type.index
+  - time_slice.profiles_2d.psi
+  - vacuum_toroidal_field.b0
+  - vacuum_toroidal_field.r0
+  - time_slice.convergence.iterations_n
+  - time_slice.convergence.grad_shafranov_deviation_value
+  - time_slice.convergence.grad_shafranov_deviation_expression.index
 
 # Notes:
 # - time_slice.: notation means array of time slices

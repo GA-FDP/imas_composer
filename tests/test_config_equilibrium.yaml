@@ -3,6 +3,58 @@
 # Field-level exceptions for validation
 field_exceptions: {}
 
+# Field-specific tolerance settings
+# Override default rtol=1e-10, atol=1e-6 for specific fields
+field_tolerances:
+  equilibrium.time_slice.profiles_1d.j_tor:
+  # This uses interpolation so accuracy is limited
+    rtol: 1.0e-5
+    atol: 1.0
+  equilibrium.time_slice.profiles_1d.volume:
+  # This uses interpolation so accuracy is limited
+    rtol: 1.0e-5
+    atol: 1.0e-5
+  equilibrium.time_slice.time:
+  # OMAS does the ms -> s conversion on the MDSplus side where everything is 32 bit
+    rtol: 1.0e-7
+    atol: 1.0e-7
+  equilibrium.time_slice.boundary_separatrix.geometric_axis.r:
+  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
+    rtol: 1.0e-8
+    atol: 1.0e-8
+  equilibrium.time_slice.boundary_separatrix.geometric_axis.z:
+  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
+    rtol: 1.0e-8
+    atol: 1.0e-8
+  equilibrium.time_slice.boundary_separatrix.closest_wall_point.distance:
+  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
+    rtol: 1.0e-8
+    atol: 1.0e-8
+  equilibrium.time_slice.boundary_separatrix.gap.value:
+  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
+    rtol: 1.0e-8
+    atol: 1.0e-8
+  equilibrium.time_slice.boundary_separatrix.strike_point.r:
+  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
+    rtol: 1.0e-8
+    atol: 1.0e-8
+  equilibrium.time_slice.boundary_separatrix.strike_point.z:
+  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
+    rtol: 1.0e-8
+    atol: 1.0e-8
+  equilibrium.time_slice.constraints.j_tor.position.psi:
+  # IMAS_composer uses the actual psi entries from MDSpus while OMAS recreates the grid
+    rtol: 1.0e-7
+    atol: 1.0e-7
+  equilibrium.time_slice.constraints.j_tor.position.psi:
+  # IMAS_composer uses the actual psi entries from MDSpus while OMAS recreates the grid
+    rtol: 1.0e-10
+    atol: 1.0e-6
+  equilibrium.time_slice.global_quantities.area:
+  # OMAS does the cm^2 -> m^2 conversion on the MDSplus side where everything is 32 bit
+    rtol: 1.0e-6
+    atol: 1.0e-6
+
 # Requirement validation settings
 requirement_validation:
   allow_different_shot: []
@@ -131,6 +183,32 @@ omas_path_map:
   equilibrium.time_slice.global_quantities.q_axis: equilibrium.time_slice.:.global_quantities.q_axis
   equilibrium.time_slice.global_quantities.q_min.value: equilibrium.time_slice.:.global_quantities.q_min.value
 
+  # 1D Profiles
+  equilibrium.time_slice.profiles_1d.dpressure_dpsi: equilibrium.time_slice.:.profiles_1d.dpressure_dpsi
+  equilibrium.time_slice.profiles_1d.f: equilibrium.time_slice.:.profiles_1d.f
+  equilibrium.time_slice.profiles_1d.f_df_dpsi: equilibrium.time_slice.:.profiles_1d.f_df_dpsi
+  equilibrium.time_slice.profiles_1d.pressure: equilibrium.time_slice.:.profiles_1d.pressure
+  equilibrium.time_slice.profiles_1d.psi: equilibrium.time_slice.:.profiles_1d.psi
+  equilibrium.time_slice.profiles_1d.q: equilibrium.time_slice.:.profiles_1d.q
+  equilibrium.time_slice.profiles_1d.rho_tor_norm: equilibrium.time_slice.:.profiles_1d.rho_tor_norm
+  equilibrium.time_slice.profiles_1d.j_tor: equilibrium.time_slice.:.profiles_1d.j_tor
+  equilibrium.time_slice.profiles_1d.volume: equilibrium.time_slice.:.profiles_1d.volume
+
+  # 2D Profiles
+  equilibrium.time_slice.profiles_2d.grid.dim1: equilibrium.time_slice.:.profiles_2d.:.grid.dim1
+  equilibrium.time_slice.profiles_2d.grid.dim2: equilibrium.time_slice.:.profiles_2d.:.grid.dim2
+  equilibrium.time_slice.profiles_2d.grid_type.index: equilibrium.time_slice.:.profiles_2d.:.grid_type.index
+  equilibrium.time_slice.profiles_2d.psi: equilibrium.time_slice.:.profiles_2d.:.psi
+
+  # Vacuum toroidal field
+  equilibrium.vacuum_toroidal_field.b0: equilibrium.vacuum_toroidal_field.b0
+  equilibrium.vacuum_toroidal_field.r0: equilibrium.vacuum_toroidal_field.r0
+
+  # Convergence
+  equilibrium.time_slice.convergence.iterations_n: equilibrium.time_slice.:.convergence.iterations_n
+  equilibrium.time_slice.convergence.grad_shafranov_deviation_value: equilibrium.time_slice.:.convergence.grad_shafranov_deviation_value
+  equilibrium.time_slice.convergence.grad_shafranov_deviation_expression.index: equilibrium.time_slice.:.convergence.grad_shafranov_deviation_expression.index
+
 # OMAS fetch mapping (machine_to_omas)
 # Overrides omas_path_map entries when fetching data via machine_to_omas
 # machine_to_omas supports wildcards (.*) that ODS class doesn't understand
@@ -190,3 +268,5 @@ omas_fetch_map:
 
   equilibrium.time_slice.constraints.j_tor.position.psi: equilibrium.time_slice.:.constraints.j_tor.:.position.psi
   equilibrium.time_slice.constraints.j_tor.measured: equilibrium.time_slice.:.constraints.j_tor.:.measured
+
+  equilibrium.time_slice.convergence.grad_shafranov_deviation_expression.index: equilibrium.time_slice.:.convergence.*

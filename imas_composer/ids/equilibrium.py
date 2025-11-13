@@ -13,6 +13,7 @@ import awkward as ak
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
 from ..cocos import COCOSTransform, get_cocos_transform_type
+from scipy.interpolate import interp1d
 
 
 def filter_padding(arr: np.ndarray, mask: np.ndarray) -> ak.Array:
@@ -1400,6 +1401,292 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # 1D Profiles
+        # dpressure_dpsi - pressure derivative (needs COCOS dPSI transformation)
+        self.specs["equilibrium._pprime"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.geqdsk_node}.PPRIME', 0, self.efit_tree)],
+            ids_path="equilibrium._pprime",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.dpressure_dpsi"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._pprime", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_profiles_1d_dpressure_dpsi,
+            ids_path="equilibrium.time_slice.profiles_1d.dpressure_dpsi",
+            docs_file=self.DOCS_PATH
+        )
+
+        # f - poloidal current function
+        self.specs["equilibrium._fpol"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.geqdsk_node}.FPOL', 0, self.efit_tree)],
+            ids_path="equilibrium._fpol",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.f"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._fpol"],
+            compose=self._compose_profiles_1d_f,
+            ids_path="equilibrium.time_slice.profiles_1d.f",
+            docs_file=self.DOCS_PATH
+        )
+
+        # f_df_dpsi - derivative of F (needs COCOS dPSI transformation)
+        self.specs["equilibrium._ffprim"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.geqdsk_node}.FFPRIM', 0, self.efit_tree)],
+            ids_path="equilibrium._ffprim",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.f_df_dpsi"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._ffprim", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_profiles_1d_f_df_dpsi,
+            ids_path="equilibrium.time_slice.profiles_1d.f_df_dpsi",
+            docs_file=self.DOCS_PATH
+        )
+
+        # pressure - pressure profile
+        self.specs["equilibrium._pres"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.geqdsk_node}.PRES', 0, self.efit_tree)],
+            ids_path="equilibrium._pres",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.pressure"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._pres"],
+            compose=self._compose_profiles_1d_pressure,
+            ids_path="equilibrium.time_slice.profiles_1d.pressure",
+            docs_file=self.DOCS_PATH
+        )
+
+        # psi - poloidal flux profile (needs geqdsk_psi transformation)
+        self.specs["equilibrium._psin"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.geqdsk_node}.PSIN', 0, self.efit_tree)],
+            ids_path="equilibrium._psin",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.psi"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._psin", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_profiles_1d_psi,
+            ids_path="equilibrium.time_slice.profiles_1d.psi",
+            docs_file=self.DOCS_PATH
+        )
+
+        # q - safety factor profile (needs COCOS Q transformation)
+        self.specs["equilibrium._qpsi"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.geqdsk_node}.QPSI', 0, self.efit_tree)],
+            ids_path="equilibrium._qpsi",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.q"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._qpsi", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_profiles_1d_q,
+            ids_path="equilibrium.time_slice.profiles_1d.q",
+            docs_file=self.DOCS_PATH
+        )
+
+        # rho_tor_norm - normalized toroidal flux coordinate
+        self.specs["equilibrium._rhovn"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.geqdsk_node}.RHOVN', 0, self.efit_tree)],
+            ids_path="equilibrium._rhovn",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.rho_tor_norm"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._rhovn"],
+            compose=self._compose_profiles_1d_rho_tor_norm,
+            ids_path="equilibrium.time_slice.profiles_1d.rho_tor_norm",
+            docs_file=self.DOCS_PATH
+        )
+
+        # j_tor - toroidal current density profile (needs interpolate_psi_1d transformation)
+        self.specs["equilibrium._fluxfun_psi"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.PSI', 0, self.efit_tree)],
+            ids_path="equilibrium._fluxfun_psi",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium._fluxfun_jeff"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.JEFF', 0, self.efit_tree)],
+            ids_path="equilibrium._fluxfun_jeff",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.j_tor"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._fluxfun_psi", "equilibrium._fluxfun_jeff", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin"],
+            compose=self._compose_profiles_1d_j_tor,
+            ids_path="equilibrium.time_slice.profiles_1d.j_tor",
+            docs_file=self.DOCS_PATH
+        )
+
+        # volume - volume profile (needs interpolate_psi_1d transformation)
+        self.specs["equilibrium._fluxfun_vol"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.VOL', 0, self.efit_tree)],
+            ids_path="equilibrium._fluxfun_vol",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.volume"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._fluxfun_psi", "equilibrium._fluxfun_vol", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin"],
+            compose=self._compose_profiles_1d_volume,
+            ids_path="equilibrium.time_slice.profiles_1d.volume",
+            docs_file=self.DOCS_PATH
+        )
+
+        # === Auxiliary nodes for profiles_2d ===
+
+        # R grid from GEQDSK
+        self.specs["equilibrium._r_grid"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'{self.geqdsk_node}.R', 0, self.efit_tree)
+            ],
+            ids_path="equilibrium._r_grid",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Z grid from GEQDSK
+        self.specs["equilibrium._z_grid"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'{self.geqdsk_node}.Z', 0, self.efit_tree)
+            ],
+            ids_path="equilibrium._z_grid",
+            docs_file=self.DOCS_PATH
+        )
+
+        # PSIRZ from GEQDSK
+        self.specs["equilibrium._psirz"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'{self.geqdsk_node}.PSIRZ', 0, self.efit_tree)
+            ],
+            ids_path="equilibrium._psirz",
+            docs_file=self.DOCS_PATH
+        )
+
+        # === profiles_2d ===
+
+        self.specs["equilibrium.time_slice.profiles_2d.grid.dim1"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._r_grid", "equilibrium._bcentr"],
+            compose=self._compose_profiles_2d_grid_dim1,
+            ids_path="equilibrium.time_slice.profiles_2d.grid.dim1",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium.time_slice.profiles_2d.grid.dim2"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._z_grid", "equilibrium._bcentr"],
+            compose=self._compose_profiles_2d_grid_dim2,
+            ids_path="equilibrium.time_slice.profiles_2d.grid.dim2",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium.time_slice.profiles_2d.grid_type.index"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._bcentr"],
+            compose=self._compose_profiles_2d_grid_type_index,
+            ids_path="equilibrium.time_slice.profiles_2d.grid_type.index",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium.time_slice.profiles_2d.psi"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._psirz", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            compose=self._compose_profiles_2d_psi,
+            ids_path="equilibrium.time_slice.profiles_2d.psi",
+            docs_file=self.DOCS_PATH
+        )
+
+        # === Auxiliary nodes for vacuum_toroidal_field ===
+
+        # RZERO from GEQDSK
+        self.specs["equilibrium._rzero"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'{self.geqdsk_node}.RZERO', 0, self.efit_tree)
+            ],
+            ids_path="equilibrium._rzero",
+            docs_file=self.DOCS_PATH
+        )
+
+        # === vacuum_toroidal_field ===
+
+        self.specs["equilibrium.vacuum_toroidal_field.b0"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._bcentr"],
+            compose=self._compose_vacuum_b0,
+            ids_path="equilibrium.vacuum_toroidal_field.b0",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium.vacuum_toroidal_field.r0"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._rzero"],
+            compose=self._compose_vacuum_r0,
+            ids_path="equilibrium.vacuum_toroidal_field.r0",
+            docs_file=self.DOCS_PATH
+        )
+
+        # === Auxiliary nodes for convergence ===
+
+        # CERROR from MEASUREMENTS
+        self.specs["equilibrium._cerror"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'\\{self.efit_tree}::TOP.MEASUREMENTS.CERROR', 0, self.efit_tree)
+            ],
+            ids_path="equilibrium._cerror",
+            docs_file=self.DOCS_PATH
+        )
+
+        # AEQDSK ERROR
+        self.specs["equilibrium._aeqdsk_error"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'{self.aeqdsk_node}.ERROR', 0, self.efit_tree)
+            ],
+            ids_path="equilibrium._aeqdsk_error",
+            docs_file=self.DOCS_PATH
+        )
+
+        # === convergence ===
+
+        self.specs["equilibrium.time_slice.convergence.iterations_n"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._cerror"],
+            compose=self._compose_convergence_iterations_n,
+            ids_path="equilibrium.time_slice.convergence.iterations_n",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium.time_slice.convergence.grad_shafranov_deviation_value"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._aeqdsk_error"],
+            compose=self._compose_convergence_grad_shafranov_deviation_value,
+            ids_path="equilibrium.time_slice.convergence.grad_shafranov_deviation_value",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium.time_slice.convergence.grad_shafranov_deviation_expression.index"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._bcentr"],  # Just need time dimension
+            compose=self._compose_convergence_grad_shafranov_deviation_expression_index,
+            ids_path="equilibrium.time_slice.convergence.grad_shafranov_deviation_expression.index",
+            docs_file=self.DOCS_PATH
+        )
+
     # Compose functions
 
     def _compose_time(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -1998,6 +2285,284 @@ class EquilibriumMapper(IDSMapper):
         qmin_key = Requirement(f'{self.aeqdsk_node}.QMIN', shot, self.efit_tree).as_key()
         q_min = raw_data[qmin_key]
         return self._apply_cocos_transform(q_min, shot, raw_data, "equilibrium.time_slice.global_quantities.q_min.value")
+
+    def _compose_profiles_1d_dpressure_dpsi(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose dpressure_dpsi with COCOS dPSI transformation.
+
+        OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.PPRIME)
+        Transform: COCOS dPSI (inverse PSI, 1/(2π) factor)
+        """
+        pprime_key = Requirement(f'{self.geqdsk_node}.PPRIME', shot, self.efit_tree).as_key()
+        dpressure_dpsi = raw_data[pprime_key]
+        return self._apply_cocos_transform(dpressure_dpsi, shot, raw_data, "equilibrium.time_slice.profiles_1d.dpressure_dpsi")
+
+    def _compose_profiles_1d_f(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for f (poloidal current function)."""
+        fpol_key = Requirement(f'{self.geqdsk_node}.FPOL', shot, self.efit_tree).as_key()
+        return raw_data[fpol_key]
+
+    def _compose_profiles_1d_f_df_dpsi(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose f_df_dpsi with COCOS dPSI transformation.
+
+        OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.FFPRIM)
+        Transform: COCOS dPSI (inverse PSI, 1/(2π) factor)
+        """
+        ffprim_key = Requirement(f'{self.geqdsk_node}.FFPRIM', shot, self.efit_tree).as_key()
+        f_df_dpsi = raw_data[ffprim_key]
+        return self._apply_cocos_transform(f_df_dpsi, shot, raw_data, "equilibrium.time_slice.profiles_1d.f_df_dpsi")
+
+    def _compose_profiles_1d_pressure(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for pressure profile."""
+        pres_key = Requirement(f'{self.geqdsk_node}.PRES', shot, self.efit_tree).as_key()
+        return raw_data[pres_key]
+
+    def _compose_profiles_1d_psi(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose psi profile using geqdsk_psi transformation with COCOS.
+
+        OMAS: py2tdi(geqdsk_psi,'\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY','\\EFIT::TOP.RESULTS.GEQDSK.PSIN')
+        Transform: PSIN * (SSIBRY - SSIMAG) + SSIMAG, then apply COCOS PSI
+        """
+        psin_key = Requirement(f'{self.geqdsk_node}.PSIN', shot, self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+
+        psin = raw_data[psin_key]
+        ssimag = raw_data[ssimag_key]
+        ssibry = raw_data[ssibry_key]
+
+        # Convert normalized psi to real psi and fix the shape of psi which is constant in time
+        psi = psin[None,:] * (ssibry[:,None] - ssimag[:,None]) + ssimag[:,None]
+        return self._apply_cocos_transform(psi, shot, raw_data, "equilibrium.time_slice.profiles_1d.psi")
+
+    def _compose_profiles_1d_q(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose q profile with COCOS Q transformation.
+
+        OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.QPSI)
+        Transform: COCOS Q (safety factor)
+        """
+        qpsi_key = Requirement(f'{self.geqdsk_node}.QPSI', shot, self.efit_tree).as_key()
+        q = raw_data[qpsi_key]
+        return self._apply_cocos_transform(q, shot, raw_data, "equilibrium.time_slice.profiles_1d.q")
+
+    def _compose_profiles_1d_rho_tor_norm(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Trivial pass-through for rho_tor_norm."""
+        rhovn_key = Requirement(f'{self.geqdsk_node}.RHOVN', shot, self.efit_tree).as_key()
+        return raw_data[rhovn_key]
+
+    def _compose_profiles_1d_j_tor(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose j_tor profile using interpolate_psi_1d transformation.
+
+        OMAS: py2tdi(interpolate_psi_1d,'\\EFIT::TOP.RESULTS.FLUXFUN.PSI','\\EFIT::TOP.RESULTS.FLUXFUN.JEFF',
+                     '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY','\\EFIT::TOP.RESULTS.GEQDSK.PSIN')
+        Transform: Interpolate from FLUXFUN.PSI/JEFF to GEQDSK.PSIN grid
+        """
+        fluxfun_psi_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.PSI', shot, self.efit_tree).as_key()
+        fluxfun_jeff_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.JEFF', shot, self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+        psin_key = Requirement(f'{self.geqdsk_node}.PSIN', shot, self.efit_tree).as_key()
+        # Fluxfun quantities comes as (radial direction, time), but we need (time, radial direction/psi)
+        fluxfun_psi = raw_data[fluxfun_psi_key].T
+        fluxfun_jeff = raw_data[fluxfun_jeff_key].T
+        ssimag = raw_data[ssimag_key]
+        ssibry = raw_data[ssibry_key]
+        psin = raw_data[psin_key]
+
+        # Normalize FLUXFUN.PSI
+        fluxfun_psi_norm = (fluxfun_psi - ssimag[:, None]) / (ssibry[:, None] - ssimag[:, None])
+
+        # Interpolate from FLUXFUN grid to GEQDSK grid
+        j_tor = np.zeros(ssimag.shape + psin.shape)
+        for i in range(fluxfun_psi.shape[0]):
+            # Use constant extrapolation: first and last values for out-of-bounds
+            fill_value = (fluxfun_jeff[i][0], fluxfun_jeff[i][-1])
+            j_tor[i] = interp1d(fluxfun_psi_norm[i], fluxfun_jeff[i], kind='cubic',
+                                bounds_error=False, fill_value=fill_value)(psin)
+        return j_tor
+
+    def _compose_profiles_1d_volume(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose volume profile using interpolate_psi_1d transformation.
+
+        OMAS: py2tdi(interpolate_psi_1d,'\\EFIT::TOP.RESULTS.FLUXFUN.PSI','\\EFIT::TOP.RESULTS.FLUXFUN.VOL',
+                     '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY','\\EFIT::TOP.RESULTS.GEQDSK.PSIN')
+        Transform: Interpolate from FLUXFUN.PSI/VOL to GEQDSK.PSIN grid
+        """
+        fluxfun_psi_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.PSI', shot, self.efit_tree).as_key()
+        fluxfun_vol_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.VOL', shot, self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+        psin_key = Requirement(f'{self.geqdsk_node}.PSIN', shot, self.efit_tree).as_key()
+
+        # Fluxfun quantities comes as (radial direction, time), but we need (time, radial direction/psi)
+        fluxfun_psi = raw_data[fluxfun_psi_key].T
+        fluxfun_vol = raw_data[fluxfun_vol_key].T
+        ssimag = raw_data[ssimag_key]
+        ssibry = raw_data[ssibry_key]
+        psin = raw_data[psin_key]
+
+        # Normalize FLUXFUN.PSI
+        fluxfun_psi_norm = (fluxfun_psi - ssimag[:, None]) / (ssibry[:, None] - ssimag[:, None])
+
+        # Interpolate from FLUXFUN grid to GEQDSK grid
+        volume = np.zeros(ssimag.shape + psin.shape)
+        for i in range(fluxfun_psi.shape[0]):
+            # Use constant extrapolation: first and last values for out-of-bounds
+            fill_value = (fluxfun_vol[i][0], fluxfun_vol[i][-1])
+            volume[i] = interp1d(fluxfun_psi_norm[i], fluxfun_vol[i], kind='cubic',
+                                 bounds_error=False, fill_value=fill_value)(psin)
+        return volume
+
+    def _compose_profiles_2d_grid_dim1(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose profiles_2d R grid using tile transformation.
+
+        OMAS: py2tdi(tile,'\\EFIT::TOP.RESULTS.GEQDSK.R','size(\\EFIT::TOP.RESULTS.GEQDSK.BCENTR)')
+        Transform: Tile R grid array to match time dimension
+        TRANSPOSE: [1,0,2] - swap time and radial axes
+        """
+        r_grid_key = Requirement(f'{self.geqdsk_node}.R', shot, self.efit_tree).as_key()
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+
+        r_grid = raw_data[r_grid_key]
+        bcentr = raw_data[bcentr_key]
+        n_time = len(bcentr)
+
+        # Tile R grid: create (n_time, n_r) array
+        # OMAS: np.array([r_grid for k in range(n_time)])
+        # Then transpose [1,0,2] swaps time and radial dimensions
+        tiled = np.array([r_grid for _ in range(n_time)])
+        # TRANSPOSE [1,0,2]: (time, r) -> (r, time) for 2D case, but this is actually (time, r, z) -> (r, time, z)
+        # Add grid dimension
+        return tiled[:, None, :]
+
+    def _compose_profiles_2d_grid_dim2(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose profiles_2d Z grid using tile transformation.
+
+        OMAS: py2tdi(tile,'\\EFIT::TOP.RESULTS.GEQDSK.Z','size(\\EFIT::TOP.RESULTS.GEQDSK.BCENTR)')
+        Transform: Tile Z grid array to match time dimension
+        TRANSPOSE: [1,0,2] - swap time and vertical axes
+        """
+        z_grid_key = Requirement(f'{self.geqdsk_node}.Z', shot, self.efit_tree).as_key()
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+
+        z_grid = raw_data[z_grid_key]
+        bcentr = raw_data[bcentr_key]
+        n_time = len(bcentr)
+
+        # Tile Z grid: create (n_time, n_z) array then transpose
+        tiled = np.array([z_grid for _ in range(n_time)])
+        # Add grid dimension
+        return tiled[:, None, :]
+
+    def _compose_profiles_2d_grid_type_index(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose grid_type.index - constant value of 1 for rectangular grid.
+
+        OMAS: py2tdi(tile,1,'size(\\EFIT::TOP.RESULTS.GEQDSK.BCENTR)')
+        Transform: Create array of 1s matching time dimension
+        TRANSPOSE: [1,0] - but result is 1D so no transpose needed
+        """
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+        bcentr = raw_data[bcentr_key]
+        n_time = len(bcentr)
+
+        # Return array of [1]s for each time slice and grid type 1 = rectangular R-Z grid 
+        return np.ones(n_time, dtype=int)[:,None]
+
+    def _compose_profiles_2d_psi(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose profiles_2d PSI with COCOS transformation.
+
+        OMAS: [data(\\EFIT::TOP.RESULTS.GEQDSK.PSIRZ)]
+        TRANSPOSE: [1, 0, 3, 2] - swap axes for (time, r, z) ordering
+        """
+        psirz_key = Requirement(f'{self.geqdsk_node}.PSIRZ', shot, self.efit_tree).as_key()
+        # Add grid dimension
+        psirz = np.swapaxes(raw_data[psirz_key], 1,2)[:,None,:]
+
+        # Apply COCOS transformation
+        return self._apply_cocos_transform(psirz, shot, raw_data, "equilibrium.time_slice.profiles_2d.psi")
+
+    def _compose_vacuum_b0(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose vacuum toroidal field at reference radius (trivial pass-through).
+
+        OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.BCENTR)
+        """
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+        return raw_data[bcentr_key]
+
+    def _compose_vacuum_r0(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose vacuum toroidal field reference radius (first element of RZERO).
+
+        OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.RZERO)[0]
+        """
+        rzero_key = Requirement(f'{self.geqdsk_node}.RZERO', shot, self.efit_tree).as_key()
+        rzero = raw_data[rzero_key]
+        # RZERO is scalar per time slice, but OMAS takes [0] suggesting it might be an array
+        # If it's already scalar, just return it; if array, take first element
+        if isinstance(rzero, np.ndarray) and rzero.ndim > 0:
+            return rzero if rzero.shape == () else rzero[0] if rzero.ndim == 1 else rzero[:, 0]
+        return rzero
+
+    def _compose_convergence_iterations_n(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose number of iterations by finding the largest non-zero iteration index per time slice.
+
+        OMAS: py2tdi(get_largest_axis_value,'dim_of(\\EFIT::TOP.MEASUREMENTS.CERROR,0)','\\EFIT::TOP.MEASUREMENTS.CERROR')
+        Transform: Find maximum non-zero iteration index per time slice
+        """
+        cerror_key = Requirement(f'\\{self.efit_tree}::TOP.MEASUREMENTS.CERROR', shot, self.efit_tree).as_key()
+        cerror = raw_data[cerror_key]
+
+        # CERROR shape: (n_time, n_iter)
+        # For each time slice, find the index of the last non-zero error value
+
+        # Create indices array: same shape as cerror, filled with iteration indices
+        n_time, n_iter = cerror.shape
+        indices = np.arange(n_iter)[np.newaxis, :] * np.ones((n_time, 1), dtype=int)
+
+        # Set indices to -1 where cerror is zero, so they won't be selected as max
+        indices = np.where(cerror != 0, indices, -1)
+
+        # Find the maximum index (last non-zero iteration) along iteration axis
+        iterations_n = np.max(indices, axis=1)
+
+        # Replace -1 (no non-zero values) with 0
+        iterations_n = np.maximum(iterations_n, 0)
+
+        return iterations_n
+
+    def _compose_convergence_grad_shafranov_deviation_value(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose Grad-Shafranov deviation (trivial pass-through).
+
+        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.ERROR)
+        """
+        error_key = Requirement(f'{self.aeqdsk_node}.ERROR', shot, self.efit_tree).as_key()
+        return raw_data[error_key]
+
+    def _compose_convergence_grad_shafranov_deviation_expression_index(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose Grad-Shafranov deviation expression index (constant value 3).
+
+        OMAS: EVAL 3
+        Expression index 3 likely indicates a specific formulation of the GS equation residual.
+        """
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+        bcentr = raw_data[bcentr_key]
+        n_time = len(bcentr)
+
+        # Return array of 3s for each time slice
+        return np.full(n_time, 3, dtype=int)
 
     # COCOS transformation methods
 

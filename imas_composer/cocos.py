@@ -238,6 +238,15 @@ EQUILIBRIUM_COCOS_MAP = {
     'equilibrium.time_slice.global_quantities.q_axis': 'Q',
     'equilibrium.time_slice.global_quantities.q_min.value': 'Q',
 
+    # 1D Profiles
+    'equilibrium.time_slice.profiles_1d.dpressure_dpsi': 'dPSI',
+    'equilibrium.time_slice.profiles_1d.f_df_dpsi': 'dPSI',
+    'equilibrium.time_slice.profiles_1d.psi': 'PSI',
+    'equilibrium.time_slice.profiles_1d.q': 'Q',
+
+    # 2D Profiles
+    'equilibrium.time_slice.profiles_2d.psi': 'PSI',
+
     # Note: Most other equilibrium quantities we're implementing don't need COCOS transforms:
     # - Geometric quantities (R, Z coordinates, triangularity, elongation, etc.) are COCOS-independent
     # - Gap values, strike points are geometric

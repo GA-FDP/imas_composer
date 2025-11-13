@@ -183,7 +183,7 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
     # Compose final data
     return composer.compose(ids_path, shot, raw_data)
 
-def compare_values(composer_val, omas_val, label="value"):
+def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float=1e-12, atol_array=1e-6):
     """
     Compare composer and OMAS values with appropriate method based on type.
 
@@ -191,6 +191,9 @@ def compare_values(composer_val, omas_val, label="value"):
         composer_val: Value from imas_composer
         omas_val: Value from OMAS
         label: Description for error messages
+        rtol: Relative tolerance for float comparisons (default: 1e-10)
+        atol_float: Absolute tolerance for scalar floats (default: 1e-12)
+        atol_array: Absolute tolerance for float arrays (default: 1e-6)
 
     Raises:
         AssertionError: If values don't match
@@ -204,7 +207,7 @@ def compare_values(composer_val, omas_val, label="value"):
     elif isinstance(omas_val, (float, np.floating)):
         np.testing.assert_allclose(
             composer_val, omas_val,
-            rtol=1e-10, atol=1e-12,
+            rtol=rtol, atol=atol_float,
             err_msg=f"{label}: float mismatch"
         )
 
@@ -231,7 +234,7 @@ def compare_values(composer_val, omas_val, label="value"):
             # Float arrays - use tolerance-based comparison
             np.testing.assert_allclose(
                 composer_val, omas_val,
-                rtol=1e-10, atol=1e-6,
+                rtol=rtol, atol=atol_array,
                 err_msg=f"{label}: float array mismatch"
             )
 
@@ -378,7 +381,7 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
 
 
 
-def _compare_recursive(composer_value, ods, omas_path):
+def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e-12, atol_array=1e-6):
     """
     Recursively compare composer value with OMAS data.
 
@@ -389,6 +392,9 @@ def _compare_recursive(composer_value, ods, omas_path):
         composer_value: Value from imas_composer
         ods: OMAS ODS object
         omas_path: OMAS path with .: or indices (e.g., 'ece.channel.:.t_e.data' or 'ece.channel.0.t_e.data')
+        rtol: Relative tolerance for float comparisons
+        atol_float: Absolute tolerance for scalar floats
+        atol_array: Absolute tolerance for float arrays
     """
     if hasattr(composer_value, "ndim"):
         ndim = composer_value.ndim
@@ -399,7 +405,7 @@ def _compare_recursive(composer_value, ods, omas_path):
     # Base case: 0D (scalar) or 1D array - do comparison
     if ndim <= 1:
         # Compare
-        compare_values(composer_value, ods[omas_path], omas_path)
+        compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
 
     else:
         # Recursive case: ndim > 1, iterate over outer dimension
@@ -413,7 +419,7 @@ def _compare_recursive(composer_value, ods, omas_path):
             # e.g., 'thomson_scattering.channel.:.n_e.time' -> 'thomson_scattering.channel.0.n_e.time'
             new_omas_path = omas_path.replace(':', str(i), 1)
 
-            _compare_recursive(composer_elem, ods, new_omas_path)
+            _compare_recursive(composer_elem, ods, new_omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
 
 
 def run_composition_against_omas(ids_path, composer, omas_data, ids_name):
@@ -439,6 +445,13 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name):
     test_config = load_test_config(ids_name)
     omas_path_map = test_config.get('omas_path_map', {})
     omas_fetch_map = test_config.get('omas_fetch_map', {})
+    field_tolerances = test_config.get('field_tolerances', {})
+
+    # Get field-specific tolerances if configured
+    field_tol = field_tolerances.get(ids_path, {})
+    rtol = field_tol.get('rtol', 1e-10)
+    atol_float = field_tol.get('atol', 1e-12)
+    atol_array = field_tol.get('atol', 1e-6)
 
     # Determine fetch and access paths
     # omas_fetch_map overrides omas_path_map for machine_to_omas calls (supports wildcards and lists)
@@ -461,5 +474,5 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name):
     else:
         ods = omas_data(ids_name)
 
-    # Recursively compare using ndim-based logic
-    _compare_recursive(composer_value, ods, omas_access_path)
+    # Recursively compare using ndim-based logic with field-specific tolerances
+    _compare_recursive(composer_value, ods, omas_access_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
