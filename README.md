@@ -321,8 +321,8 @@ When contributing new IDS mappers or fields:
 
 ## License
 
-[License information to be added]
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Contact
 
-[Contact information to be added]
+For questions or contributions, please open an issue on the project repository.
