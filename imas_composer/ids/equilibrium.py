@@ -1681,7 +1681,7 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.convergence.grad_shafranov_deviation_expression.index"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._bcentr"],  # Just need time dimension
+            depends_on=["equilibrium._aeqdsk_error"],  # Just need time dimension
             compose=self._compose_convergence_grad_shafranov_deviation_expression_index,
             ids_path="equilibrium.time_slice.convergence.grad_shafranov_deviation_expression.index",
             docs_file=self.DOCS_PATH
@@ -2555,14 +2555,12 @@ class EquilibriumMapper(IDSMapper):
         Compose Grad-Shafranov deviation expression index (constant value 3).
 
         OMAS: EVAL 3
-        Expression index 3 likely indicates a specific formulation of the GS equation residual.
+        Expression index 3 indicates a specific formulation of the GS equation residual.
         """
-        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
-        bcentr = raw_data[bcentr_key]
-        n_time = len(bcentr)
+        error_key = Requirement(f'{self.aeqdsk_node}.ERROR', shot, self.efit_tree).as_key()
 
         # Return array of 3s for each time slice
-        return np.full(n_time, 3, dtype=int)
+        return np.full(len(raw_data[error_key]), 3, dtype=int)
 
     # COCOS transformation methods
 
