@@ -1,0 +1,24 @@
+# EC Launchers IDS Configuration for DIII-D
+
+# Static values (hardcoded, not from MDSplus)
+static_values: {}
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  - beam.frequency.data
+  - beam.frequency.time
+  - beam.identifier
+  - beam.launching_position.r
+  - beam.launching_position.z
+  - beam.launching_position.phi
+  - beam.mode
+  - beam.name
+  - beam.phase.angle
+  - beam.phase.curvature
+  - beam.power_launched.data
+  - beam.power_launched.time
+  - beam.spot.angle
+  - beam.spot.size
+  - beam.steering_angle_pol
+  - beam.steering_angle_tor
+  - beam.time
