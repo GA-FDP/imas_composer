@@ -30,11 +30,7 @@ IMAS Composer provides a clean, declarative API for mapping DIII-D diagnostic an
 - Click ▶️ next to any test to run it
 - View output in the "Test Results" panel
 
-**Integration markers:**
-- `@pytest.mark.integration` - Tests that access MDSplus
-- `@pytest.mark.requires_mdsplus` - Tests requiring DIII-D data access
-
-Use these markers to filter tests in VSCode or command line.
+**Note:** All tests require MDSplus access to DIII-D data servers.
 
 ## Quick Start
 

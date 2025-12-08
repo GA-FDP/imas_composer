@@ -8,7 +8,6 @@ import pytest
 
 from tests.conftest import REFERENCE_SHOT, load_ids_fields, run_requirements_resolution
 
-pytestmark = [pytest.mark.integration, pytest.mark.requires_mdsplus]
 @pytest.mark.parametrize('ids_path', load_ids_fields('ece'))
 def test_can_resolve_requirements(ids_path, composer):
     """Test that resolve() can fully resolve requirements for each ECE field."""
