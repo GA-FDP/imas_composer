@@ -196,7 +196,7 @@ class COCOSTransform:
         return (sigma_Ip, sigma_Bp, exp_Bp, sigma_rhotp, sigma_B0)
 
     def transform(self, data: np.ndarray, source_cocos: int,
-                 transform_type: str) -> np.ndarray:
+                 transform_type: str, no_sign: bool = False) -> np.ndarray:
         """
         Transform data from source COCOS to target COCOS (11).
 
@@ -209,6 +209,8 @@ class COCOSTransform:
             Transformed data array
         """
         factor = self.get_transform_factor(source_cocos, self.TARGET_COCOS, transform_type)
+        if no_sign:
+            factor = np.abs(factor)
         return data * factor
 
 
