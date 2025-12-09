@@ -33,40 +33,100 @@ class ECLaunchersMapper(IDSMapper):
         """Build all IDS entry specifications"""
 
         # Internal dependencies - fetch NUM_SYSTEMS to know how many beams exist
+        # Note: This is shot-dependent (different shots may have different active systems)
         self.specs["ec_launchers._num_systems"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[
-                Requirement('.ECH.NUM_SYSTEMS', 0, 'RF'),
+            stage=RequirementStage.DERIVED,
+            depends_on=[],
+            derive_requirements=lambda shot, raw: [
+                Requirement('.ECH.NUM_SYSTEMS', shot, 'RF')
             ],
             ids_path="ec_launchers._num_systems",
             docs_file=self.DOCS_PATH
         )
 
-        # Fetch last time from EFIT01 for data trimming
-        self.specs["ec_launchers._last_time"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[
-                Requirement('\\EFIT01::TOP.RESULTS.GEQDSK.GTIME/1000.', 0, 'EFIT01'),
-            ],
-            ids_path="ec_launchers._last_time",
-            docs_file=self.DOCS_PATH
-        )
-
-        # DERIVED: System-level data (gyrotron names, geometry, etc.)
-        self.specs["ec_launchers._system_data"] = IDSEntrySpec(
+        # DERIVED: Gyrotron names for all systems (needed by most fields)
+        self.specs["ec_launchers._gyrotron_names"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             depends_on=["ec_launchers._num_systems"],
-            derive_requirements=self._derive_system_requirements,
-            ids_path="ec_launchers._system_data",
+            derive_requirements=lambda shot, raw: self._derive_system_level_requirements(
+                shot, raw, '.ECH.SYSTEM_{system_no}.GYROTRON.NAME'
+            ),
+            ids_path="ec_launchers._gyrotron_names",
             docs_file=self.DOCS_PATH
         )
 
         # DERIVED: Gyrotron-specific data (power, angles, etc.)
         self.specs["ec_launchers._gyrotron_data"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
-            depends_on=["ec_launchers._system_data"],
+            depends_on=["ec_launchers._gyrotron_names"],
             derive_requirements=self._derive_gyrotron_requirements,
             ids_path="ec_launchers._gyrotron_data",
+            docs_file=self.DOCS_PATH
+        )
+
+        # DERIVED: Frequency data (per-field requirement)
+        self.specs["ec_launchers._frequency"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=["ec_launchers._num_systems"],
+            derive_requirements=lambda shot, raw: self._derive_system_level_requirements(
+                shot, raw, '.ECH.SYSTEM_{system_no}.GYROTRON.FREQUENCY'
+            ),
+            ids_path="ec_launchers._frequency",
+            docs_file=self.DOCS_PATH
+        )
+
+        # DERIVED: Launch R position (per-field requirement)
+        self.specs["ec_launchers._launch_r"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=["ec_launchers._num_systems"],
+            derive_requirements=lambda shot, raw: self._derive_system_level_requirements(
+                shot, raw, '.ECH.SYSTEM_{system_no}.ANTENNA.LAUNCH_R'
+            ),
+            ids_path="ec_launchers._launch_r",
+            docs_file=self.DOCS_PATH
+        )
+
+        # DERIVED: Launch Z position (per-field requirement)
+        self.specs["ec_launchers._launch_z"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=["ec_launchers._num_systems"],
+            derive_requirements=lambda shot, raw: self._derive_system_level_requirements(
+                shot, raw, '.ECH.SYSTEM_{system_no}.ANTENNA.LAUNCH_Z'
+            ),
+            ids_path="ec_launchers._launch_z",
+            docs_file=self.DOCS_PATH
+        )
+
+        # DERIVED: Port/phi data (per-field requirement)
+        self.specs["ec_launchers._port"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=["ec_launchers._num_systems"],
+            derive_requirements=lambda shot, raw: self._derive_system_level_requirements(
+                shot, raw, '.ECH.SYSTEM_{system_no}.ANTENNA.PORT'
+            ),
+            ids_path="ec_launchers._port",
+            docs_file=self.DOCS_PATH
+        )
+
+        # DERIVED: Gaussian beam curvature (per-field requirement)
+        self.specs["ec_launchers._gb_rcurve"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=["ec_launchers._num_systems"],
+            derive_requirements=lambda shot, raw: self._derive_system_level_requirements(
+                shot, raw, '.ECH.SYSTEM_{system_no}.ANTENNA.GB_RCURVE'
+            ),
+            ids_path="ec_launchers._gb_rcurve",
+            docs_file=self.DOCS_PATH
+        )
+
+        # DERIVED: Gaussian beam waist (per-field requirement)
+        self.specs["ec_launchers._gb_waist"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=["ec_launchers._num_systems"],
+            derive_requirements=lambda shot, raw: self._derive_system_level_requirements(
+                shot, raw, '.ECH.SYSTEM_{system_no}.ANTENNA.GB_WAIST'
+            ),
+            ids_path="ec_launchers._gb_waist",
             docs_file=self.DOCS_PATH
         )
 
@@ -82,7 +142,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.identifier"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._system_data", "ec_launchers._gyrotron_data"],
+            depends_on=["ec_launchers._gyrotron_names", "ec_launchers._gyrotron_data"],
             compose=self._compose_beam_identifier,
             ids_path="ec_launchers.beam.identifier",
             docs_file=self.DOCS_PATH
@@ -90,7 +150,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.name"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._system_data", "ec_launchers._gyrotron_data"],
+            depends_on=["ec_launchers._gyrotron_names", "ec_launchers._gyrotron_data"],
             compose=self._compose_beam_name,
             ids_path="ec_launchers.beam.name",
             docs_file=self.DOCS_PATH
@@ -106,7 +166,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.frequency.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._system_data", "ec_launchers._gyrotron_data"],
+            depends_on=["ec_launchers._frequency", "ec_launchers._gyrotron_data"],
             compose=self._compose_frequency_data,
             ids_path="ec_launchers.beam.frequency.data",
             docs_file=self.DOCS_PATH
@@ -114,7 +174,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.launching_position.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._system_data", "ec_launchers._gyrotron_data"],
+            depends_on=["ec_launchers._launch_r", "ec_launchers._gyrotron_data"],
             compose=self._compose_launching_position_r,
             ids_path="ec_launchers.beam.launching_position.r",
             docs_file=self.DOCS_PATH
@@ -122,7 +182,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.launching_position.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._system_data", "ec_launchers._gyrotron_data"],
+            depends_on=["ec_launchers._launch_z", "ec_launchers._gyrotron_data"],
             compose=self._compose_launching_position_z,
             ids_path="ec_launchers.beam.launching_position.z",
             docs_file=self.DOCS_PATH
@@ -130,7 +190,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.launching_position.phi"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._system_data", "ec_launchers._gyrotron_data"],
+            depends_on=["ec_launchers._port", "ec_launchers._gyrotron_data"],
             compose=self._compose_launching_position_phi,
             ids_path="ec_launchers.beam.launching_position.phi",
             docs_file=self.DOCS_PATH
@@ -154,7 +214,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.phase.curvature"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._system_data", "ec_launchers._gyrotron_data"],
+            depends_on=["ec_launchers._gb_rcurve", "ec_launchers._gyrotron_data"],
             compose=self._compose_phase_curvature,
             ids_path="ec_launchers.beam.phase.curvature",
             docs_file=self.DOCS_PATH
@@ -162,7 +222,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.power_launched.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._gyrotron_data", "ec_launchers._last_time"],
+            depends_on=["ec_launchers._gyrotron_data"],
             compose=self._compose_power_launched_time,
             ids_path="ec_launchers.beam.power_launched.time",
             docs_file=self.DOCS_PATH
@@ -170,7 +230,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.power_launched.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._gyrotron_data", "ec_launchers._last_time"],
+            depends_on=["ec_launchers._gyrotron_data"],
             compose=self._compose_power_launched_data,
             ids_path="ec_launchers.beam.power_launched.data",
             docs_file=self.DOCS_PATH
@@ -186,7 +246,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.spot.size"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._system_data", "ec_launchers._gyrotron_data"],
+            depends_on=["ec_launchers._gb_waist", "ec_launchers._gyrotron_data"],
             compose=self._compose_spot_size,
             ids_path="ec_launchers.beam.spot.size",
             docs_file=self.DOCS_PATH
@@ -208,36 +268,38 @@ class ECLaunchersMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-    # Requirement derivation functions
-    def _derive_system_requirements(self, shot: int, raw_data: dict) -> List[Requirement]:
-        """Derive requirements for system-level data based on NUM_SYSTEMS."""
+    # Requirement derivation helper
+    def _derive_system_level_requirements(self, shot: int, raw_data: dict, mds_path_template: str) -> List[Requirement]:
+        """
+        Generic helper to derive requirements for system-level data.
+
+        Args:
+            shot: Shot number
+            raw_data: Raw data dictionary
+            mds_path_template: MDS+ path template with {system_no} placeholder
+                              e.g., '.ECH.SYSTEM_{system_no}.GYROTRON.NAME'
+
+        Returns:
+            List of requirements, one per system
+        """
         num_systems_key = Requirement('.ECH.NUM_SYSTEMS', shot, 'RF').as_key()
         num_systems = int(raw_data[num_systems_key])
 
         requirements = []
         for system_no in range(1, num_systems + 1):
-            cur_system = f'SYSTEM_{system_no}.'
-            requirements.extend([
-                Requirement(f'.ECH.{cur_system}GYROTRON.NAME', shot, 'RF'),
-                Requirement(f'.ECH.{cur_system}GYROTRON.FREQUENCY', shot, 'RF'),
-                Requirement(f'.ECH.{cur_system}ANTENNA.LAUNCH_R', shot, 'RF'),
-                Requirement(f'.ECH.{cur_system}ANTENNA.LAUNCH_Z', shot, 'RF'),
-                Requirement(f'.ECH.{cur_system}ANTENNA.PORT', shot, 'RF'),
-                Requirement(f'.ECH.{cur_system}ANTENNA.DISPERSION', shot, 'RF'),
-                Requirement(f'.ECH.{cur_system}ANTENNA.GB_RCURVE', shot, 'RF'),
-                Requirement(f'.ECH.{cur_system}ANTENNA.GB_WAIST', shot, 'RF'),
-            ])
+            mds_path = mds_path_template.format(system_no=system_no)
+            requirements.append(Requirement(mds_path, shot, 'RF'))
 
         return requirements
 
     def _derive_gyrotron_requirements(self, shot: int, raw_data: dict) -> List[Requirement]:
-        """Derive requirements for gyrotron-specific data based on system data."""
+        """Derive requirements for gyrotron-specific data based on gyrotron names."""
         num_systems_key = Requirement('.ECH.NUM_SYSTEMS', shot, 'RF').as_key()
         num_systems = int(raw_data[num_systems_key])
 
         requirements = []
         for system_no in range(1, num_systems + 1):
-            # Get gyrotron name from system data
+            # Get gyrotron name from _gyrotron_names data
             gyrotron_name_key = Requirement(f'.ECH.SYSTEM_{system_no}.GYROTRON.NAME', shot, 'RF').as_key()
 
             # Skip if gyrotron name is empty (no gyrotron connected)
@@ -489,10 +551,8 @@ class ECLaunchersMapper(IDSMapper):
         return np.array(curvature_arrays)
 
     def _compose_power_launched_time(self, shot: int, raw_data: dict) -> np.ndarray:
-        """Compose power launched time arrays (trimmed to EFIT time)."""
+        """Compose power launched time arrays."""
         active_systems = self._get_active_systems(shot, raw_data)
-        last_time_key = Requirement('\\EFIT01::TOP.RESULTS.GEQDSK.GTIME/1000.', shot, 'EFIT01').as_key()
-        last_time = raw_data[last_time_key][-1]
 
         time_arrays = []
         for system_no in active_systems:
@@ -502,34 +562,23 @@ class ECLaunchersMapper(IDSMapper):
             time_key = Requirement(f'dim_of(.ECH.{gyrotron_name.upper()}.EC{gyr}FPWRC+01) / 1E3', shot, 'RF').as_key()
             times = np.atleast_1d(raw_data[time_key])
 
-            trim_start = np.searchsorted(times, 0.0, side='left')
-            trim_end = np.searchsorted(times, last_time, side='right')
-
-            time_arrays.append(times[trim_start:trim_end])
+            time_arrays.append(times)
 
         return np.array(time_arrays)
 
     def _compose_power_launched_data(self, shot: int, raw_data: dict) -> np.ndarray:
-        """Compose power launched data arrays (trimmed to EFIT time)."""
+        """Compose power launched data arrays."""
         active_systems = self._get_active_systems(shot, raw_data)
-        last_time_key = Requirement('\\EFIT01::TOP.RESULTS.GEQDSK.GTIME/1000.', shot, 'EFIT01').as_key()
-        last_time = raw_data[last_time_key][-1]
 
         power_arrays = []
         for system_no in active_systems:
             gyrotron_name = self._get_gyrotron_name(shot, raw_data, system_no)
             gyr = gyrotron_name.upper()[:3]
 
-            time_key = Requirement(f'dim_of(.ECH.{gyrotron_name.upper()}.EC{gyr}FPWRC+01) / 1E3', shot, 'RF').as_key()
-            times = np.atleast_1d(raw_data[time_key])
-
-            trim_start = np.searchsorted(times, 0.0, side='left')
-            trim_end = np.searchsorted(times, last_time, side='right')
-
             power_key = Requirement(f'.ECH.{gyrotron_name.upper()}.EC{gyr}FPWRC', shot, 'RF').as_key()
             power = np.atleast_1d(raw_data[power_key])
 
-            power_arrays.append(power[trim_start:trim_end])
+            power_arrays.append(power)
 
         return np.array(power_arrays)
 

@@ -1,8 +1,7 @@
 # Test configuration for EC Launchers IDS
 
-# Use shot 170325 instead of REFERENCE_SHOT (200000)
-# because shot 200000 does not have EC launcher data
-test_shot: 170325
+# Only shot 170325 has EC launcher data, exclude all others
+exclude_shots: []
 
 # Field-level exceptions for validation
 field_exceptions: {}

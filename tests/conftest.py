@@ -21,6 +21,15 @@ from imas_composer.core import Requirement
 # Reference shot used across most tests
 REFERENCE_SHOT = 200000
 
+# Shots to test across (parametrized in test_shot fixture)
+#          Bt | Ip
+# 202161:  -  | -
+# 203321:  +  | -
+# 204602:  -  | +
+# 204601:  +  | +
+
+TEST_SHOTS = [202161, 203321, 204602, 204601]
+
 
 # ============================================================================
 # YAML Configuration Utilities
@@ -54,18 +63,47 @@ def load_test_config(ids_name):
     return config
 
 
-def get_test_shot(ids_name):
+@pytest.fixture(params=TEST_SHOTS)
+def test_shot(request):
     """
-    Get the test shot number for an IDS from config, or use REFERENCE_SHOT.
+    Fixture that provides the test shot number for the current test.
 
-    Args:
-        ids_name: IDS identifier (e.g., 'ece', 'ec_launchers')
+    Parametrized across TEST_SHOTS to run tests on multiple shots.
+    IDS-specific configs can exclude certain shots via 'exclude_shots' list.
+
+    Determines the IDS name from the test file name (e.g., test_ece_*.py -> 'ece')
+    and checks if the shot should be skipped for this IDS.
 
     Returns:
-        int: Shot number to use for testing this IDS
+        int: Shot number to use for testing
     """
+    shot = request.param
+
+    # Extract IDS name from test file name
+    # e.g., 'test_ece_requirements.py' -> 'ece'
+    # e.g., 'test_ec_launchers_composition.py' -> 'ec_launchers'
+    test_file = request.node.fspath.basename
+
+    # Remove 'test_' prefix and '_requirements.py' or '_composition.py' suffix
+    if test_file.startswith('test_'):
+        test_file = test_file[5:]  # Remove 'test_'
+
+    # Remove common suffixes
+    for suffix in ['_requirements.py', '_composition.py', '.py']:
+        if test_file.endswith(suffix):
+            test_file = test_file[:-len(suffix)]
+            break
+
+    ids_name = test_file
+
+    # Load config and check for excluded shots
     config = load_test_config(ids_name)
-    return config.get('test_shot', REFERENCE_SHOT)
+    exclude_shots = config.get('exclude_shots', [])
+
+    if shot in exclude_shots:
+        pytest.skip(f"Shot {shot} excluded for {ids_name} (no data available)")
+
+    return shot
 
 
 def load_ids_fields(ids_name):
@@ -290,30 +328,36 @@ def omas_data():
         # Fetch for different shot
         omas_data('equilibrium', 'equilibrium.time', shot=200001)
 
+        # Reset cache before fetching (creates new ODS, but still caches it)
+        ods = omas_data('equilibrium', 'equilibrium.time', reset_cache=True)
+
     Args:
         ids_name: IDS identifier (e.g., 'ece', 'thomson_scattering', 'equilibrium')
         ids_path: Optional specific IDS path to fetch (defaults to '{ids_name}.*')
         shot: Optional shot number (defaults to REFERENCE_SHOT=200000)
+        reset_cache: If True, clear cache and start with fresh ODS (default: False)
 
     Returns:
-        ODS object with fetched data (cached per shot, accumulates across calls)
+        ODS object with fetched data (cached per shot)
     """
     cache = {}
 
-    def _fetch_omas_data(ids_name, ids_path=None, shot=REFERENCE_SHOT):
+    def _fetch_omas_data(ids_name, ids_path=None, shot=REFERENCE_SHOT, reset_cache=False):
         # Default to wildcard fetch for non-equilibrium IDS
         if ids_path is None:
             ids_path = f'{ids_name}.*'
 
         # Use shot as cache key to handle future tests that iterate over several shots
-        if shot in cache:
-            ods = cache[shot]
-        else:
+        # If reset_cache=True, clear cache and create new ODS
+        if reset_cache or shot not in cache:
             ods = ODS()
+            cache[shot] = ods
+        else:
+            ods = cache[shot]
+
         # For equilibrium with specific path, fetch only that field
         # For others, use wildcard
         machine_to_omas(ods, 'd3d', shot, ids_path, options={'EFIT_tree': 'EFIT01'})
-        cache[shot] = ods
 
         return cache[shot]
 
@@ -436,7 +480,7 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
             _compare_recursive(composer_elem, ods, new_omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
 
 
-def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot=None):
+def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
     """
     Generic helper function for composition validation against OMAS.
 
@@ -451,11 +495,8 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot=N
         composer: ImasComposer instance
         omas_data: OMAS data factory fixture
         ids_name: IDS name (e.g., 'ece', 'thomson_scattering')
-        shot: Optional shot number (defaults to REFERENCE_SHOT or test_shot from config)
+        shot: Shot number (from test_shot fixture)
     """
-    # Get shot from config if not provided
-    if shot is None:
-        shot = get_test_shot(ids_name)
 
     # Compose using imas_composer
     composer_value = resolve_and_compose(composer, ids_path, shot)
@@ -485,11 +526,15 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot=N
         # Handle list of paths (for fetch order control) or single path
         if isinstance(omas_fetch_spec, list):
             # Fetch each path in order (important for OMAS broadcasting)
-            ods = omas_data(ids_name, omas_fetch_spec[0], shot=shot)
+            # Reset cache on first fetch for equilibrium (to avoid field accumulation interference)
+            reset_first = (ids_name == 'equilibrium')
+            ods = omas_data(ids_name, omas_fetch_spec[0], shot=shot, reset_cache=reset_first)
             for fetch_path in omas_fetch_spec[1:]:
                 omas_data(ids_name, fetch_path, shot=shot)  # Additional fetches to same ODS
         else:
-            ods = omas_data(ids_name, omas_fetch_spec, shot=shot)
+            # Reset cache for equilibrium (to avoid field accumulation interference)
+            reset = (ids_name == 'equilibrium')
+            ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=reset)
     else:
         ods = omas_data(ids_name, shot=shot)
 

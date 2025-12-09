@@ -6,12 +6,11 @@ for each EC launchers field, tracking resolution depth.
 """
 import pytest
 
-from tests.conftest import get_test_shot, load_ids_fields, run_requirements_resolution
+from tests.conftest import load_ids_fields, run_requirements_resolution
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_mdsplus]
 @pytest.mark.parametrize('ids_path', load_ids_fields('ec_launchers'))
-def test_can_resolve_requirements(ids_path, composer):
+def test_can_resolve_requirements(ids_path, composer, test_shot):
     """Test that resolve() can fully resolve requirements for each EC launchers field."""
-    shot = get_test_shot('ec_launchers')
-    resolution_steps = run_requirements_resolution(ids_path, composer, shot)
+    resolution_steps = run_requirements_resolution(ids_path, composer, test_shot)
     print(f"\n{ids_path}: resolved in {resolution_steps} steps")
