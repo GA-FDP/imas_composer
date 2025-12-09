@@ -1,0 +1,52 @@
+# COCOS transformation mappings for IDS fields
+#
+# This file defines which COCOS transformation should be applied to each IDS field.
+# Valid transformation types are defined in cocos.py:
+#   - PSI: Poloidal flux
+#   - dPSI: Poloidal flux derivative
+#   - 1/PSI, invPSI: Inverse poloidal flux
+#   - F_FPRIME: F and F' (flux function derivatives)
+#   - PPRIME: Pressure derivative
+#   - Q: Safety factor
+#   - TOR, BT, IP, F: Toroidal quantities
+#   - POL, BP: Poloidal quantities
+#   - null: No transformation
+#
+# Based on OMAS _cocos_signals dictionary
+
+equilibrium:
+  # Boundary separatrix
+  time_slice.boundary_separatrix.psi: PSI
+
+  # Constraints - IP
+  time_slice.constraints.ip.measured: TOR
+  time_slice.constraints.ip.reconstructed: TOR
+
+  # Constraints - Flux loop (magnetic flux measurements)
+  time_slice.constraints.flux_loop.measured: PSI
+  time_slice.constraints.flux_loop.reconstructed: PSI
+
+  # Constraints - Toroidal current density (j_tor)
+  time_slice.constraints.j_tor.position.psi: PSI
+
+  # Global quantities
+  time_slice.global_quantities.ip: TOR
+  time_slice.global_quantities.psi_axis: PSI
+  time_slice.global_quantities.psi_boundary: PSI
+  time_slice.global_quantities.q_95: Q
+  time_slice.global_quantities.q_axis: Q
+  time_slice.global_quantities.q_min.value: Q
+
+  # 1D Profiles
+  time_slice.profiles_1d.dpressure_dpsi: dPSI
+  time_slice.profiles_1d.f_df_dpsi: dPSI
+  time_slice.profiles_1d.psi: PSI
+  time_slice.profiles_1d.q: Q
+
+  # 2D Profiles
+  time_slice.profiles_2d.psi: PSI
+
+# Note: Most equilibrium quantities don't need COCOS transforms:
+# - Geometric quantities (R, Z coordinates, triangularity, elongation, etc.) are COCOS-independent
+# - Gap values, strike points are geometric
+# - Constraint weights, chi_squared don't have COCOS dependence (ratios/statistical measures)
