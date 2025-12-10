@@ -324,3 +324,76 @@ class ImasComposer:
                     seen_keys.add(key)
 
         return resolution_status, all_requirements
+
+    def resolve_and_compose(
+        self,
+        ids_path: str,
+        shot: int,
+        fetch_function,
+        max_iterations: int = 10
+    ) -> Any:
+        """
+        Convenience method to resolve requirements and compose in one call.
+
+        This method handles the iterative resolve/fetch loop automatically.
+
+        Args:
+            ids_path: Full IDS path (e.g., 'ece.channel.t_e.data')
+            shot: Shot number
+            fetch_function: Callable that takes a list of Requirements and returns
+                           a dict mapping requirement keys to fetched values.
+                           Should raise an exception if any fetch fails.
+            max_iterations: Maximum number of resolve iterations (default: 10)
+
+        Returns:
+            Composed value from the IDS path
+
+        Raises:
+            RuntimeError: If requirements cannot be resolved within max_iterations
+            Exception: If any requirement fetch fails (re-raises from fetch_function)
+
+        Example:
+            >>> from omas import mdsvalue
+            >>>
+            >>> def fetch_requirements(requirements):
+            ...     raw_data = {}
+            ...     for req in requirements:
+            ...         mds = mdsvalue('d3d', req.treename, req.shot, req.mds_path)
+            ...         raw_data[req.as_key()] = mds.raw()
+            ...     return raw_data
+            >>>
+            >>> composer = ImasComposer()
+            >>> t_e_data = composer.resolve_and_compose(
+            ...     'ece.channel.t_e.data',
+            ...     180000,
+            ...     fetch_requirements
+            ... )
+        """
+        raw_data = {}
+
+        # Iteratively resolve requirements
+        for iteration in range(max_iterations):
+            fully_resolved, requirements = self.resolve(ids_path, shot, raw_data)
+
+            if fully_resolved:
+                break
+
+            # Fetch requirements using provided function
+            fetched = fetch_function(requirements)
+
+            # Check if any fetched values are exceptions
+            for key, value in fetched.items():
+                if isinstance(value, Exception):
+                    raise RuntimeError(
+                        f"Failed to fetch requirement {key} for {ids_path}: {value}"
+                    ) from value
+
+            raw_data.update(fetched)
+
+        if not fully_resolved:
+            raise RuntimeError(
+                f"Could not resolve {ids_path} within {max_iterations} iterations"
+            )
+
+        # Compose final data
+        return self.compose(ids_path, shot, raw_data)
