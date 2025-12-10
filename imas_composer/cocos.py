@@ -192,7 +192,7 @@ class COCOSTransform:
         sigma_Bp = 1 if base in [1, 2, 5, 6] else -1
 
         # sigma_rhotp: determined by bits
-        sigma_rhotp = 1 if base in [1, 2, 3, 4] else -1
+        sigma_rhotp = 1 if base in [1, 2, 7, 8] else -1
 
         return (sigma_Ip, sigma_Bp, exp_Bp, sigma_rhotp)
 

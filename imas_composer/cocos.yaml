@@ -20,10 +20,12 @@ equilibrium:
 
   # Constraints - IP
   time_slice.constraints.ip.measured: TOR
+  time_slice.constraints.ip.measured_error_upper: TOR
   time_slice.constraints.ip.reconstructed: TOR
 
   # Constraints - Flux loop (magnetic flux measurements)
   time_slice.constraints.flux_loop.measured: PSI
+  time_slice.constraints.flux_loop.measured_error_upper: PSI
   time_slice.constraints.flux_loop.reconstructed: PSI
 
   # Constraints - Toroidal current density (j_tor)
