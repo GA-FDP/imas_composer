@@ -52,7 +52,8 @@ def load_test_config(ids_name):
         return {
             'field_exceptions': {},
             'requirement_validation': {
-                'allow_different_shot': []
+                'allow_different_shot': [],
+                'optional_requirements': []
             },
             'omas_path_map': {}
         }
@@ -210,6 +211,11 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
         RuntimeError: If requirements cannot be resolved within max iterations
         Exception: If any requirement fetch fails (re-raises the fetch exception)
     """
+    # Load test configuration to get optional requirements list
+    ids_name = ids_path.split('.')[0]
+    test_config = load_test_config(ids_name)
+    optional_patterns = test_config.get('requirement_validation', {}).get('optional_requirements', [])
+
     raw_data = {}
 
     # Iteratively resolve requirements
@@ -225,7 +231,15 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
         # Check if any fetched values are exceptions (from failed MDS+ access)
         for key, value in fetched.items():
             if isinstance(value, Exception):
-                raise RuntimeError(f"Failed to fetch requirement {key} for {ids_path}: {value}") from value
+                # Check if this requirement matches any optional pattern
+                mds_path = key[0]  # key is (mds_path, shot, treename)
+                is_optional = any(
+                    _matches_optional_pattern(mds_path, pattern)
+                    for pattern in optional_patterns
+                )
+
+                if not is_optional:
+                    raise RuntimeError(f"Failed to fetch requirement {key} for {ids_path}: {value}") from value
 
         raw_data.update(fetched)
 
@@ -234,6 +248,28 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
 
     # Compose final data
     return composer.compose(ids_path, shot, raw_data)
+
+
+def _matches_optional_pattern(mds_path, pattern):
+    """
+    Check if an MDS path matches an optional requirement pattern.
+
+    Supports {system_no} placeholder for dynamic system numbers.
+
+    Args:
+        mds_path: Actual MDS path (e.g., '.ECH.SYSTEM_1.ANTENNA.GB_RCURVE')
+        pattern: Pattern with placeholders (e.g., '.ECH.SYSTEM_{system_no}.ANTENNA.GB_RCURVE')
+
+    Returns:
+        bool: True if the path matches the pattern
+    """
+    import re
+
+    # Convert pattern to regex, replacing {system_no} with digit matcher
+    regex_pattern = pattern.replace('{system_no}', r'\d+')
+    regex_pattern = '^' + re.escape(regex_pattern).replace(r'\\d\+', r'\d+') + '$'
+
+    return bool(re.match(regex_pattern, mds_path))
 
 def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float=1e-12, atol_array=1e-6):
     """

@@ -108,9 +108,27 @@ class ECLaunchersMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # NOTE: GB_RCURVE and GB_WAIST are optional fields that may not exist in MDSplus.
-        # They are NOT included as DERIVED requirements to avoid fetch errors.
-        # Instead, compose functions handle them directly with fallback defaults.
+        # DERIVED: Gaussian beam curvature (optional, per-field requirement)
+        self.specs["ec_launchers._gb_rcurve"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=["ec_launchers._num_systems"],
+            derive_requirements=lambda shot, raw: self._derive_system_level_requirements(
+                shot, raw, '.ECH.SYSTEM_{system_no}.ANTENNA.GB_RCURVE'
+            ),
+            ids_path="ec_launchers._gb_rcurve",
+            docs_file=self.DOCS_PATH
+        )
+
+        # DERIVED: Gaussian beam waist (optional, per-field requirement)
+        self.specs["ec_launchers._gb_waist"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=["ec_launchers._num_systems"],
+            derive_requirements=lambda shot, raw: self._derive_system_level_requirements(
+                shot, raw, '.ECH.SYSTEM_{system_no}.ANTENNA.GB_WAIST'
+            ),
+            ids_path="ec_launchers._gb_waist",
+            docs_file=self.DOCS_PATH
+        )
 
         # Public IDS fields - all COMPUTED stage
 
@@ -196,7 +214,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.phase.curvature"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._gyrotron_data"],
+            depends_on=["ec_launchers._gb_rcurve", "ec_launchers._gyrotron_data"],
             compose=self._compose_phase_curvature,
             ids_path="ec_launchers.beam.phase.curvature",
             docs_file=self.DOCS_PATH
@@ -228,7 +246,7 @@ class ECLaunchersMapper(IDSMapper):
 
         self.specs["ec_launchers.beam.spot.size"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["ec_launchers._gyrotron_data"],
+            depends_on=["ec_launchers._gb_waist", "ec_launchers._gyrotron_data"],
             compose=self._compose_spot_size,
             ids_path="ec_launchers.beam.spot.size",
             docs_file=self.DOCS_PATH
@@ -517,7 +535,7 @@ class ECLaunchersMapper(IDSMapper):
             time = np.atleast_1d(raw_data[time_key])
             ntime = len(time) if len(time) > 1 else 1
 
-            # Try to get curvature from MDSplus
+            # Try to get curvature from MDSplus (optional field)
             rcurve_key = Requirement(f'.ECH.SYSTEM_{system_no}.ANTENNA.GB_RCURVE', shot, 'RF').as_key()
 
             if rcurve_key in raw_data and not isinstance(raw_data[rcurve_key], Exception):
