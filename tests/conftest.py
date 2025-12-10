@@ -18,8 +18,17 @@ from imas_composer import ImasComposer
 from imas_composer.core import Requirement
 
 
-# Reference shot used across all tests
+# Reference shot used across most tests
 REFERENCE_SHOT = 200000
+
+# Shots to test across (parametrized in test_shot fixture)
+#          Bt | Ip
+# 202161:  -  | -
+# 203321:  +  | -
+# 204602:  -  | +
+# 204601:  +  | +
+
+TEST_SHOTS = [202161, 203321, 204602, 204601]
 
 
 # ============================================================================
@@ -43,7 +52,8 @@ def load_test_config(ids_name):
         return {
             'field_exceptions': {},
             'requirement_validation': {
-                'allow_different_shot': []
+                'allow_different_shot': [],
+                'optional_requirements': []
             },
             'omas_path_map': {}
         }
@@ -52,6 +62,49 @@ def load_test_config(ids_name):
         config = yaml.safe_load(f)
 
     return config
+
+
+@pytest.fixture(params=TEST_SHOTS)
+def test_shot(request):
+    """
+    Fixture that provides the test shot number for the current test.
+
+    Parametrized across TEST_SHOTS to run tests on multiple shots.
+    IDS-specific configs can exclude certain shots via 'exclude_shots' list.
+
+    Determines the IDS name from the test file name (e.g., test_ece_*.py -> 'ece')
+    and checks if the shot should be skipped for this IDS.
+
+    Returns:
+        int: Shot number to use for testing
+    """
+    shot = request.param
+
+    # Extract IDS name from test file name
+    # e.g., 'test_ece_requirements.py' -> 'ece'
+    # e.g., 'test_ec_launchers_composition.py' -> 'ec_launchers'
+    test_file = request.node.fspath.basename
+
+    # Remove 'test_' prefix and '_requirements.py' or '_composition.py' suffix
+    if test_file.startswith('test_'):
+        test_file = test_file[5:]  # Remove 'test_'
+
+    # Remove common suffixes
+    for suffix in ['_requirements.py', '_composition.py', '.py']:
+        if test_file.endswith(suffix):
+            test_file = test_file[:-len(suffix)]
+            break
+
+    ids_name = test_file
+
+    # Load config and check for excluded shots
+    config = load_test_config(ids_name)
+    exclude_shots = config.get('exclude_shots', [])
+
+    if shot in exclude_shots:
+        pytest.skip(f"Shot {shot} excluded for {ids_name} (no data available)")
+
+    return shot
 
 
 def load_ids_fields(ids_name):
@@ -158,6 +211,11 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
         RuntimeError: If requirements cannot be resolved within max iterations
         Exception: If any requirement fetch fails (re-raises the fetch exception)
     """
+    # Load test configuration to get optional requirements list
+    ids_name = ids_path.split('.')[0]
+    test_config = load_test_config(ids_name)
+    optional_patterns = test_config.get('requirement_validation', {}).get('optional_requirements', [])
+
     raw_data = {}
 
     # Iteratively resolve requirements
@@ -173,7 +231,15 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
         # Check if any fetched values are exceptions (from failed MDS+ access)
         for key, value in fetched.items():
             if isinstance(value, Exception):
-                raise RuntimeError(f"Failed to fetch requirement {key} for {ids_path}: {value}") from value
+                # Check if this requirement matches any optional pattern
+                mds_path = key[0]  # key is (mds_path, shot, treename)
+                is_optional = any(
+                    _matches_optional_pattern(mds_path, pattern)
+                    for pattern in optional_patterns
+                )
+
+                if not is_optional:
+                    raise RuntimeError(f"Failed to fetch requirement {key} for {ids_path}: {value}") from value
 
         raw_data.update(fetched)
 
@@ -182,6 +248,28 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
 
     # Compose final data
     return composer.compose(ids_path, shot, raw_data)
+
+
+def _matches_optional_pattern(mds_path, pattern):
+    """
+    Check if an MDS path matches an optional requirement pattern.
+
+    Supports {system_no} placeholder for dynamic system numbers.
+
+    Args:
+        mds_path: Actual MDS path (e.g., '.ECH.SYSTEM_1.ANTENNA.GB_RCURVE')
+        pattern: Pattern with placeholders (e.g., '.ECH.SYSTEM_{system_no}.ANTENNA.GB_RCURVE')
+
+    Returns:
+        bool: True if the path matches the pattern
+    """
+    import re
+
+    # Convert pattern to regex, replacing {system_no} with digit matcher
+    regex_pattern = pattern.replace('{system_no}', r'\d+')
+    regex_pattern = '^' + re.escape(regex_pattern).replace(r'\\d\+', r'\d+') + '$'
+
+    return bool(re.match(regex_pattern, mds_path))
 
 def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float=1e-12, atol_array=1e-6):
     """
@@ -276,30 +364,36 @@ def omas_data():
         # Fetch for different shot
         omas_data('equilibrium', 'equilibrium.time', shot=200001)
 
+        # Reset cache before fetching (creates new ODS, but still caches it)
+        ods = omas_data('equilibrium', 'equilibrium.time', reset_cache=True)
+
     Args:
         ids_name: IDS identifier (e.g., 'ece', 'thomson_scattering', 'equilibrium')
         ids_path: Optional specific IDS path to fetch (defaults to '{ids_name}.*')
         shot: Optional shot number (defaults to REFERENCE_SHOT=200000)
+        reset_cache: If True, clear cache and start with fresh ODS (default: False)
 
     Returns:
-        ODS object with fetched data (cached per shot, accumulates across calls)
+        ODS object with fetched data (cached per shot)
     """
     cache = {}
 
-    def _fetch_omas_data(ids_name, ids_path=None, shot=REFERENCE_SHOT):
+    def _fetch_omas_data(ids_name, ids_path=None, shot=REFERENCE_SHOT, reset_cache=False):
         # Default to wildcard fetch for non-equilibrium IDS
         if ids_path is None:
             ids_path = f'{ids_name}.*'
 
         # Use shot as cache key to handle future tests that iterate over several shots
-        if shot in cache:
-            ods = cache[shot]
-        else:
+        # If reset_cache=True, clear cache and create new ODS
+        if reset_cache or shot not in cache:
             ods = ODS()
+            cache[shot] = ods
+        else:
+            ods = cache[shot]
+
         # For equilibrium with specific path, fetch only that field
         # For others, use wildcard
-        machine_to_omas(ods, 'd3d', REFERENCE_SHOT, ids_path, options={'EFIT_tree': 'EFIT01'})
-        cache[shot] = ods
+        machine_to_omas(ods, 'd3d', shot, ids_path, options={'EFIT_tree': 'EFIT01'})
 
         return cache[shot]
 
@@ -422,7 +516,7 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
             _compare_recursive(composer_elem, ods, new_omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
 
 
-def run_composition_against_omas(ids_path, composer, omas_data, ids_name):
+def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
     """
     Generic helper function for composition validation against OMAS.
 
@@ -437,9 +531,11 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name):
         composer: ImasComposer instance
         omas_data: OMAS data factory fixture
         ids_name: IDS name (e.g., 'ece', 'thomson_scattering')
+        shot: Shot number (from test_shot fixture)
     """
+
     # Compose using imas_composer
-    composer_value = resolve_and_compose(composer, ids_path)
+    composer_value = resolve_and_compose(composer, ids_path, shot)
 
     # Load test config to get OMAS path mapping
     test_config = load_test_config(ids_name)
@@ -460,19 +556,23 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name):
     omas_access_path = omas_path_map.get(ids_path, ids_path)
 
     # Fetch OMAS ODS object
-    # For equilibrium, fetch only the specific field to avoid loading entire IDS (slow)
+    # For equilibrium and ec_launchers, fetch only specific fields to avoid loading unwanted data
     # For other IDS, still fetch entire IDS with wildcard for backward compatibility
-    if ids_name == 'equilibrium':
+    if ids_name in ['equilibrium', 'ec_launchers']:
         # Handle list of paths (for fetch order control) or single path
         if isinstance(omas_fetch_spec, list):
             # Fetch each path in order (important for OMAS broadcasting)
-            ods = omas_data(ids_name, omas_fetch_spec[0])
+            # Reset cache on first fetch for equilibrium (to avoid field accumulation interference)
+            reset_first = (ids_name == 'equilibrium')
+            ods = omas_data(ids_name, omas_fetch_spec[0], shot=shot, reset_cache=reset_first)
             for fetch_path in omas_fetch_spec[1:]:
-                omas_data(ids_name, fetch_path)  # Additional fetches to same ODS
+                omas_data(ids_name, fetch_path, shot=shot)  # Additional fetches to same ODS
         else:
-            ods = omas_data(ids_name, omas_fetch_spec)
+            # Reset cache for equilibrium (to avoid field accumulation interference)
+            reset = (ids_name == 'equilibrium')
+            ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=reset)
     else:
-        ods = omas_data(ids_name)
+        ods = omas_data(ids_name, shot=shot)
 
     # Recursively compare using ndim-based logic with field-specific tolerances
     _compare_recursive(composer_value, ods, omas_access_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)

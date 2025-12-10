@@ -11,6 +11,6 @@ pytestmark = [pytest.mark.omas_validation]
 
 
 @pytest.mark.parametrize('ids_path', load_ids_fields('ece'))
-def test_composition_matches_omas(ids_path, composer, omas_data):
+def test_composition_matches_omas(ids_path, composer, omas_data, test_shot):
     """Test that composed data matches OMAS for each ECE field."""
-    run_composition_against_omas(ids_path, composer, omas_data, 'ece')
+    run_composition_against_omas(ids_path, composer, omas_data, 'ece', test_shot)

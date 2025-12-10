@@ -21,7 +21,9 @@ References:
 """
 
 import numpy as np
-from typing import Dict, Tuple
+import yaml
+from pathlib import Path
+from typing import Dict, Tuple, Optional
 
 
 class COCOSTransform:
@@ -122,20 +124,19 @@ class COCOSTransform:
             return 1.0
 
         # Extract COCOS parameters
-        # COCOS structure: COCOS = sigma_Ip_eff + 2*(exp_Bp_eff - 1) + 4*sigma_rhotp_eff + 8*sigma_B0_eff
-        # For simplified cases (1-16), we can extract:
         source_params = self._decode_cocos(source_cocos)
         target_params = self._decode_cocos(target_cocos)
 
         # Calculate effective signs and exponents
-        sigma_Ip_src, sigma_Bp_src, exp_Bp_src, sigma_rhotp_src, sigma_B0_src = source_params
-        sigma_Ip_tgt, sigma_Bp_tgt, exp_Bp_tgt, sigma_rhotp_tgt, sigma_B0_tgt = target_params
+        sigma_Ip_src, sigma_Bp_src, exp_Bp_src, sigma_rhotp_src = source_params
+        sigma_Ip_tgt, sigma_Bp_tgt, exp_Bp_tgt, sigma_rhotp_tgt = target_params
 
         # Effective signs after transformation (multiply, not divide!)
         # From OMAS cocos_transform: sigma_Ip_eff = cocosin['sigma_RpZ'] * cocosout['sigma_RpZ']
+        # NOTE: In OMAS, sigma_B0_eff uses sigma_RpZ (which is sigma_Ip in our notation)
         sigma_Ip_eff = sigma_Ip_src * sigma_Ip_tgt
         sigma_Bp_eff = sigma_Bp_src * sigma_Bp_tgt
-        sigma_B0_eff = sigma_B0_src * sigma_B0_tgt
+        sigma_B0_eff = sigma_Ip_src * sigma_Ip_tgt  # Uses sigma_RpZ (same as sigma_Ip)!
         sigma_rhotp_eff = sigma_rhotp_src * sigma_rhotp_tgt
         # exp_Bp_eff = target - source (not source - target!)
         exp_Bp_eff = exp_Bp_tgt - exp_Bp_src
@@ -157,7 +158,7 @@ class COCOSTransform:
 
         return factor
 
-    def _decode_cocos(self, cocos: int) -> Tuple[int, int, int, int, int]:
+    def _decode_cocos(self, cocos: int) -> Tuple[int, int, int, int]:
         """
         Decode COCOS number into constituent parameters.
 
@@ -165,7 +166,10 @@ class COCOSTransform:
             cocos: COCOS number (1-16)
 
         Returns:
-            Tuple of (sigma_Ip, sigma_Bp, exp_Bp, sigma_rhotp, sigma_B0)
+            Tuple of (sigma_Ip, sigma_Bp, exp_Bp, sigma_rhotp)
+
+            Note: sigma_B0 is not returned because OMAS uses sigma_RpZ (sigma_Ip)
+            for sigma_B0_eff in transformations.
 
         Note:
             Based on Table 1 in Sauter & Medvedev 2013
@@ -181,22 +185,19 @@ class COCOSTransform:
             raise ValueError(f"COCOS {cocos} not in valid range (1-8, 11-18)")
 
         # Decode base (1-8) into signs
-        # sigma_Ip: 1 for odd, -1 for even
+        # sigma_Ip (same as sigma_RpZ): 1 for odd, -1 for even
         sigma_Ip = 1 if base % 2 == 1 else -1
 
         # sigma_Bp: determined by bits
         sigma_Bp = 1 if base in [1, 2, 5, 6] else -1
 
         # sigma_rhotp: determined by bits
-        sigma_rhotp = 1 if base in [1, 2, 3, 4] else -1
+        sigma_rhotp = 1 if base in [1, 2, 7, 8] else -1
 
-        # sigma_B0: always 1 for standard COCOS
-        sigma_B0 = 1
-
-        return (sigma_Ip, sigma_Bp, exp_Bp, sigma_rhotp, sigma_B0)
+        return (sigma_Ip, sigma_Bp, exp_Bp, sigma_rhotp)
 
     def transform(self, data: np.ndarray, source_cocos: int,
-                 transform_type: str) -> np.ndarray:
+                 transform_type: str, no_sign: bool = False) -> np.ndarray:
         """
         Transform data from source COCOS to target COCOS (11).
 
@@ -209,52 +210,46 @@ class COCOSTransform:
             Transformed data array
         """
         factor = self.get_transform_factor(source_cocos, self.TARGET_COCOS, transform_type)
+        if no_sign:
+            factor = np.abs(factor)
         return data * factor
 
 
-# Equilibrium field to COCOS transformation mapping
-# Based on OMAS _cocos_signals dictionary
-EQUILIBRIUM_COCOS_MAP = {
-    # Boundary separatrix
-    'equilibrium.time_slice.boundary_separatrix.psi': 'PSI',
-
-    # Constraints - IP
-    'equilibrium.time_slice.constraints.ip.measured': 'TOR',
-    'equilibrium.time_slice.constraints.ip.reconstructed': 'TOR',
-
-    # Constraints - Flux loop (magnetic flux measurements need PSI transformation)
-    'equilibrium.time_slice.constraints.flux_loop.measured': 'PSI',
-    'equilibrium.time_slice.constraints.flux_loop.measured_error_upper': 'PSI',
-    'equilibrium.time_slice.constraints.flux_loop.reconstructed': 'PSI',
-
-    # Constraints - Toroidal current density (j_tor)
-    'equilibrium.time_slice.constraints.j_tor.position.psi': 'PSI',
-
-    # Global quantities
-    'equilibrium.time_slice.global_quantities.ip': 'TOR',
-    'equilibrium.time_slice.global_quantities.psi_axis': 'PSI',
-    'equilibrium.time_slice.global_quantities.psi_boundary': 'PSI',
-    'equilibrium.time_slice.global_quantities.q_95': 'Q',
-    'equilibrium.time_slice.global_quantities.q_axis': 'Q',
-    'equilibrium.time_slice.global_quantities.q_min.value': 'Q',
-
-    # 1D Profiles
-    'equilibrium.time_slice.profiles_1d.dpressure_dpsi': 'dPSI',
-    'equilibrium.time_slice.profiles_1d.f_df_dpsi': 'dPSI',
-    'equilibrium.time_slice.profiles_1d.psi': 'PSI',
-    'equilibrium.time_slice.profiles_1d.q': 'Q',
-
-    # 2D Profiles
-    'equilibrium.time_slice.profiles_2d.psi': 'PSI',
-
-    # Note: Most other equilibrium quantities we're implementing don't need COCOS transforms:
-    # - Geometric quantities (R, Z coordinates, triangularity, elongation, etc.) are COCOS-independent
-    # - Gap values, strike points are geometric
-    # - Constraint weights, chi_squared don't have COCOS dependence (ratios/statistical measures)
-}
+# Cache for loaded COCOS mappings
+_COCOS_MAP_CACHE: Optional[Dict[str, str]] = None
 
 
-def get_cocos_transform_type(ids_path: str) -> str:
+def _load_cocos_mappings() -> Dict[str, str]:
+    """
+    Load COCOS transformation mappings from cocos.yaml.
+
+    Returns:
+        Dictionary mapping IDS paths to transformation types
+    """
+    global _COCOS_MAP_CACHE
+
+    if _COCOS_MAP_CACHE is not None:
+        return _COCOS_MAP_CACHE
+
+    # Load YAML file from same directory as this module
+    cocos_yaml_path = Path(__file__).parent / 'cocos.yaml'
+
+    with open(cocos_yaml_path, 'r') as f:
+        cocos_config = yaml.safe_load(f)
+
+    # Flatten the nested YAML structure into dot-notation paths
+    # e.g., {'equilibrium': {'time_slice.psi': 'PSI'}} -> {'equilibrium.time_slice.psi': 'PSI'}
+    flat_map = {}
+    for ids_name, field_map in cocos_config.items():
+        for field_path, transform_type in field_map.items():
+            full_path = f"{ids_name}.{field_path}"
+            flat_map[full_path] = transform_type
+
+    _COCOS_MAP_CACHE = flat_map
+    return flat_map
+
+
+def get_cocos_transform_type(ids_path: str) -> Optional[str]:
     """
     Get COCOS transformation type for a given IDS path.
 
@@ -264,4 +259,5 @@ def get_cocos_transform_type(ids_path: str) -> str:
     Returns:
         Transform type string ('PSI', 'TOR', etc.) or None if no transform needed
     """
-    return EQUILIBRIUM_COCOS_MAP.get(ids_path, None)
+    cocos_map = _load_cocos_mappings()
+    return cocos_map.get(ids_path, None)

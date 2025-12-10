@@ -2064,7 +2064,8 @@ class EquilibriumMapper(IDSMapper):
         """
         sigsil_key = Requirement(f'{self.measurements_node}.SIGSIL', shot, self.efit_tree).as_key()
         error = raw_data[sigsil_key]
-        return self._apply_cocos_transform(error, shot, raw_data, "equilibrium.time_slice.constraints.flux_loop.measured_error_upper")
+        return self._apply_cocos_transform(error, shot, raw_data, 
+                                           "equilibrium.time_slice.constraints.flux_loop.measured_error_upper", no_sign=True)
 
     def _compose_flux_loop_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -2603,7 +2604,7 @@ class EquilibriumMapper(IDSMapper):
         return cocos
 
     def _apply_cocos_transform(self, data: np.ndarray, shot: int, raw_data: dict,
-                               ids_path: str) -> np.ndarray:
+                               ids_path: str, no_sign:bool = False) -> np.ndarray:
         """
         Apply COCOS transformation to data if needed.
 
@@ -2621,4 +2622,4 @@ class EquilibriumMapper(IDSMapper):
             return data
 
         source_cocos = self._get_cocos_for_shot(shot, raw_data)
-        return self.cocos.transform(data, source_cocos, transform_type)
+        return self.cocos.transform(data, source_cocos, transform_type, no_sign)
