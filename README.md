@@ -1,12 +1,12 @@
 # IMAS Composer
 
-A Python library for converting DIII-D MDS+ data to IMAS (ITER Integrated Modelling & Analysis Suite) format.
+A Python library for converting DIII-D MDSplus data to IMAS (ITER Integrated Modelling & Analysis Suite) format.
 
 ## Overview
 
-IMAS Composer provides a clean, declarative API for mapping DIII-D diagnostic and analysis data (stored in MDS+) to standardized IMAS data structures (IDS - Interface Data Structures). It handles:
+IMAS Composer provides a clean, declarative API for mapping DIII-D diagnostic and analysis data (stored in MDSplus) to standardized IMAS v3.41.0 data structures (IDS - Interface Data Structures). It handles:
 
-- **Requirement resolution**: Determining what MDS+ data needs to be fetched
+- **Requirement identification**: Determining what MDSplus data needs to be fetched
 - **Data transformation**: Converting units, coordinate systems, and data layouts
 - **COCOS conversions**: Handling magnetic coordinate conventions
 - **Composition**: Assembling final IMAS-compliant data structures
@@ -15,8 +15,8 @@ IMAS Composer provides a clean, declarative API for mapping DIII-D diagnostic an
 
 **Requirements:**
 - Python extension for VSCode
-- Python environment with `pytest` installed
-- MDS+ access configured (connection to DIII-D data servers)
+- Python environment with `pytest` and `omas` (installed from the `omas_mds_convert_to_64bit` branch)
+- MDSplus access configured (connection to DIII-D data servers)
 
 **Test Explorer Setup:**
 1. Open VSCode settings (Cmd/Ctrl + ,)
@@ -30,11 +30,7 @@ IMAS Composer provides a clean, declarative API for mapping DIII-D diagnostic an
 - Click ▶️ next to any test to run it
 - View output in the "Test Results" panel
 
-**Integration markers:**
-- `@pytest.mark.integration` - Tests that access MDS+
-- `@pytest.mark.requires_mdsplus` - Tests requiring DIII-D data access
-
-Use these markers to filter tests in VSCode or command line.
+**Note:** All tests require MDSplus access to DIII-D data servers.
 
 ## Quick Start
 
@@ -57,7 +53,7 @@ while True:
     if fully_resolved:
         break
 
-    # Fetch requirements from MDS+
+    # Fetch requirements from MDSplus
     for req in requirements:
         mds_data = fetch_from_mdsplus(req)  # Your fetching logic
         raw_data[req.as_key()] = mds_data
@@ -87,7 +83,7 @@ This gives Claude access to:
 
 ### Adding New Fields: Quick Workflow
 
-You know OMAS and DIII-D MDS+ data structures. Here's the direct workflow for working with Claude:
+You know OMAS and DIII-D MDSplus data structures. Here's the direct workflow for working with Claude:
 
 #### 1. Tell Claude what to implement
 
@@ -97,15 +93,25 @@ OMAS uses two mapping styles - point Claude to the right one:
 ```
 Implement equilibrium.time_slice.profiles_2d.psi from omas/machine_mappings/_efit.json
 ```
+or
+```
+Implement these equilibrium.time_slice.profiles_1d fields from _efit.json:
+dpressure_dpsi, f, f_df_dpsi, pressure, psi, q, rho_tor_norm, j_tor, volume
+```
 
 **Diagnostic fields** (Python mapping):
 ```
 Implement thomson_scattering.channel.n_e.data from the thomson_scattering_data
 function in omas/machine_mappings/d3d.py
 ```
+or
+```
+Implement thomson_scattering.channel fields from thomson_scattering_data in d3d.py:
+position.r, position.z, position.phi, n_e.data, n_e.data_error_upper, t_e.data, t_e.data_error_upper
+```
 
 Claude will read the OMAS implementation and create:
-- Auxiliary nodes for raw MDS+ data
+- Auxiliary nodes for raw MDSplus data
 - `IDSEntrySpec` with proper stage (DIRECT/DERIVED/COMPUTED)
 - Compose functions with transformations
 - YAML field list entries
@@ -113,7 +119,7 @@ Claude will read the OMAS implementation and create:
 
 #### 2. Test and iterate
 
-Use VSCode Test Explorer to run tests (see [VSCode Setup](#vscode-setup) below):
+Use VSCode Test Explorer to run tests (see [VSCode Setup](#vscode-setup) above):
 - Click the test flask icon in VSCode sidebar
 - Navigate to the specific test
 - Click ▶️ to run
@@ -133,20 +139,6 @@ Claude will debug common issues:
 - **COCOS transformations**: Missing or incorrect coordinate conversions
 - **Precision differences**: Interpolation methods, tolerance adjustments
 - **Ragged arrays**: Zero-padding, awkward array conversion
-
-### Examples
-
-**Equilibrium fields** (JSON mapping):
-```
-Implement these equilibrium.time_slice.profiles_1d fields from _efit.json:
-dpressure_dpsi, f, f_df_dpsi, pressure, psi, q, rho_tor_norm, j_tor, volume
-```
-
-**Diagnostic fields** (Python mapping):
-```
-Implement thomson_scattering.channel fields from thomson_scattering_data in d3d.py:
-position.r, position.z, position.phi, n_e.data, n_e.data_error_upper, t_e.data, t_e.data_error_upper
-```
 
 **Key patterns Claude handles automatically:**
 
@@ -192,7 +184,7 @@ Claude will implement: zero filtering with awkward arrays.
 
 Due to data privacy restrictions:
 - ❌ Execute Python code or run pytest
-- ❌ Access MDS+ servers
+- ❌ Access MDSplus servers
 - ❌ Import modules
 
 Claude will:
@@ -204,7 +196,7 @@ Claude will:
 
 ### Three-Stage Requirement System
 
-1. **DIRECT**: Static MDS+ paths known at initialization
+1. **DIRECT**: Static MDSplus paths known at initialization
    ```python
    static_requirements=[Requirement('\\EFIT::TOP.RESULTS.GEQDSK.BCENTR', 0, 'EFIT01')]
    ```
@@ -229,21 +221,21 @@ imas_composer/
 ├── imas_composer/
 │   ├── core.py              # Core requirement system
 │   ├── composer.py          # Public ImasComposer API
-│   ├── cocos.py            # COCOS transformations
+│   ├── cocos.py             # COCOS transformations
 │   └── ids/
-│       ├── base.py         # IDSMapper base class
-│       ├── equilibrium.py  # Equilibrium IDS mapper
+│       ├── base.py          # IDSMapper base class
+│       ├── equilibrium.py   # Equilibrium IDS mapper
 │       ├── equilibrium.yaml # Field list
 │       └── ...
 ├── tests/
-│   ├── conftest.py         # Shared test infrastructure
+│   ├── conftest.py          # Shared test infrastructure
 │   ├── test_equilibrium_requirements.py
 │   ├── test_equilibrium_composition.py
 │   ├── test_config_equilibrium.yaml  # Test configuration
 │   └── ...
-└── .claude/                # Claude Code documentation
-    ├── README.md           # Index of documentation
-    ├── .claudecontext      # Critical policies & quick reference
+└── .claude/                 # Claude Code documentation
+    ├── README.md            # Index of documentation
+    ├── .claudecontext       # Critical policies & quick reference
     ├── DEVELOPMENT_PRINCIPLES.md  # Architecture guide
     └── ...
 ```
@@ -316,7 +308,7 @@ When contributing new IDS mappers or fields:
 
 - **IMAS Documentation**: https://www.iter.org/
 - **OMAS Repository**: https://github.com/gafusion/omas
-- **DIII-D MDS+ Documentation**: Internal DIII-D documentation
+- **DIII-D MDSplus Documentation**: Internal DIII-D documentation https://nomos.gat.com/DIII-D/documentation/
 - **Claude Code Context**: See `.claude/README.md` for development guides
 
 ## License
