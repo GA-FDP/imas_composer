@@ -9,6 +9,7 @@ from .core import Requirement, RequirementStage
 from .ids.ece import ElectronCyclotronEmissionMapper
 from .ids.thomson_scattering import ThomsonScatteringMapper
 from .ids.equilibrium import EquilibriumMapper
+from .ids.ec_launchers import ECLaunchersMapper
 
 
 class ImasComposer:
@@ -48,6 +49,7 @@ class ImasComposer:
         self._register_mapper('ece', ElectronCyclotronEmissionMapper(fast_ece=False))
         self._register_mapper('thomson_scattering', ThomsonScatteringMapper())
         self._register_mapper('equilibrium', EquilibriumMapper(efit_tree=efit_tree))
+        self._register_mapper('ec_launchers', ECLaunchersMapper())
 
     def _register_mapper(self, ids_name: str, mapper):
         """Register an IDS mapper."""

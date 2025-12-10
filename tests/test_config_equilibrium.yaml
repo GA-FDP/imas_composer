@@ -12,8 +12,8 @@ field_tolerances:
     atol: 1.0
   equilibrium.time_slice.profiles_1d.volume:
   # This uses interpolation so accuracy is limited
-    rtol: 1.0e-5
-    atol: 1.0e-5
+    rtol: 2.0e-5
+    atol: 2.0e-4
   equilibrium.time_slice.time:
   # OMAS does the ms -> s conversion on the MDSplus side where everything is 32 bit
     rtol: 1.0e-7

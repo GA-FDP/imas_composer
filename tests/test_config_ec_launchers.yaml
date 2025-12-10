@@ -1,0 +1,39 @@
+# Test configuration for EC Launchers IDS
+
+# Only shot 170325 has EC launcher data, exclude all others
+exclude_shots: []
+
+# Field-level exceptions for validation
+field_exceptions: {}
+
+# Requirement validation settings
+requirement_validation:
+  # MDS+ paths that use setup/calibration data (shot 0), not the requested shot
+  allow_different_shot: []
+  # Optional MDS+ paths that may not exist (exceptions are allowed)
+  optional_requirements:
+    - '.ECH.SYSTEM_{system_no}.ANTENNA.GB_RCURVE'
+    - '.ECH.SYSTEM_{system_no}.ANTENNA.GB_WAIST'
+
+# OMAS path mapping
+# Maps imas_composer notation to OMAS notation for fetching reference data
+# For beam fields, OMAS uses .: to index all beams at once
+omas_path_map:
+  # Beam fields (add .: to fetch all beams)
+  ec_launchers.beam.time: ec_launchers.beam.:.time
+  ec_launchers.beam.identifier: ec_launchers.beam.:.identifier
+  ec_launchers.beam.name: ec_launchers.beam.:.name
+  ec_launchers.beam.frequency.time: ec_launchers.beam.:.frequency.time
+  ec_launchers.beam.frequency.data: ec_launchers.beam.:.frequency.data
+  ec_launchers.beam.launching_position.r: ec_launchers.beam.:.launching_position.r
+  ec_launchers.beam.launching_position.z: ec_launchers.beam.:.launching_position.z
+  ec_launchers.beam.launching_position.phi: ec_launchers.beam.:.launching_position.phi
+  ec_launchers.beam.mode: ec_launchers.beam.:.mode
+  ec_launchers.beam.phase.angle: ec_launchers.beam.:.phase.angle
+  ec_launchers.beam.phase.curvature: ec_launchers.beam.:.phase.curvature
+  ec_launchers.beam.power_launched.time: ec_launchers.beam.:.power_launched.time
+  ec_launchers.beam.power_launched.data: ec_launchers.beam.:.power_launched.data
+  ec_launchers.beam.spot.angle: ec_launchers.beam.:.spot.angle
+  ec_launchers.beam.spot.size: ec_launchers.beam.:.spot.size
+  ec_launchers.beam.steering_angle_pol: ec_launchers.beam.:.steering_angle_pol
+  ec_launchers.beam.steering_angle_tor: ec_launchers.beam.:.steering_angle_tor
