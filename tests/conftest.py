@@ -35,9 +35,13 @@ TEST_SHOTS = [202161, 203321, 204602, 204601]
 # YAML Configuration Utilities
 # ============================================================================
 
+_test_config_cache = {}
+
 def load_test_config(ids_name):
     """
     Load test configuration for an IDS.
+
+    Configurations are cached to avoid repeated file I/O during parametrized tests.
 
     Args:
         ids_name: IDS identifier (e.g., 'ece', 'thomson_scattering')
@@ -45,22 +49,17 @@ def load_test_config(ids_name):
     Returns:
         dict: Test configuration with validation rules, exceptions, and OMAS path mapping
     """
-    config_path = Path(__file__).parent / f'test_config_{ids_name}.yaml'
+    # Return cached config if available
+    if ids_name in _test_config_cache:
+        return _test_config_cache[ids_name]
 
-    if not config_path.exists():
-        # Return default config if no custom config exists
-        return {
-            'field_exceptions': {},
-            'requirement_validation': {
-                'allow_different_shot': [],
-                'optional_requirements': []
-            },
-            'omas_path_map': {}
-        }
+    config_path = Path(__file__).parent / f'test_config_{ids_name}.yaml'
 
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
 
+    # Cache the config
+    _test_config_cache[ids_name] = config
     return config
 
 
@@ -182,6 +181,27 @@ def fetch_requirements(requirements: list[Requirement]) -> dict:
                 raw_data[req.as_key()] = e
 
     return raw_data
+
+
+def check_field_shot_exclusion(ids_name, ids_path, shot):
+    """
+    Check if a specific field/shot combination should be skipped.
+
+    Args:
+        ids_name: IDS identifier (e.g., 'ec_launchers')
+        ids_path: Full IDS path (e.g., 'ec_launchers.beam.spot.size')
+        shot: Shot number
+
+    Raises:
+        pytest.skip: If the field/shot combination is in the exclusion list
+    """
+    config = load_test_config(ids_name)
+    field_shot_exclusions = config.get('field_shot_exclusions', {})
+
+    if ids_path in field_shot_exclusions:
+        excluded_shots = field_shot_exclusions[ids_path]
+        if shot in excluded_shots:
+            pytest.skip(f"Shot {shot} excluded for {ids_path} (no data available)")
 
 
 def get_ndim(arr):
@@ -422,6 +442,10 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
     """
     # Load test configuration for this IDS
     ids_name = ids_path.split('.')[0]
+
+    # Check for field-specific shot exclusions
+    check_field_shot_exclusion(ids_name, ids_path, shot)
+
     test_config = load_test_config(ids_name)
     allow_different_shot = test_config['requirement_validation']['allow_different_shot']
 
@@ -533,6 +557,8 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
         ids_name: IDS name (e.g., 'ece', 'thomson_scattering')
         shot: Shot number (from test_shot fixture)
     """
+    # Check for field-specific shot exclusions
+    check_field_shot_exclusion(ids_name, ids_path, shot)
 
     # Compose using imas_composer
     composer_value = resolve_and_compose(composer, ids_path, shot)
