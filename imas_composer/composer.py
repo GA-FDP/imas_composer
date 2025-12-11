@@ -9,8 +9,8 @@ from .core import Requirement, RequirementStage
 from .ids.ece import ElectronCyclotronEmissionMapper
 from .ids.thomson_scattering import ThomsonScatteringMapper
 from .ids.equilibrium import EquilibriumMapper
+from .ids.core_profiles import CoreProfilesMapper
 from .ids.ec_launchers import ECLaunchersMapper
-
 
 class ImasComposer:
     """
@@ -33,22 +33,25 @@ class ImasComposer:
         result = composer.compose('ece.channel.t_e.data', 180000, raw_data)
     """
 
-    def __init__(self, device: str = 'd3d', efit_tree: str = 'EFIT01'):
+    def __init__(self, device: str = 'd3d', efit_tree: str = 'EFIT01', profiles_tree: str = 'ZIPFIT01'):
         """
         Initialize ImasComposer.
 
         Args:
             device: Device identifier (currently only 'd3d' supported)
             efit_tree: EFIT tree to use for equilibrium data (e.g., 'EFIT01', 'EFIT02')
+            profiles_tree: Profiles tree to use for core_profiles data (e.g., 'ZIPFIT01', 'OMFIT_PROFS')
         """
         self.device = device
         self.efit_tree = efit_tree
+        self.profiles_tree = profiles_tree
         self._mappers = {}
 
         # Register available mappers
         self._register_mapper('ece', ElectronCyclotronEmissionMapper(fast_ece=False))
         self._register_mapper('thomson_scattering', ThomsonScatteringMapper())
         self._register_mapper('equilibrium', EquilibriumMapper(efit_tree=efit_tree))
+        self._register_mapper('core_profiles', CoreProfilesMapper(profiles_tree=profiles_tree))
         self._register_mapper('ec_launchers', ECLaunchersMapper())
 
     def _register_mapper(self, ids_name: str, mapper):

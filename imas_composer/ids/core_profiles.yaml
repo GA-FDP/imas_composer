@@ -1,0 +1,41 @@
+# Core Profiles IDS Configuration for DIII-D
+
+# Static values (hardcoded, not from MDSplus)
+static_values:
+  ids_properties.homogeneous_time: 1
+
+# Profiles tree configuration
+# Default to ZIPFIT01
+default_profiles_tree: ZIPFIT01
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  # Time
+  - time
+  - profiles_1d.time
+  - ids_properties.homogeneous_time
+
+  # Grid
+  - profiles_1d.grid.rho_tor_norm
+
+  # Electrons
+  - profiles_1d.electrons.density_thermal
+  - profiles_1d.electrons.temperature
+
+  # Ion[0] - Deuterium
+  - profiles_1d.ion.0.density_thermal
+  - profiles_1d.ion.0.temperature
+  - profiles_1d.ion.0.label
+  - profiles_1d.ion.0.element.0.z_n
+  - profiles_1d.ion.0.element.0.a
+
+  # Ion[1] - Carbon
+  - profiles_1d.ion.1.density_thermal
+  - profiles_1d.ion.1.temperature
+  - profiles_1d.ion.1.rotation_frequency_tor
+  - profiles_1d.ion.1.label
+  - profiles_1d.ion.1.element.0.z_n
+  - profiles_1d.ion.1.element.0.a
+
+  # Global quantities
+  - global_quantities.v_loop
