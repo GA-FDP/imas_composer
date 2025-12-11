@@ -200,23 +200,27 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
 
     Args:
         composer: ImasComposer instance
-        ids_path: Full IDS path (e.g., 'ece.channel.t_e.data')
+        ids_path: Full IDS path (e.g., 'ece.channel.t_e.data') or list of paths
         shot: Shot number (default: REFERENCE_SHOT)
 
     Returns:
-        Composed value from imas_composer
+        Composed value from imas_composer (single value if ids_path is str, dict if list)
 
     Raises:
         RuntimeError: If requirements cannot be resolved within max iterations
         Exception: If any requirement fetch fails (re-raises the fetch exception)
     """
+    # Convert single path to list for batch API
+    single_path = isinstance(ids_path, str)
+    ids_paths = [ids_path] if single_path else ids_path
+
     raw_data = {}
 
-    # Iteratively resolve requirements
+    # Iteratively resolve requirements using batch API
     for _ in range(10):  # Max 10 iterations
-        fully_resolved, requirements = composer.resolve(ids_path, shot, raw_data)
+        status, requirements = composer.resolve(ids_paths, shot, raw_data)
 
-        if fully_resolved:
+        if all(status.values()):
             break
 
         # Fetch requirements
@@ -225,15 +229,19 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
         # Check if any fetched values are exceptions (from failed MDS+ access)
         for key, value in fetched.items():
             if isinstance(value, Exception):
-                raise RuntimeError(f"Failed to fetch requirement {key} for {ids_path}: {value}") from value
+                raise RuntimeError(f"Failed to fetch requirement {key}: {value}") from value
 
         raw_data.update(fetched)
 
-    if not fully_resolved:
-        raise RuntimeError(f"Could not resolve {ids_path} within 10 iterations")
+    if not all(status.values()):
+        unresolved = [path for path, resolved in status.items() if not resolved]
+        raise RuntimeError(f"Could not resolve {unresolved} within 10 iterations")
 
-    # Compose final data
-    return composer.compose(ids_path, shot, raw_data)
+    # Compose final data using batch API
+    results = composer.compose(ids_paths, shot, raw_data)
+
+    # Return single value if input was single path
+    return results[ids_path] if single_path else results
 
 def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float=1e-12, atol_array=1e-6):
     """

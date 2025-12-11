@@ -16,21 +16,25 @@ class ImasComposer:
     """
     Main interface for composing IMAS data.
 
+    This class uses a batch-first API that processes multiple IDS paths efficiently.
+
     Usage:
         composer = ImasComposer()
 
-        # Iteratively resolve requirements
+        # Iteratively resolve requirements for multiple paths
+        ids_paths = ['ece.channel.t_e.data', 'ece.channel.time']
         raw_data = {}
         while True:
-            fully_resolved, requirements = composer.resolve('ece.channel.t_e.data', 180000, raw_data)
-            if fully_resolved:
+            status, requirements = composer.resolve(ids_paths, 180000, raw_data)
+            if all(status.values()):
                 break
             # Fetch requirements from MDSplus/toksearch
             for req in requirements:
                 raw_data[req.as_key()] = fetch_from_mds(req)
 
-        # Compose final data
-        result = composer.compose('ece.channel.t_e.data', 180000, raw_data)
+        # Compose final data for all paths at once
+        results = composer.compose(ids_paths, 180000, raw_data)
+        # results is a dict: {'ece.channel.t_e.data': array(...), 'ece.channel.time': array(...)}
     """
 
     def __init__(self, device: str = 'd3d', efit_tree: str = 'EFIT01'):
@@ -79,137 +83,203 @@ class ImasComposer:
 
         return self._mappers[ids_name], ids_name
 
-    def resolve(
-        self,
-        ids_path: str,
-        shot: int,
-        raw_data: Dict[str, Any]
-    ) -> Tuple[bool, List[Requirement]]:
+    def _group_paths_by_ids(self, ids_paths: List[str]) -> Dict[str, List[str]]:
         """
-        Resolve requirements for an IDS path.
-
-        This method determines what MDSplus data is needed to synthesize the requested
-        IDS field. It should be called iteratively, fetching requirements and updating
-        raw_data, until fully_resolved returns True.
+        Group IDS paths by their root IDS name.
 
         Args:
-            ids_path: Full IDS path (e.g., 'ece.channel.t_e.data')
+            ids_paths: List of full IDS paths
+
+        Returns:
+            Dict mapping ids_name -> list of paths for that IDS
+
+        Example:
+            >>> paths = ['ece.channel.t_e.data', 'equilibrium.time', 'ece.channel.time']
+            >>> grouped = composer._group_paths_by_ids(paths)
+            >>> grouped
+            {'ece': ['ece.channel.t_e.data', 'ece.channel.time'],
+             'equilibrium': ['equilibrium.time']}
+        """
+        paths_by_ids = {}
+        for ids_path in ids_paths:
+            ids_name = ids_path.split('.')[0]
+            if ids_name not in paths_by_ids:
+                paths_by_ids[ids_name] = []
+            paths_by_ids[ids_name].append(ids_path)
+        return paths_by_ids
+
+    def resolve(
+        self,
+        ids_paths: List[str],
+        shot: int,
+        raw_data: Dict[str, Any]
+    ) -> Tuple[Dict[str, bool], List[Requirement]]:
+        """
+        Resolve requirements for multiple IDS paths at once.
+
+        This method determines what MDSplus data is needed to synthesize the requested
+        IDS fields. It should be called iteratively, fetching requirements and updating
+        raw_data, until all paths are fully resolved.
+
+        Args:
+            ids_paths: List of full IDS paths (e.g., ['ece.channel.t_e.data', 'ece.channel.time'])
             shot: Shot number
             raw_data: Dict of already-fetched data (requirement keys -> values)
 
         Returns:
-            Tuple of (fully_resolved, requirements):
-                - fully_resolved: True if all dependencies are satisfied
-                - requirements: List of Requirement objects still needed
+            Tuple of (resolution_status, requirements):
+                - resolution_status: Dict mapping path -> fully_resolved boolean
+                - requirements: Deduplicated list of all requirements needed
 
         Example:
             >>> composer = ImasComposer()
             >>> raw_data = {}
-            >>> resolved, reqs = composer.resolve('ece.channel.t_e.data', 180000, raw_data)
-            >>> print(resolved)  # False - need to fetch requirements
-            >>> print(len(reqs))  # N requirements needed
+            >>> status, reqs = composer.resolve(['ece.channel.t_e.data', 'ece.channel.time'], 180000, raw_data)
+            >>> print(status)
+            {'ece.channel.t_e.data': False, 'ece.channel.time': False}
+            >>> print(len(reqs))  # Deduplicated requirements for both fields
         """
-        mapper, ids_name = self._get_mapper_for_path(ids_path)
+        # Group paths by IDS name for efficient batching
+        paths_by_ids = self._group_paths_by_ids(ids_paths)
 
-        # Check if spec exists
-        if ids_path not in mapper.specs:
-            raise ValueError(
-                f"IDS path '{ids_path}' not found in {ids_name} mapper. "
-                f"Available: {list(mapper.specs.keys())}"
-            )
+        # Collect requirements for all paths, grouped by IDS
+        all_requirements = []
+        seen_keys = set()
+        resolution_status = {}
 
-        # Collect all requirements needed for this path
-        # Use _collect_requirements_with_data to handle DERIVED stages
-        all_requirements = self._collect_requirements_with_data(mapper, ids_path, shot, raw_data)
+        for ids_name, paths in paths_by_ids.items():
+            if ids_name not in self._mappers:
+                raise ValueError(
+                    f"No mapper registered for IDS '{ids_name}'. "
+                    f"Available: {list(self._mappers.keys())}"
+                )
 
-        # Filter out requirements we already have
-        missing_requirements = [
-            req for req in all_requirements
-            if req.as_key() not in raw_data
-        ]
+            mapper = self._mappers[ids_name]
 
-        # Fully resolved if no missing requirements
-        fully_resolved = len(missing_requirements) == 0
+            # Validate all paths exist in mapper
+            for ids_path in paths:
+                if ids_path not in mapper.specs:
+                    raise ValueError(
+                        f"IDS path '{ids_path}' not found in {ids_name} mapper. "
+                        f"Available: {list(mapper.specs.keys())}"
+                    )
 
-        return fully_resolved, missing_requirements
+            # Batch collect requirements for all paths in this IDS
+            ids_requirements = self._collect_requirements_batch(mapper, paths, shot, raw_data)
 
-    def _collect_requirements_with_data(
+            # Deduplicate and track resolution status
+            for ids_path, path_requirements in ids_requirements.items():
+                # Filter out requirements we already have
+                missing_requirements = [
+                    req for req in path_requirements
+                    if req.as_key() not in raw_data
+                ]
+
+                # Track resolution status
+                resolution_status[ids_path] = len(missing_requirements) == 0
+
+                # Add to deduplicated list
+                for req in missing_requirements:
+                    key = req.as_key()
+                    if key not in seen_keys:
+                        all_requirements.append(req)
+                        seen_keys.add(key)
+
+        return resolution_status, all_requirements
+
+    def _collect_requirements_batch(
         self,
         mapper,
-        ids_path: str,
+        ids_paths: List[str],
         shot: int,
         raw_data: Dict[str, Any]
-    ) -> List[Requirement]:
+    ) -> Dict[str, List[Requirement]]:
         """
-        Collect requirements with access to raw_data for DERIVED stages.
+        Collect requirements for multiple IDS paths at once, sharing dependency traversal.
 
-        This performs multi-pass resolution:
-        1. Collect DIRECT requirements
+        This performs multi-pass resolution for all paths simultaneously:
+        1. Collect DIRECT requirements for all paths
         2. Use fetched data to derive DERIVED requirements
         3. Repeat until all requirements collected
+
+        Args:
+            mapper: IDS mapper instance
+            ids_paths: List of IDS paths to collect requirements for
+            shot: Shot number
+            raw_data: Already-fetched data
+
+        Returns:
+            Dict mapping each ids_path -> List[Requirement]
         """
-        all_requirements = []
+        # Track requirements per path
+        requirements_by_path = {path: [] for path in ids_paths}
+
+        # Shared visited set across all paths to avoid redundant traversal
         visited = set()
 
-        # Start with the target path
-        to_process = [(ids_path, 0)]  # (path, depth)
-        max_depth = 10  # Prevent infinite loops
+        # Process all paths together
+        to_process = [(path, path, 0) for path in ids_paths]  # (original_path, current_path, depth)
+        max_depth = 10
 
         while to_process:
-            current_path, depth = to_process.pop(0)
+            original_path, current_path, depth = to_process.pop(0)
 
             if depth > max_depth:
                 raise RuntimeError(f"Max dependency depth exceeded for {current_path}")
 
-            if current_path in visited:
+            # Use a combined key for visiting to share across all paths
+            visit_key = current_path
+            if visit_key in visited:
                 continue
-            visited.add(current_path)
+            visited.add(visit_key)
 
             if current_path not in mapper.specs:
                 continue
 
             spec = mapper.specs[current_path]
 
-            # Add dependencies to process list
+            # Add dependencies to process list (propagate original_path)
             if spec.depends_on:
                 for dep in spec.depends_on:
-                    to_process.append((dep, depth + 1))
+                    to_process.append((original_path, dep, depth + 1))
 
             # Collect requirements based on stage
             if spec.stage == RequirementStage.DIRECT:
                 for req in spec.static_requirements:
-                    all_requirements.append(Requirement(req.mds_path, shot, req.treename))
+                    requirements_by_path[original_path].append(
+                        Requirement(req.mds_path, shot, req.treename)
+                    )
 
             elif spec.stage == RequirementStage.DERIVED:
                 if spec.derive_requirements:
                     # Try to derive requirements if we have the dependency data
                     try:
                         derived_reqs = spec.derive_requirements(shot, raw_data)
-                        all_requirements.extend(derived_reqs)
+                        requirements_by_path[original_path].extend(derived_reqs)
                     except (KeyError, Exception):
                         # Dependencies not yet available, will be resolved in next pass
                         pass
 
-        return all_requirements
+        return requirements_by_path
 
     def compose(
         self,
-        ids_path: str,
+        ids_paths: List[str],
         shot: int,
         raw_data: Dict[str, Any]
-    ) -> Any:
+    ) -> Dict[str, Any]:
         """
-        Compose (synthesize) the final IDS data from raw MDSplus data.
+        Compose (synthesize) final IDS data from raw MDSplus data for multiple paths.
 
-        This should only be called after resolve() returns fully_resolved=True.
+        This should only be called after resolve() returns all paths as fully_resolved=True.
 
         Args:
-            ids_path: Full IDS path (e.g., 'ece.channel.t_e.data')
+            ids_paths: List of full IDS paths (e.g., ['ece.channel.t_e.data', 'ece.channel.time'])
             shot: Shot number
             raw_data: Dict of fetched data (requirement keys -> values)
 
         Returns:
-            Synthesized IDS data (type depends on field - could be array, scalar, etc.)
+            Dict mapping each ids_path -> synthesized IDS data
 
         Raises:
             ValueError: If path not found or requirements not met
@@ -218,42 +288,56 @@ class ImasComposer:
         Example:
             >>> composer = ImasComposer()
             >>> # ... resolve and fetch all requirements ...
-            >>> t_e_data = composer.compose('ece.channel.t_e.data', 180000, raw_data)
-            >>> print(t_e_data.shape)  # (n_channels, n_time)
+            >>> results = composer.compose(['ece.channel.t_e.data', 'ece.channel.time'], 180000, raw_data)
+            >>> print(results['ece.channel.t_e.data'].shape)  # (n_channels, n_time)
         """
-        mapper, ids_name = self._get_mapper_for_path(ids_path)
+        results = {}
 
-        # Check if spec exists
-        if ids_path not in mapper.specs:
-            raise ValueError(
-                f"IDS path '{ids_path}' not found in {ids_name} mapper"
-            )
+        # Group paths by IDS for efficient processing
+        paths_by_ids = self._group_paths_by_ids(ids_paths)
 
-        spec = mapper.specs[ids_path]
+        # Compose all paths
+        for ids_name, paths in paths_by_ids.items():
+            if ids_name not in self._mappers:
+                raise ValueError(
+                    f"No mapper registered for IDS '{ids_name}'. "
+                    f"Available: {list(self._mappers.keys())}"
+                )
 
-        # Verify it's a COMPUTED stage
-        if spec.stage != RequirementStage.COMPUTED:
-            raise ValueError(
-                f"Cannot compose '{ids_path}' - it is {spec.stage}, not COMPUTED. "
-                f"Only COMPUTED stage fields can be composed."
-            )
+            mapper = self._mappers[ids_name]
 
-        # Verify it has a compose function
-        if not spec.compose:
-            raise ValueError(
-                f"Cannot compose '{ids_path}' - no compose function defined"
-            )
+            for ids_path in paths:
+                # Check if spec exists
+                if ids_path not in mapper.specs:
+                    raise ValueError(
+                        f"IDS path '{ids_path}' not found in {ids_name} mapper"
+                    )
 
-        # Compose the data
-        try:
-            result = spec.compose(shot, raw_data)
-        except KeyError as e:
-            raise RuntimeError(
-                f"Missing required data for composing '{ids_path}': {e}. "
-                f"Did you call resolve() and fetch all requirements?"
-            ) from e
+                spec = mapper.specs[ids_path]
 
-        return result
+                # Verify it's a COMPUTED stage
+                if spec.stage != RequirementStage.COMPUTED:
+                    raise ValueError(
+                        f"Cannot compose '{ids_path}' - it is {spec.stage}, not COMPUTED. "
+                        f"Only COMPUTED stage fields can be composed."
+                    )
+
+                # Verify it has a compose function
+                if not spec.compose:
+                    raise ValueError(
+                        f"Cannot compose '{ids_path}' - no compose function defined"
+                    )
+
+                # Compose the data
+                try:
+                    results[ids_path] = spec.compose(shot, raw_data)
+                except KeyError as e:
+                    raise RuntimeError(
+                        f"Missing required data for composing '{ids_path}': {e}. "
+                        f"Did you call resolve() and fetch all requirements?"
+                    ) from e
+
+        return results
 
     def get_supported_fields(self, ids_name: str) -> List[str]:
         """
@@ -281,119 +365,3 @@ class ImasComposer:
             path for path, spec in mapper.specs.items()
             if spec.stage == RequirementStage.COMPUTED
         ]
-
-    def resolve_multiple(
-        self,
-        ids_paths: List[str],
-        shot: int,
-        raw_data: Dict[str, Any]
-    ) -> Tuple[Dict[str, bool], List[Requirement]]:
-        """
-        Resolve requirements for multiple IDS paths at once.
-
-        Args:
-            ids_paths: List of IDS paths to resolve
-            shot: Shot number
-            raw_data: Dict of already-fetched data
-
-        Returns:
-            Tuple of (resolution_status, requirements):
-                - resolution_status: Dict mapping path -> fully_resolved boolean
-                - requirements: Deduplicated list of all requirements needed
-
-        Example:
-            >>> paths = ['ece.channel.t_e.data', 'ece.channel.time']
-            >>> status, reqs = composer.resolve_multiple(paths, 180000, {})
-            >>> print(status)
-            {'ece.channel.t_e.data': False, 'ece.channel.time': False}
-            >>> print(len(reqs))  # Deduplicated requirements for both fields
-        """
-        resolution_status = {}
-        all_requirements = []
-        seen_keys = set()
-
-        for ids_path in ids_paths:
-            fully_resolved, requirements = self.resolve(ids_path, shot, raw_data)
-            resolution_status[ids_path] = fully_resolved
-
-            # Deduplicate requirements
-            for req in requirements:
-                key = req.as_key()
-                if key not in seen_keys:
-                    all_requirements.append(req)
-                    seen_keys.add(key)
-
-        return resolution_status, all_requirements
-
-    def resolve_and_compose(
-        self,
-        ids_path: str,
-        shot: int,
-        fetch_function,
-        max_iterations: int = 10
-    ) -> Any:
-        """
-        Convenience method to resolve requirements and compose in one call.
-
-        This method handles the iterative resolve/fetch loop automatically.
-
-        Args:
-            ids_path: Full IDS path (e.g., 'ece.channel.t_e.data')
-            shot: Shot number
-            fetch_function: Callable that takes a list of Requirements and returns
-                           a dict mapping requirement keys to fetched values.
-                           Should raise an exception if any fetch fails.
-            max_iterations: Maximum number of resolve iterations (default: 10)
-
-        Returns:
-            Composed value from the IDS path
-
-        Raises:
-            RuntimeError: If requirements cannot be resolved within max_iterations
-            Exception: If any requirement fetch fails (re-raises from fetch_function)
-
-        Example:
-            >>> from omas import mdsvalue
-            >>>
-            >>> def fetch_requirements(requirements):
-            ...     raw_data = {}
-            ...     for req in requirements:
-            ...         mds = mdsvalue('d3d', req.treename, req.shot, req.mds_path)
-            ...         raw_data[req.as_key()] = mds.raw()
-            ...     return raw_data
-            >>>
-            >>> composer = ImasComposer()
-            >>> t_e_data = composer.resolve_and_compose(
-            ...     'ece.channel.t_e.data',
-            ...     180000,
-            ...     fetch_requirements
-            ... )
-        """
-        raw_data = {}
-
-        # Iteratively resolve requirements
-        for iteration in range(max_iterations):
-            fully_resolved, requirements = self.resolve(ids_path, shot, raw_data)
-
-            if fully_resolved:
-                break
-
-            # Fetch requirements using provided function
-            fetched = fetch_function(requirements)
-
-            # Check if any fetched values are exceptions
-            for key, value in fetched.items():
-                if isinstance(value, Exception):
-                    raise RuntimeError(
-                        f"Failed to fetch requirement {key} for {ids_path}: {value}"
-                    ) from value
-
-            raw_data.update(fetched)
-
-        if not fully_resolved:
-            raise RuntimeError(
-                f"Could not resolve {ids_path} within {max_iterations} iterations"
-            )
-
-        # Compose final data
-        return self.compose(ids_path, shot, raw_data)
