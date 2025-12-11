@@ -80,6 +80,7 @@ fields:
   - time_slice.constraints.pf_current.weight
   - time_slice.constraints.pf_current.reconstructed
   - time_slice.constraints.pf_current.chi_squared
+  - time_slice.constraints.pressure.position.psi
   - time_slice.constraints.pressure.measured
   - time_slice.constraints.pressure.measured_error_upper
   - time_slice.constraints.pressure.weight
