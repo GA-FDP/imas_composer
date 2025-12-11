@@ -106,6 +106,28 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # Internal dependency: MTIME (measurements time base)
+        # Required for constraint time filtering (MEASUREMENTS have different time dimension)
+        self.specs["equilibrium._mtime"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'{self.measurements_node}.MTIME', 0, self.efit_tree),
+            ],
+            ids_path="equilibrium._mtime",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Internal dependency: Time indices for constraint filtering
+        # Maps GTIME (equilibrium time base) to MTIME (measurements time base)
+        # Needed because EFIT filters are applied to RESULTS but not MEASUREMENTS
+        self.specs["equilibrium._constraint_time_indices"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._gtime", "equilibrium._mtime"],
+            compose=self._compose_constraint_time_indices,
+            ids_path="equilibrium._constraint_time_indices",
+            docs_file=self.DOCS_PATH
+        )
+
         # Internal dependency: RBBBS (boundary R, used for masking)
         self.specs["equilibrium._rbbbs"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
@@ -579,7 +601,7 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.ip.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._plasma", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            depends_on=["equilibrium._plasma", "equilibrium._bcentr", "equilibrium._cpasma_cocos", "equilibrium._constraint_time_indices"],
             compose=self._compose_ip_measured,
             ids_path="equilibrium.time_slice.constraints.ip.measured",
             docs_file=self.DOCS_PATH
@@ -593,8 +615,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.ip.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._sigpasma"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.SIGPASMA', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._sigpasma", "equilibrium._constraint_time_indices"],
+            compose=self._compose_ip_measured_error_upper,
             ids_path="equilibrium.time_slice.constraints.ip.measured_error_upper",
             docs_file=self.DOCS_PATH
         )
@@ -607,8 +629,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.ip.weight"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._fwtpasma"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.FWTPASMA', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._fwtpasma", "equilibrium._constraint_time_indices"],
+            compose=self._compose_ip_weight,
             ids_path="equilibrium.time_slice.constraints.ip.weight",
             docs_file=self.DOCS_PATH
         )
@@ -621,7 +643,7 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.ip.reconstructed"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._cpasma", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            depends_on=["equilibrium._cpasma", "equilibrium._bcentr", "equilibrium._cpasma_cocos", "equilibrium._constraint_time_indices"],
             compose=self._compose_ip_reconstructed,
             ids_path="equilibrium.time_slice.constraints.ip.reconstructed",
             docs_file=self.DOCS_PATH
@@ -635,8 +657,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.ip.chi_squared"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._chipasma"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CHIPASMA', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._chipasma", "equilibrium._constraint_time_indices"],
+            compose=self._compose_ip_chi_squared,
             ids_path="equilibrium.time_slice.constraints.ip.chi_squared",
             docs_file=self.DOCS_PATH
         )
@@ -650,8 +672,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.bpol_probe.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._expmpi"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.EXPMPI', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._expmpi", "equilibrium._constraint_time_indices"],
+            compose=self._compose_bpol_probe_measured,
             ids_path="equilibrium.time_slice.constraints.bpol_probe.measured",
             docs_file=self.DOCS_PATH
         )
@@ -664,8 +686,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.bpol_probe.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._sigmpi"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.SIGMPI', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._sigmpi", "equilibrium._constraint_time_indices"],
+            compose=self._compose_bpol_probe_measured_error_upper,
             ids_path="equilibrium.time_slice.constraints.bpol_probe.measured_error_upper",
             docs_file=self.DOCS_PATH
         )
@@ -678,8 +700,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.bpol_probe.weight"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._fwtmp2"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.FWTMP2', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._fwtmp2", "equilibrium._constraint_time_indices"],
+            compose=self._compose_bpol_probe_weight,
             ids_path="equilibrium.time_slice.constraints.bpol_probe.weight",
             docs_file=self.DOCS_PATH
         )
@@ -692,8 +714,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.bpol_probe.reconstructed"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._cmpr2"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CMPR2', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._cmpr2", "equilibrium._constraint_time_indices"],
+            compose=self._compose_bpol_probe_reconstructed,
             ids_path="equilibrium.time_slice.constraints.bpol_probe.reconstructed",
             docs_file=self.DOCS_PATH
         )
@@ -706,8 +728,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.bpol_probe.chi_squared"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._saimpi"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.SAIMPI', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._saimpi", "equilibrium._constraint_time_indices"],
+            compose=self._compose_bpol_probe_chi_squared,
             ids_path="equilibrium.time_slice.constraints.bpol_probe.chi_squared",
             docs_file=self.DOCS_PATH
         )
@@ -721,8 +743,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._diamag"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.DIAMAG', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._diamag", "equilibrium._constraint_time_indices"],
+            compose=self._compose_diamagnetic_flux_measured,
             ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.measured",
             docs_file=self.DOCS_PATH
         )
@@ -735,8 +757,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._sigdia"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.SIGDIA', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._sigdia", "equilibrium._constraint_time_indices"],
+            compose=self._compose_diamagnetic_flux_measured_error_upper,
             ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.measured_error_upper",
             docs_file=self.DOCS_PATH
         )
@@ -749,8 +771,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.weight"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._fwtdia"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.FWTDIA', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._fwtdia", "equilibrium._constraint_time_indices"],
+            compose=self._compose_diamagnetic_flux_weight,
             ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.weight",
             docs_file=self.DOCS_PATH
         )
@@ -763,8 +785,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.reconstructed"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._cdflux"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CDFLUX', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._cdflux", "equilibrium._constraint_time_indices"],
+            compose=self._compose_diamagnetic_flux_reconstructed,
             ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.reconstructed",
             docs_file=self.DOCS_PATH
         )
@@ -777,8 +799,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.diamagnetic_flux.chi_squared"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._chidflux"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CHIDFLUX', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._chidflux", "equilibrium._constraint_time_indices"],
+            compose=self._compose_diamagnetic_flux_chi_squared,
             ids_path="equilibrium.time_slice.constraints.diamagnetic_flux.chi_squared",
             docs_file=self.DOCS_PATH
         )
@@ -792,7 +814,7 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.flux_loop.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._silopt", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            depends_on=["equilibrium._silopt", "equilibrium._bcentr", "equilibrium._cpasma_cocos", "equilibrium._constraint_time_indices"],
             compose=self._compose_flux_loop_measured,
             ids_path="equilibrium.time_slice.constraints.flux_loop.measured",
             docs_file=self.DOCS_PATH
@@ -806,7 +828,7 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.flux_loop.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._sigsil", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            depends_on=["equilibrium._sigsil", "equilibrium._bcentr", "equilibrium._cpasma_cocos", "equilibrium._constraint_time_indices"],
             compose=self._compose_flux_loop_measured_error_upper,
             ids_path="equilibrium.time_slice.constraints.flux_loop.measured_error_upper",
             docs_file=self.DOCS_PATH
@@ -820,8 +842,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.flux_loop.weight"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._fwtsi"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.FWTSI', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._fwtsi", "equilibrium._constraint_time_indices"],
+            compose=self._compose_flux_loop_weight,
             ids_path="equilibrium.time_slice.constraints.flux_loop.weight",
             docs_file=self.DOCS_PATH
         )
@@ -834,7 +856,7 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.flux_loop.reconstructed"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._csilop", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            depends_on=["equilibrium._csilop", "equilibrium._bcentr", "equilibrium._cpasma_cocos", "equilibrium._constraint_time_indices"],
             compose=self._compose_flux_loop_reconstructed,
             ids_path="equilibrium.time_slice.constraints.flux_loop.reconstructed",
             docs_file=self.DOCS_PATH
@@ -848,8 +870,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.flux_loop.chi_squared"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._saisil"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.SAISIL', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._saisil", "equilibrium._constraint_time_indices"],
+            compose=self._compose_flux_loop_chi_squared,
             ids_path="equilibrium.time_slice.constraints.flux_loop.chi_squared",
             docs_file=self.DOCS_PATH
         )
@@ -867,7 +889,7 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.constraints.mse_polarisation_angle.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._tangam"],
+            depends_on=["equilibrium._tangam", "equilibrium._constraint_time_indices"],
             compose=self._compose_mse_measured,
             ids_path="equilibrium.time_slice.constraints.mse_polarisation_angle.measured",
             docs_file=self.DOCS_PATH
@@ -884,7 +906,7 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.constraints.mse_polarisation_angle.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._siggam"],
+            depends_on=["equilibrium._siggam", "equilibrium._constraint_time_indices"],
             compose=self._compose_mse_error,
             ids_path="equilibrium.time_slice.constraints.mse_polarisation_angle.measured_error_upper",
             docs_file=self.DOCS_PATH
@@ -898,8 +920,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.mse_polarisation_angle.weight"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._fwtgam"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.FWTGAM', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._fwtgam", "equilibrium._constraint_time_indices"],
+            compose=self._compose_mse_weight,
             ids_path="equilibrium.time_slice.constraints.mse_polarisation_angle.weight",
             docs_file=self.DOCS_PATH
         )
@@ -912,8 +934,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.mse_polarisation_angle.reconstructed"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._cmgam"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CMGAM', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._cmgam", "equilibrium._constraint_time_indices"],
+            compose=self._compose_mse_reconstructed,
             ids_path="equilibrium.time_slice.constraints.mse_polarisation_angle.reconstructed",
             docs_file=self.DOCS_PATH
         )
@@ -926,8 +948,8 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.mse_polarisation_angle.chi_squared"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._chigam"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.measurements_node}.CHIGAM', shot, self.efit_tree).as_key()],
+            depends_on=["equilibrium._chigam", "equilibrium._constraint_time_indices"],
+            compose=self._compose_mse_chi_squared,
             ids_path="equilibrium.time_slice.constraints.mse_polarisation_angle.chi_squared",
             docs_file=self.DOCS_PATH
         )
@@ -954,7 +976,7 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.constraints.pf_current.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._eccurt", "equilibrium._fccurt"],
+            depends_on=["equilibrium._eccurt", "equilibrium._fccurt", "equilibrium._constraint_time_indices"],
             compose=self._compose_pf_current_measured,
             ids_path="equilibrium.time_slice.constraints.pf_current.measured",
             docs_file=self.DOCS_PATH
@@ -980,7 +1002,7 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.constraints.pf_current.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._sigecc", "equilibrium._sigfcc"],
+            depends_on=["equilibrium._sigecc", "equilibrium._sigfcc", "equilibrium._constraint_time_indices"],
             compose=self._compose_pf_current_error,
             ids_path="equilibrium.time_slice.constraints.pf_current.measured_error_upper",
             docs_file=self.DOCS_PATH
@@ -1006,7 +1028,7 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.constraints.pf_current.weight"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._fwtec", "equilibrium._fwtfc"],
+            depends_on=["equilibrium._fwtec", "equilibrium._fwtfc", "equilibrium._constraint_time_indices"],
             compose=self._compose_pf_current_weight,
             ids_path="equilibrium.time_slice.constraints.pf_current.weight",
             docs_file=self.DOCS_PATH
@@ -1032,7 +1054,7 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.constraints.pf_current.reconstructed"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._cecurr", "equilibrium._ccbrsp"],
+            depends_on=["equilibrium._cecurr", "equilibrium._ccbrsp", "equilibrium._constraint_time_indices"],
             compose=self._compose_pf_current_reconstructed,
             ids_path="equilibrium.time_slice.constraints.pf_current.reconstructed",
             docs_file=self.DOCS_PATH
@@ -1058,89 +1080,17 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.constraints.pf_current.chi_squared"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._chiecc", "equilibrium._chifcc"],
+            depends_on=["equilibrium._chiecc", "equilibrium._chifcc", "equilibrium._constraint_time_indices"],
             compose=self._compose_pf_current_chi_squared,
             ids_path="equilibrium.time_slice.constraints.pf_current.chi_squared",
             docs_file=self.DOCS_PATH
         )
 
         # Constraints - Pressure array (pressure)
-        self.specs["equilibrium._pressr"] = IDSEntrySpec(
+        self.specs["equilibrium._rpress"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.measurements_node}.PRESSR', 0, self.efit_tree)],
-            ids_path="equilibrium._pressr",
-            docs_file=self.DOCS_PATH
-        )
-        self.specs["equilibrium.time_slice.constraints.pressure.measured"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._pressr"],
-            compose=self._compose_pressure_measured,
-            ids_path="equilibrium.time_slice.constraints.pressure.measured",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["equilibrium._sigpre"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.measurements_node}.SIGPRE', 0, self.efit_tree)],
-            ids_path="equilibrium._sigpre",
-            docs_file=self.DOCS_PATH
-        )
-        self.specs["equilibrium.time_slice.constraints.pressure.measured_error_upper"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._sigpre"],
-            compose=self._compose_pressure_error,
-            ids_path="equilibrium.time_slice.constraints.pressure.measured_error_upper",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["equilibrium._fwtpre"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.measurements_node}.FWTPRE', 0, self.efit_tree)],
-            ids_path="equilibrium._fwtpre",
-            docs_file=self.DOCS_PATH
-        )
-        self.specs["equilibrium.time_slice.constraints.pressure.weight"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._fwtpre"],
-            compose=self._compose_pressure_weight,
-            ids_path="equilibrium.time_slice.constraints.pressure.weight",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["equilibrium._cpress"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.measurements_node}.CPRESS', 0, self.efit_tree)],
-            ids_path="equilibrium._cpress",
-            docs_file=self.DOCS_PATH
-        )
-        self.specs["equilibrium.time_slice.constraints.pressure.reconstructed"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._cpress"],
-            compose=self._compose_pressure_reconstructed,
-            ids_path="equilibrium.time_slice.constraints.pressure.reconstructed",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["equilibrium._saipre"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.measurements_node}.SAIPRE', 0, self.efit_tree)],
-            ids_path="equilibrium._saipre",
-            docs_file=self.DOCS_PATH
-        )
-        self.specs["equilibrium.time_slice.constraints.pressure.chi_squared"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._saipre"],
-            compose=self._compose_pressure_chi_squared,
-            ids_path="equilibrium.time_slice.constraints.pressure.chi_squared",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Constraints - Toroidal current density array (j_tor)
-        # Note: j_tor only has position.psi and measured (no error, weight, reconstructed, chi_squared)
-        self.specs["equilibrium._sizeroj"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(f'{self.measurements_node}.SIZEROJ', 0, self.efit_tree)],
-            ids_path="equilibrium._sizeroj",
+            static_requirements=[Requirement(f'{self.measurements_node}.RPRESS', 0, self.efit_tree)],
+            ids_path="equilibrium._rpress",
             docs_file=self.DOCS_PATH
         )
         # Need SSIMAG and SSIBRY for psi transformation
@@ -1156,9 +1106,95 @@ class EquilibriumMapper(IDSMapper):
             ids_path="equilibrium._ssibry",
             docs_file=self.DOCS_PATH
         )
+        self.specs["equilibrium.time_slice.constraints.pressure.position.psi"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._rpress", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._bcentr", "equilibrium._cpasma_cocos", "equilibrium._constraint_time_indices"],
+            compose=self._compose_pressure_position_psi,
+            ids_path="equilibrium.time_slice.constraints.pressure.position.psi",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium._pressr"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.PRESSR', 0, self.efit_tree)],
+            ids_path="equilibrium._pressr",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.pressure.measured"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._pressr", "equilibrium._constraint_time_indices"],
+            compose=self._compose_pressure_measured,
+            ids_path="equilibrium.time_slice.constraints.pressure.measured",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium._sigpre"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.SIGPRE', 0, self.efit_tree)],
+            ids_path="equilibrium._sigpre",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.pressure.measured_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._sigpre", "equilibrium._constraint_time_indices"],
+            compose=self._compose_pressure_error,
+            ids_path="equilibrium.time_slice.constraints.pressure.measured_error_upper",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium._fwtpre"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.FWTPRE', 0, self.efit_tree)],
+            ids_path="equilibrium._fwtpre",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.pressure.weight"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._fwtpre", "equilibrium._constraint_time_indices"],
+            compose=self._compose_pressure_weight,
+            ids_path="equilibrium.time_slice.constraints.pressure.weight",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium._cpress"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.CPRESS', 0, self.efit_tree)],
+            ids_path="equilibrium._cpress",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.pressure.reconstructed"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._cpress", "equilibrium._constraint_time_indices"],
+            compose=self._compose_pressure_reconstructed,
+            ids_path="equilibrium.time_slice.constraints.pressure.reconstructed",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium._saipre"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.SAIPRE', 0, self.efit_tree)],
+            ids_path="equilibrium._saipre",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.constraints.pressure.chi_squared"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._saipre", "equilibrium._constraint_time_indices"],
+            compose=self._compose_pressure_chi_squared,
+            ids_path="equilibrium.time_slice.constraints.pressure.chi_squared",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Constraints - Toroidal current density array (j_tor)
+        # Note: j_tor only has position.psi and measured (no error, weight, reconstructed, chi_squared)
+        self.specs["equilibrium._sizeroj"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.measurements_node}.SIZEROJ', 0, self.efit_tree)],
+            ids_path="equilibrium._sizeroj",
+            docs_file=self.DOCS_PATH
+        )
         self.specs["equilibrium.time_slice.constraints.j_tor.position.psi"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._sizeroj", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
+            depends_on=["equilibrium._sizeroj", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._bcentr", "equilibrium._cpasma_cocos", "equilibrium._constraint_time_indices"],
             compose=self._compose_j_tor_position_psi,
             ids_path="equilibrium.time_slice.constraints.j_tor.position.psi",
             docs_file=self.DOCS_PATH
@@ -1172,7 +1208,7 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.j_tor.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._vzeroj"],
+            depends_on=["equilibrium._vzeroj", "equilibrium._constraint_time_indices"],
             compose=self._compose_j_tor_measured,
             ids_path="equilibrium.time_slice.constraints.j_tor.measured",
             docs_file=self.DOCS_PATH
@@ -1665,7 +1701,7 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.convergence.iterations_n"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._cerror"],
+            depends_on=["equilibrium._cerror", "equilibrium._constraint_time_indices"],
             compose=self._compose_convergence_iterations_n,
             ids_path="equilibrium.time_slice.convergence.iterations_n",
             docs_file=self.DOCS_PATH
@@ -1698,6 +1734,45 @@ class EquilibriumMapper(IDSMapper):
         gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', shot, self.efit_tree).as_key()
         gtime_ms = raw_data[gtime_key]
         return gtime_ms / 1000.0  # Convert milliseconds to seconds
+
+    def _compose_constraint_time_indices(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose time index mapping for constraints.
+
+        Constraints are stored in MEASUREMENTS which have a different time dimension (MTIME)
+        than the equilibrium time base (GTIME). This is because between-shot EFIT filters
+        are applied to RESULTS.GEQDSK but not to MEASUREMENTS.
+
+        This function creates an index array that maps each GTIME to the corresponding MTIME index.
+
+        OMAS reference: _common.py lines 322-326
+        ```python
+        ntimes = len(all_data['time'])
+        if ntimes == len(all_data['mtime']):
+            it = np.arange(ntimes)
+        else:
+            it = np.minimum(all_data['mtime'].searchsorted(all_data['time']), ntimes-1)
+        ```
+
+        Returns:
+            Array of indices into MTIME for each GTIME value
+        """
+        gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', shot, self.efit_tree).as_key()
+        mtime_key = Requirement(f'{self.measurements_node}.MTIME', shot, self.efit_tree).as_key()
+
+        gtime = raw_data[gtime_key]
+        mtime = raw_data[mtime_key]
+
+        ntimes = len(gtime)
+
+        # If time dimensions match, use identity mapping
+        if ntimes == len(mtime):
+            return np.arange(ntimes)
+
+        # Otherwise, find closest MTIME index for each GTIME
+        # searchsorted returns index where GTIME would be inserted to maintain sorted order
+        # np.minimum caps at ntimes-1 to avoid out-of-bounds indexing
+        return np.minimum(mtime.searchsorted(gtime), ntimes - 1)
 
     def _compose_boundary_outline_r(self, shot: int, raw_data: dict) -> ak.Array:
         """
@@ -1928,27 +2003,37 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_mse_measured(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose MSE polarisation angle measured values (apply ATAN).
+        Compose MSE polarisation angle measured values (apply ATAN and time filtering).
 
         OMAS: ATAN(data(\\EFIT::TOP.MEASUREMENTS.TANGAM))
         """
         tangam_key = Requirement(f'{self.measurements_node}.TANGAM', shot, self.efit_tree).as_key()
-        tangam = raw_data[tangam_key]
+        tangam_all_times = raw_data[tangam_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        tangam = tangam_all_times[time_indices]
+
         return np.arctan(tangam)
 
     def _compose_mse_error(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose MSE polarisation angle error values (apply ATAN).
+        Compose MSE polarisation angle error values (apply ATAN and time filtering).
 
         OMAS: ATAN(data(\\EFIT::TOP.MEASUREMENTS.SIGGAM))
         """
         siggam_key = Requirement(f'{self.measurements_node}.SIGGAM', shot, self.efit_tree).as_key()
-        siggam = raw_data[siggam_key]
+        siggam_all_times = raw_data[siggam_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        siggam = siggam_all_times[time_indices]
+
         return np.arctan(siggam)
 
     def _compose_pf_current_measured(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose PF current measured values using stack_outer_2.
+        Compose PF current measured values using stack_outer_2 and time filtering.
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.ECCURT','\\EFIT::TOP.MEASUREMENTS.FCCURT')
 
@@ -1956,8 +2041,13 @@ class EquilibriumMapper(IDSMapper):
         """
         eccurt_key = Requirement(f'{self.measurements_node}.ECCURT', shot, self.efit_tree).as_key()
         fccurt_key = Requirement(f'{self.measurements_node}.FCCURT', shot, self.efit_tree).as_key()
-        eccurt = raw_data[eccurt_key]
-        fccurt = raw_data[fccurt_key]
+        eccurt_all_times = raw_data[eccurt_key]
+        fccurt_all_times = raw_data[fccurt_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        eccurt = eccurt_all_times[time_indices]
+        fccurt = fccurt_all_times[time_indices]
 
         # Stack along the outer dimension (concatenate arrays)
         # If eccurt is (n_time, n_ec) and fccurt is (n_time, n_fc), result is (n_time, n_ec + n_fc)
@@ -1965,50 +2055,74 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_pf_current_error(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose PF current error values using stack_outer_2.
+        Compose PF current error values using stack_outer_2 and time filtering.
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.SIGECC','\\EFIT::TOP.MEASUREMENTS.SIGFCC')
         """
         sigecc_key = Requirement(f'{self.measurements_node}.SIGECC', shot, self.efit_tree).as_key()
         sigfcc_key = Requirement(f'{self.measurements_node}.SIGFCC', shot, self.efit_tree).as_key()
-        sigecc = raw_data[sigecc_key]
-        sigfcc = raw_data[sigfcc_key]
+        sigecc_all_times = raw_data[sigecc_key]
+        sigfcc_all_times = raw_data[sigfcc_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        sigecc = sigecc_all_times[time_indices]
+        sigfcc = sigfcc_all_times[time_indices]
+
         return np.concatenate([sigecc, sigfcc], axis=1)
 
     def _compose_pf_current_weight(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose PF current weight values using stack_outer_2.
+        Compose PF current weight values using stack_outer_2 and time filtering.
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.FWTEC','\\EFIT::TOP.MEASUREMENTS.FWTFC')
         """
         fwtec_key = Requirement(f'{self.measurements_node}.FWTEC', shot, self.efit_tree).as_key()
         fwtfc_key = Requirement(f'{self.measurements_node}.FWTFC', shot, self.efit_tree).as_key()
-        fwtec = raw_data[fwtec_key]
-        fwtfc = raw_data[fwtfc_key]
+        fwtec_all_times = raw_data[fwtec_key]
+        fwtfc_all_times = raw_data[fwtfc_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        fwtec = fwtec_all_times[time_indices]
+        fwtfc = fwtfc_all_times[time_indices]
+
         return np.concatenate([fwtec, fwtfc], axis=1)
 
     def _compose_pf_current_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose PF current reconstructed values using stack_outer_2.
+        Compose PF current reconstructed values using stack_outer_2 and time filtering.
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.CECURR','\\EFIT::TOP.MEASUREMENTS.CCBRSP')
         """
         cecurr_key = Requirement(f'{self.measurements_node}.CECURR', shot, self.efit_tree).as_key()
         ccbrsp_key = Requirement(f'{self.measurements_node}.CCBRSP', shot, self.efit_tree).as_key()
-        cecurr = raw_data[cecurr_key]
-        ccbrsp = raw_data[ccbrsp_key]
+        cecurr_all_times = raw_data[cecurr_key]
+        ccbrsp_all_times = raw_data[ccbrsp_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        cecurr = cecurr_all_times[time_indices]
+        ccbrsp = ccbrsp_all_times[time_indices]
+
         return np.concatenate([cecurr, ccbrsp], axis=1)
 
     def _compose_pf_current_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose PF current chi squared values using stack_outer_2.
+        Compose PF current chi squared values using stack_outer_2 and time filtering.
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.CHIECC','\\EFIT::TOP.MEASUREMENTS.CHIFCC')
         """
         chiecc_key = Requirement(f'{self.measurements_node}.CHIECC', shot, self.efit_tree).as_key()
         chifcc_key = Requirement(f'{self.measurements_node}.CHIFCC', shot, self.efit_tree).as_key()
-        chiecc = raw_data[chiecc_key]
-        chifcc = raw_data[chifcc_key]
+        chiecc_all_times = raw_data[chiecc_key]
+        chifcc_all_times = raw_data[chifcc_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        chiecc = chiecc_all_times[time_indices]
+        chifcc = chifcc_all_times[time_indices]
+
         return np.concatenate([chiecc, chifcc], axis=1)
 
     def _compose_psi(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -2024,118 +2138,224 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_ip_measured(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose measured plasma current with COCOS transformation.
+        Compose measured plasma current with COCOS transformation and time filtering.
 
         OMAS: data(\\EFIT::TOP.MEASUREMENTS.PLASMA)
         Transform: TOR (requires COCOS conversion)
+
+        Time filtering: MEASUREMENTS have different time dimension (MTIME) than
+        equilibrium time base (GTIME). Apply index mapping to align with GTIME.
         """
         plasma_key = Requirement(f'{self.measurements_node}.PLASMA', shot, self.efit_tree).as_key()
-        ip = raw_data[plasma_key]
+        ip_all_times = raw_data[plasma_key]
+
+        # Apply time filtering: get indices mapping GTIME to MTIME
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        ip = ip_all_times[time_indices]
+
         return self._apply_cocos_transform(ip, shot, raw_data, "equilibrium.time_slice.constraints.ip.measured")
 
     def _compose_ip_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose reconstructed plasma current with COCOS transformation.
+        Compose reconstructed plasma current with COCOS transformation and time filtering.
 
         OMAS: data(\\EFIT::TOP.MEASUREMENTS.CPASMA)
         Transform: TOR (requires COCOS conversion)
         """
         cpasma_key = Requirement(f'{self.measurements_node}.CPASMA', shot, self.efit_tree).as_key()
-        ip = raw_data[cpasma_key]
+        ip_all_times = raw_data[cpasma_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        ip = ip_all_times[time_indices]
+
         return self._apply_cocos_transform(ip, shot, raw_data, "equilibrium.time_slice.constraints.ip.reconstructed")
 
     def _compose_flux_loop_measured(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose measured flux loop data with COCOS transformation.
+        Compose measured flux loop data with COCOS transformation and time filtering.
 
         OMAS: data(\\EFIT::TOP.MEASUREMENTS.SILOPT)
         Transform: PSI (magnetic flux requires COCOS conversion, factor of 2π for COCOS 1→11)
         """
         silopt_key = Requirement(f'{self.measurements_node}.SILOPT', shot, self.efit_tree).as_key()
-        flux = raw_data[silopt_key]
+        flux_all_times = raw_data[silopt_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        flux = flux_all_times[time_indices]
+
         return self._apply_cocos_transform(flux, shot, raw_data, "equilibrium.time_slice.constraints.flux_loop.measured")
 
     def _compose_flux_loop_measured_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose flux loop measurement error with COCOS transformation.
+        Compose flux loop measurement error with COCOS transformation and time filtering.
 
         OMAS: data(\\EFIT::TOP.MEASUREMENTS.SIGSIL)
         Transform: PSI (error on magnetic flux requires same COCOS conversion as flux)
         """
         sigsil_key = Requirement(f'{self.measurements_node}.SIGSIL', shot, self.efit_tree).as_key()
-        error = raw_data[sigsil_key]
-        return self._apply_cocos_transform(error, shot, raw_data, 
+        error_all_times = raw_data[sigsil_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        error = error_all_times[time_indices]
+
+        return self._apply_cocos_transform(error, shot, raw_data,
                                            "equilibrium.time_slice.constraints.flux_loop.measured_error_upper", no_sign=True)
 
     def _compose_flux_loop_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose reconstructed flux loop data with COCOS transformation.
+        Compose reconstructed flux loop data with COCOS transformation and time filtering.
 
         OMAS: data(\\EFIT::TOP.MEASUREMENTS.CSILOP)
         Transform: PSI (magnetic flux requires COCOS conversion, factor of 2π for COCOS 1→11)
         """
         csilop_key = Requirement(f'{self.measurements_node}.CSILOP', shot, self.efit_tree).as_key()
-        flux = raw_data[csilop_key]
+        flux_all_times = raw_data[csilop_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        flux = flux_all_times[time_indices]
+
         return self._apply_cocos_transform(flux, shot, raw_data, "equilibrium.time_slice.constraints.flux_loop.reconstructed")
+
+    def _compose_pressure_position_psi(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose pressure position psi using efit_psi_to_real_psi_2d transformation with COCOS and time filtering.
+
+        OMAS: py2tdi(efit_psi_to_real_psi_2d,'-\\EFIT::TOP.MEASUREMENTS.RPRESS',
+                     '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY')
+        Transform: (-RPRESS.T * (SSIBRY - SSIMAG) + SSIMAG).T with COCOS PSI conversion
+        """
+        rpress_key = Requirement(f'{self.measurements_node}.RPRESS', shot, self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+
+        rpress_all_times = -raw_data[rpress_key]
+        ssimag = raw_data[ssimag_key]
+        ssibry = raw_data[ssibry_key]
+
+        # Apply time filtering to MEASUREMENTS data
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        rpress = rpress_all_times[time_indices]
+
+        # Convert normalized psi to real psi, then apply COCOS transform
+        if len(np.shape(rpress)) < 2:
+            rpress_2d = np.atleast_2d(rpress).T
+        else:
+            rpress_2d = rpress
+        psi = (rpress_2d.T * (ssibry - ssimag) + ssimag).T
+        return self._apply_cocos_transform(psi, shot, raw_data, "equilibrium.time_slice.constraints.pressure.position.psi")
 
     def _compose_pressure_measured(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose measured pressure with ensure_2d transformation.
+        Compose measured pressure with ensure_2d transformation and time filtering.
 
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.PRESSR')
         Transform: ensure_2d (adds dimension if 1D)
         """
         pressr_key = Requirement(f'{self.measurements_node}.PRESSR', shot, self.efit_tree).as_key()
-        pressure = raw_data[pressr_key]
-        return np.atleast_2d(pressure)
+        pressure_all_times = raw_data[pressr_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        pressure = pressure_all_times[time_indices]
+
+        if len(np.shape(pressure)) < 2:
+            pressure_2d = np.atleast_2d(pressure).T
+        else:
+            pressure_2d = pressure
+
+        return pressure_2d
 
     def _compose_pressure_error(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose pressure measurement error with ensure_2d transformation.
+        Compose pressure measurement error with ensure_2d transformation and time filtering.
 
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.SIGPRE')
         Transform: ensure_2d (adds dimension if 1D)
         """
         sigpre_key = Requirement(f'{self.measurements_node}.SIGPRE', shot, self.efit_tree).as_key()
-        error = raw_data[sigpre_key]
-        return np.atleast_2d(error)
+        error_all_times = raw_data[sigpre_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        error = error_all_times[time_indices]
+
+        if len(np.shape(error)) < 2:
+            error_2d = np.atleast_2d(error).T
+        else:
+            error_2d = error
+
+        return error_2d
 
     def _compose_pressure_weight(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose pressure weight with ensure_2d transformation.
+        Compose pressure weight with ensure_2d transformation and time filtering.
 
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.FWTPRE')
         Transform: ensure_2d (adds dimension if 1D)
         """
         fwtpre_key = Requirement(f'{self.measurements_node}.FWTPRE', shot, self.efit_tree).as_key()
-        weight = raw_data[fwtpre_key]
-        return np.atleast_2d(weight)
+        weight_all_times = raw_data[fwtpre_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        weight = weight_all_times[time_indices]
+
+        if len(np.shape(weight)) < 2:
+            weight_2d = np.atleast_2d(weight).T
+        else:
+            weight_2d = weight
+
+        return weight_2d
 
     def _compose_pressure_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose reconstructed pressure with ensure_2d transformation.
+        Compose reconstructed pressure with ensure_2d transformation and time filtering.
 
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.CPRESS')
         Transform: ensure_2d (adds dimension if 1D)
         """
         cpress_key = Requirement(f'{self.measurements_node}.CPRESS', shot, self.efit_tree).as_key()
-        pressure = raw_data[cpress_key]
-        return np.atleast_2d(pressure)
+        pressure_all_times = raw_data[cpress_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        pressure = pressure_all_times[time_indices]
+
+        if len(np.shape(pressure)) < 2:
+            pressure_2d = np.atleast_2d(pressure).T
+        else:
+            pressure_2d = pressure
+
+        return pressure_2d
 
     def _compose_pressure_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose pressure chi squared with ensure_2d and negative sign.
+        Compose pressure chi squared with ensure_2d, negative sign, and time filtering.
 
         OMAS: py2tdi(ensure_2d,'-\\EFIT::TOP.MEASUREMENTS.SAIPRE')
         Transform: ensure_2d + negate
         """
         saipre_key = Requirement(f'{self.measurements_node}.SAIPRE', shot, self.efit_tree).as_key()
-        chi_sq = raw_data[saipre_key]
-        return -np.atleast_2d(chi_sq)
+        chi_sq_all_times = raw_data[saipre_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        chi_sq = chi_sq_all_times[time_indices]
+
+        if len(np.shape(chi_sq)) < 2:
+            chi_sq_2d = np.atleast_2d(chi_sq).T
+        else:
+            chi_sq_2d = chi_sq
+
+        return -chi_sq_2d
 
     def _compose_j_tor_position_psi(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose j_tor position psi using efit_psi_to_real_psi_2d transformation with COCOS.
+        Compose j_tor position psi using efit_psi_to_real_psi_2d transformation with COCOS and time filtering.
 
         OMAS: py2tdi(efit_psi_to_real_psi_2d,'\\EFIT::TOP.MEASUREMENTS.SIZEROJ',
                      '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY')
@@ -2145,25 +2365,170 @@ class EquilibriumMapper(IDSMapper):
         ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
         ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
 
-        sizeroj = raw_data[sizeroj_key]
+        sizeroj_all_times = raw_data[sizeroj_key]
         ssimag = raw_data[ssimag_key]
         ssibry = raw_data[ssibry_key]
 
+        # Apply time filtering to MEASUREMENTS data
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        sizeroj = sizeroj_all_times[time_indices]
+
         # Convert normalized psi to real psi, then apply COCOS transform
-        sizeroj_2d = np.atleast_2d(sizeroj)
-        psi = (sizeroj_2d.T * (ssibry - ssimag) + ssimag).T
+        if len(np.shape(sizeroj)) < 2:
+            sizeroj_2d = np.atleast_2d(sizeroj).T
+        else:
+            sizeroj_2d = sizeroj
+        psi = (abs(sizeroj_2d).T * (ssibry - ssimag) + ssimag).T
         return self._apply_cocos_transform(psi, shot, raw_data, "equilibrium.time_slice.constraints.j_tor.position.psi")
 
     def _compose_j_tor_measured(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose j_tor measured values with ensure_2d transformation.
+        Compose j_tor measured values with ensure_2d transformation and time filtering.
 
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.VZEROJ')
         Transform: ensure_2d (convert to 2D array)
         """
         vzeroj_key = Requirement(f'{self.measurements_node}.VZEROJ', shot, self.efit_tree).as_key()
-        j_tor = raw_data[vzeroj_key]
-        return np.atleast_2d(j_tor)
+        j_tor_all_times = raw_data[vzeroj_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        j_tor = j_tor_all_times[time_indices]
+
+        if len(np.shape(j_tor)) < 2:
+            j_tor_2d = np.atleast_2d(j_tor).T
+        else:
+            j_tor_2d = j_tor
+
+        return j_tor_2d
+
+    # Simple constraint compose functions with time filtering (converted from lambdas)
+
+    def _compose_ip_measured_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose IP measured error with time filtering."""
+        sigpasma_key = Requirement(f'{self.measurements_node}.SIGPASMA', shot, self.efit_tree).as_key()
+        error_all_times = raw_data[sigpasma_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return error_all_times[time_indices]
+
+    def _compose_ip_weight(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose IP weight with time filtering."""
+        fwtpasma_key = Requirement(f'{self.measurements_node}.FWTPASMA', shot, self.efit_tree).as_key()
+        weight_all_times = raw_data[fwtpasma_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return weight_all_times[time_indices]
+
+    def _compose_ip_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose IP chi squared with time filtering."""
+        chipasma_key = Requirement(f'{self.measurements_node}.CHIPASMA', shot, self.efit_tree).as_key()
+        chi_sq_all_times = raw_data[chipasma_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return chi_sq_all_times[time_indices]
+
+    def _compose_bpol_probe_measured(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose bpol probe measured with time filtering."""
+        expmpi_key = Requirement(f'{self.measurements_node}.EXPMPI', shot, self.efit_tree).as_key()
+        measured_all_times = raw_data[expmpi_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return measured_all_times[time_indices]
+
+    def _compose_bpol_probe_measured_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose bpol probe measured error with time filtering."""
+        sigmpi_key = Requirement(f'{self.measurements_node}.SIGMPI', shot, self.efit_tree).as_key()
+        error_all_times = raw_data[sigmpi_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return error_all_times[time_indices]
+
+    def _compose_bpol_probe_weight(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose bpol probe weight with time filtering."""
+        fwtmp2_key = Requirement(f'{self.measurements_node}.FWTMP2', shot, self.efit_tree).as_key()
+        weight_all_times = raw_data[fwtmp2_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return weight_all_times[time_indices]
+
+    def _compose_bpol_probe_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose bpol probe reconstructed with time filtering."""
+        cmpr2_key = Requirement(f'{self.measurements_node}.CMPR2', shot, self.efit_tree).as_key()
+        reconstructed_all_times = raw_data[cmpr2_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return reconstructed_all_times[time_indices]
+
+    def _compose_bpol_probe_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose bpol probe chi squared with time filtering."""
+        saimpi_key = Requirement(f'{self.measurements_node}.SAIMPI', shot, self.efit_tree).as_key()
+        chi_sq_all_times = raw_data[saimpi_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return chi_sq_all_times[time_indices]
+
+    def _compose_diamagnetic_flux_measured(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose diamagnetic flux measured with time filtering."""
+        diamag_key = Requirement(f'{self.measurements_node}.DIAMAG', shot, self.efit_tree).as_key()
+        measured_all_times = raw_data[diamag_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return measured_all_times[time_indices]
+
+    def _compose_diamagnetic_flux_measured_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose diamagnetic flux measured error with time filtering."""
+        sigdia_key = Requirement(f'{self.measurements_node}.SIGDIA', shot, self.efit_tree).as_key()
+        error_all_times = raw_data[sigdia_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return error_all_times[time_indices]
+
+    def _compose_diamagnetic_flux_weight(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose diamagnetic flux weight with time filtering."""
+        fwtdia_key = Requirement(f'{self.measurements_node}.FWTDIA', shot, self.efit_tree).as_key()
+        weight_all_times = raw_data[fwtdia_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return weight_all_times[time_indices]
+
+    def _compose_diamagnetic_flux_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose diamagnetic flux reconstructed with time filtering."""
+        cdflux_key = Requirement(f'{self.measurements_node}.CDFLUX', shot, self.efit_tree).as_key()
+        reconstructed_all_times = raw_data[cdflux_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return reconstructed_all_times[time_indices]
+
+    def _compose_diamagnetic_flux_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose diamagnetic flux chi squared with time filtering."""
+        chidflux_key = Requirement(f'{self.measurements_node}.CHIDFLUX', shot, self.efit_tree).as_key()
+        chi_sq_all_times = raw_data[chidflux_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return chi_sq_all_times[time_indices]
+
+    def _compose_flux_loop_weight(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose flux loop weight with time filtering."""
+        fwtsi_key = Requirement(f'{self.measurements_node}.FWTSI', shot, self.efit_tree).as_key()
+        weight_all_times = raw_data[fwtsi_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return weight_all_times[time_indices]
+
+    def _compose_flux_loop_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose flux loop chi squared with time filtering."""
+        saisil_key = Requirement(f'{self.measurements_node}.SAISIL', shot, self.efit_tree).as_key()
+        chi_sq_all_times = raw_data[saisil_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return chi_sq_all_times[time_indices]
+
+    def _compose_mse_weight(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose MSE weight with time filtering."""
+        fwtgam_key = Requirement(f'{self.measurements_node}.FWTGAM', shot, self.efit_tree).as_key()
+        weight_all_times = raw_data[fwtgam_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return weight_all_times[time_indices]
+
+    def _compose_mse_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose MSE reconstructed with time filtering."""
+        cmgam_key = Requirement(f'{self.measurements_node}.CMGAM', shot, self.efit_tree).as_key()
+        reconstructed_all_times = raw_data[cmgam_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return reconstructed_all_times[time_indices]
+
+    def _compose_mse_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose MSE chi squared with time filtering."""
+        chigam_key = Requirement(f'{self.measurements_node}.CHIGAM', shot, self.efit_tree).as_key()
+        chi_sq_all_times = raw_data[chigam_key]
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        return chi_sq_all_times[time_indices]
 
     def _compose_global_ip(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -2520,9 +2885,16 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(get_largest_axis_value,'dim_of(\\EFIT::TOP.MEASUREMENTS.CERROR,0)','\\EFIT::TOP.MEASUREMENTS.CERROR')
         Transform: Find maximum non-zero iteration index per time slice
+
+        Time filtering: CERROR is from MEASUREMENTS which has different time dimension (MTIME)
+        than equilibrium time base (GTIME). Apply index mapping to align with GTIME.
         """
         cerror_key = Requirement(f'\\{self.efit_tree}::TOP.MEASUREMENTS.CERROR', shot, self.efit_tree).as_key()
-        cerror = raw_data[cerror_key]
+        cerror_all_times = raw_data[cerror_key]
+
+        # Apply time filtering
+        time_indices = self._compose_constraint_time_indices(shot, raw_data)
+        cerror = cerror_all_times[time_indices]
 
         # CERROR shape: (n_time, n_iter)
         # For each time slice, find the index of the last non-zero error value

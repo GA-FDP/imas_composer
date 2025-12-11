@@ -35,9 +35,13 @@ TEST_SHOTS = [202161, 203321, 204602, 204601]
 # YAML Configuration Utilities
 # ============================================================================
 
+_test_config_cache = {}
+
 def load_test_config(ids_name):
     """
     Load test configuration for an IDS.
+
+    Configurations are cached to avoid repeated file I/O during parametrized tests.
 
     Args:
         ids_name: IDS identifier (e.g., 'ece', 'thomson_scattering')
@@ -45,21 +49,17 @@ def load_test_config(ids_name):
     Returns:
         dict: Test configuration with validation rules, exceptions, and OMAS path mapping
     """
-    config_path = Path(__file__).parent / f'test_config_{ids_name}.yaml'
+    # Return cached config if available
+    if ids_name in _test_config_cache:
+        return _test_config_cache[ids_name]
 
-    if not config_path.exists():
-        # Return default config if no custom config exists
-        return {
-            'field_exceptions': {},
-            'requirement_validation': {
-                'allow_different_shot': []
-            },
-            'omas_path_map': {}
-        }
+    config_path = Path(__file__).parent / f'test_config_{ids_name}.yaml'
 
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
 
+    # Cache the config
+    _test_config_cache[ids_name] = config
     return config
 
 
@@ -183,6 +183,27 @@ def fetch_requirements(requirements: list[Requirement]) -> dict:
     return raw_data
 
 
+def check_field_shot_exclusion(ids_name, ids_path, shot):
+    """
+    Check if a specific field/shot combination should be skipped.
+
+    Args:
+        ids_name: IDS identifier (e.g., 'ec_launchers')
+        ids_path: Full IDS path (e.g., 'ec_launchers.beam.spot.size')
+        shot: Shot number
+
+    Raises:
+        pytest.skip: If the field/shot combination is in the exclusion list
+    """
+    config = load_test_config(ids_name)
+    field_shot_exclusions = config.get('field_shot_exclusions', {})
+
+    if ids_path in field_shot_exclusions:
+        excluded_shots = field_shot_exclusions[ids_path]
+        if shot in excluded_shots:
+            pytest.skip(f"Shot {shot} excluded for {ids_path} (no data available)")
+
+
 def get_ndim(arr):
     """
     Extract shape information from awkward or numpy arrays.
@@ -213,6 +234,10 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
     # Convert single path to list for batch API
     single_path = isinstance(ids_path, str)
     ids_paths = [ids_path] if single_path else ids_path
+    # Load test configuration to get optional requirements list
+    ids_name = ids_path.split('.')[0]
+    test_config = load_test_config(ids_name)
+    optional_patterns = test_config.get('requirement_validation', {}).get('optional_requirements', [])
 
     raw_data = {}
 
@@ -230,8 +255,15 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
         for key, value in fetched.items():
             if isinstance(value, Exception):
                 raise RuntimeError(f"Failed to fetch requirement {key}: {value}") from value
+                # Check if this requirement matches any optional pattern
+            mds_path = key[0]  # key is (mds_path, shot, treename)
+            is_optional = any(
+                _matches_optional_pattern(mds_path, pattern)
+                for pattern in optional_patterns
+            )
 
-        raw_data.update(fetched)
+            if not is_optional:
+                raw_data.update(fetched)
 
     if not all(status.values()):
         unresolved = [path for path, resolved in status.items() if not resolved]
@@ -242,6 +274,28 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
 
     # Return single value if input was single path
     return results[ids_path] if single_path else results
+
+
+def _matches_optional_pattern(mds_path, pattern):
+    """
+    Check if an MDS path matches an optional requirement pattern.
+
+    Supports {system_no} placeholder for dynamic system numbers.
+
+    Args:
+        mds_path: Actual MDS path (e.g., '.ECH.SYSTEM_1.ANTENNA.GB_RCURVE')
+        pattern: Pattern with placeholders (e.g., '.ECH.SYSTEM_{system_no}.ANTENNA.GB_RCURVE')
+
+    Returns:
+        bool: True if the path matches the pattern
+    """
+    import re
+
+    # Convert pattern to regex, replacing {system_no} with digit matcher
+    regex_pattern = pattern.replace('{system_no}', r'\d+')
+    regex_pattern = '^' + re.escape(regex_pattern).replace(r'\\d\+', r'\d+') + '$'
+
+    return bool(re.match(regex_pattern, mds_path))
 
 def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float=1e-12, atol_array=1e-6):
     """
@@ -394,6 +448,10 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
     """
     # Load test configuration for this IDS
     ids_name = ids_path.split('.')[0]
+
+    # Check for field-specific shot exclusions
+    check_field_shot_exclusion(ids_name, ids_path, shot)
+
     test_config = load_test_config(ids_name)
     allow_different_shot = test_config['requirement_validation']['allow_different_shot']
 
@@ -505,6 +563,8 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
         ids_name: IDS name (e.g., 'ece', 'thomson_scattering')
         shot: Shot number (from test_shot fixture)
     """
+    # Check for field-specific shot exclusions
+    check_field_shot_exclusion(ids_name, ids_path, shot)
 
     # Compose using imas_composer
     composer_value = resolve_and_compose(composer, ids_path, shot)
