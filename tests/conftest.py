@@ -402,7 +402,7 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
 
     # Iteratively resolve requirements
     for step in range(max_steps):
-        fully_resolved, requirements = composer.resolve(ids_path, shot, raw_data)
+        fully_resolved, requirements = composer.resolve([ids_path], shot, raw_data)
 
         if fully_resolved:
             resolution_steps = step
