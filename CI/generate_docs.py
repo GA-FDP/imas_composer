@@ -32,9 +32,9 @@ def yaml_to_markdown(yaml_file: Path, output_dir: Path):
         ])
         
         if 'mds_path' in entry_data:
-            md_lines.append(f"**MDS+ Path:** `{entry_data['mds_path']}`  ")
+            md_lines.append(f"**MDSplus Path:** `{entry_data['mds_path']}`  ")
         if 'mds_paths' in entry_data:
-            md_lines.append("**MDS+ Paths:**")
+            md_lines.append("**MDSplus Paths:**")
             for path in entry_data['mds_paths']:
                 md_lines.append(f"- `{path}`")
         

@@ -20,9 +20,9 @@ field_shot_exclusions:
 
 # Requirement validation settings
 requirement_validation:
-  # MDS+ paths that use setup/calibration data (shot 0), not the requested shot
+  # MDSplus paths that use setup/calibration data (shot 0), not the requested shot
   allow_different_shot: []
-  # Optional MDS+ paths that may not exist (exceptions are allowed)
+  # Optional MDSplus paths that may not exist (exceptions are allowed)
   optional_requirements:
     - '.ECH.SYSTEM_{system_no}.ANTENNA.GB_RCURVE'
     - '.ECH.SYSTEM_{system_no}.ANTENNA.GB_WAIST'

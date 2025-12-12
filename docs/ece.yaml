@@ -4,15 +4,15 @@
 system_overview: |
   ECE measures electron temperature via cyclotron emission.
   - Two sampling modes: standard and fast (high frequency)
-  - Channels numbered 1-NUMCH in MDS+, 0-indexed in IMAS
+  - Channels numbered 1-NUMCH in MDSplus, 0-indexed in IMAS
   - Line of sight geometry defined by phi, theta, and vertical position
 
 special_considerations:
-  - Fast ECE mode uses different MDS+ nodes (TECEF prefix instead of TECE)
-  - Line of sight geometry is NOT stored in MDS+; computed from fixed points
+  - Fast ECE mode uses different MDSplus nodes (TECEF prefix instead of TECE)
+  - Line of sight geometry is NOT stored in MDSplus; computed from fixed points
   - Uncertainties are computed, not fetched (7% calibration + sqrt(T*1000))
-  - Time in MDS+ is milliseconds, converted to seconds
-  - Frequency in MDS+ is GHz, converted to Hz for IMAS
+  - Time in MDSplus is milliseconds, converted to seconds
+  - Frequency in MDSplus is GHz, converted to Hz for IMAS
 
 entries:
   ece._numch:
@@ -52,7 +52,7 @@ entries:
   ece._time_base:
     summary: Time base for ECE measurements
     description: |
-      In MDS+, time is stored as the dimension of channel data.
+      In MDSplus, time is stored as the dimension of channel data.
       We use TECE{fast_suffix}01 as the representative channel
       since all channels share the same time base.
     mds_path: dim_of(\ECE::TOP.TECE.TECE{fast_suffix}01)
@@ -79,7 +79,7 @@ entries:
     depends_on:
       - ece._numch
     uncertainty_calculation: |
-      NOT stored in MDS+. Computed from:
+      NOT stored in MDSplus. Computed from:
       - Calibration error: 7% (optimistic estimate)
       - Statistical error: sqrt(T_keV * 1000) from Poisson statistics
       - Combined: sqrt(abs(T_keV * 1000)) + 70 * abs(T_keV)
@@ -90,7 +90,7 @@ entries:
       Value: 0 (false) - ECE channels may have different time bases in principle,
       though in practice DIII-D ECE typically has uniform sampling.
       
-      This is a metadata field that requires no MDS+ fetches.
+      This is a metadata field that requires no MDSplus fetches.
     value: 0
     omas_path: ods['ece.ids_properties.homogeneous_time']
     stage: COMPUTED
@@ -98,9 +98,9 @@ entries:
   ece.line_of_sight.first_point.r:
     summary: Major radius of first point defining ECE line of sight
     description: |
-      Value: 2.5 m (outer wall location, not stored in MDS+)
+      Value: 2.5 m (outer wall location, not stored in MDSplus)
       This is a fixed geometric parameter for DIII-D ECE system.
-      No MDS+ data required - pure constant.
+      No MDSplus data required - pure constant.
     value: 2.5
     units: meters
     omas_path: ods['ece.line_of_sight.first_point.r']
@@ -132,9 +132,9 @@ entries:
   ece.line_of_sight.second_point.r:
     summary: Major radius of second point defining ECE line of sight
     description: |
-      Value: 0.8 m (approximate plasma center, not stored in MDS+)
+      Value: 0.8 m (approximate plasma center, not stored in MDSplus)
       This is a fixed geometric parameter for DIII-D ECE system.
-      No MDS+ data required - pure constant.
+      No MDSplus data required - pure constant.
     value: 0.8
     units: meters
     omas_path: ods['ece.line_of_sight.second_point.r']
@@ -169,7 +169,7 @@ entries:
       Format: ECE{channel_number}
       Example: ECE1, ECE2, ..., ECE40
       
-      Channel numbers are 1-indexed (matching MDS+ convention).
+      Channel numbers are 1-indexed (matching MDSplus convention).
       Only requires knowing NUMCH, not actual measurement data.
     format: ECE{1-indexed}
     omas_path: ods['ece']['channel'][i]['name']
@@ -178,12 +178,12 @@ entries:
       - ece._numch
       
   ece.channel.identifier:
-    summary: Channel identifiers matching MDS+ node names
+    summary: Channel identifiers matching MDSplus node names
     description: |
       Format: TECE{fast_suffix}{channel:02d}
       Examples: TECE01, TECE02, ..., TECEF01 (fast mode)
       
-      These identifiers match the MDS+ node names exactly.
+      These identifiers match the MDSplus node names exactly.
       Only requires knowing NUMCH, not actual measurement data.
     format: TECE{fast_suffix}{02d}
     omas_path: ods['ece']['channel'][i]['identifier']
@@ -197,7 +197,7 @@ entries:
       In DIII-D ECE, all channels share the same time base.
       Time is replicated for each channel in flat array format.
       
-      Conversion: MDS+ time (ms) / 1000 -> IMAS time (s)
+      Conversion: MDSplus time (ms) / 1000 -> IMAS time (s)
       
       This can be fetched independently of temperature data,
       useful for pre-allocating arrays or time-based queries.
@@ -259,7 +259,7 @@ entries:
       All other channel properties (name, frequency, geometry) can be queried
       without triggering this expensive data fetch.
       
-      Conversion: MDS+ (keV) * 1000 -> IMAS (eV)
+      Conversion: MDSplus (keV) * 1000 -> IMAS (eV)
       
       Uncertainties computed from:
       - Calibration error: 7% (optimistic)

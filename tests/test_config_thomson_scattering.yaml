@@ -5,7 +5,7 @@ field_exceptions: {}
 
 # Requirement validation settings
 requirement_validation:
-  # MDS+ paths that use calibration data (shot 0 or cal_set), not the requested shot
+  # MDSplus paths that use calibration data (shot 0 or cal_set), not the requested shot
   allow_different_shot:
     - '.ts.BLESSED.header.calib_nums'  # Calibration numbers (shot 0)
     - '.TANGENTIAL.hwmapints'  # Hardware maps use cal_set shot

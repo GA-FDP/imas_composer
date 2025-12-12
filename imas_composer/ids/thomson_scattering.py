@@ -29,19 +29,19 @@ class ThomsonScatteringMapper(IDSMapper):
         self._build_specs()
 
     def _get_calib_nums_path(self) -> str:
-        """Get MDS+ path for calibration numbers."""
+        """Get MDSplus path for calibration numbers."""
         return f'.ts.{self.REVISION}.header.calib_nums'
 
     def _get_system_coordinate_path(self, system: str, coordinate: str) -> str:
-        """Get MDS+ path for system coordinate (R, Z, PHI)."""
+        """Get MDSplus path for system coordinate (R, Z, PHI)."""
         return f'.TS.{self.REVISION}.{system}:{coordinate}'
 
     def _get_system_measurement_path(self, system: str, quantity: str) -> str:
-        """Get MDS+ path for system measurement (DENSITY, TEMP, TIME, etc)."""
+        """Get MDSplus path for system measurement (DENSITY, TEMP, TIME, etc)."""
         return f'.TS.{self.REVISION}.{system}:{quantity}'
 
     def _get_hwmap_path(self, system: str) -> str:
-        """Get MDS+ path for hardware map."""
+        """Get MDSplus path for hardware map."""
         return f'.{system}.hwmapints'
     
     def _build_specs(self):
@@ -378,7 +378,7 @@ class ThomsonScatteringMapper(IDSMapper):
 
         Args:
             shot: Shot number
-            raw_data: Raw MDS+ data
+            raw_data: Raw MDSplus data
 
         Returns:
             Awkward array with ragged time data per channel (milliseconds)
@@ -420,9 +420,9 @@ class ThomsonScatteringMapper(IDSMapper):
 
         Args:
             shot: Shot number
-            raw_data: Raw MDS+ data
+            raw_data: Raw MDSplus data
             measurement: IMAS measurement name (e.g., 'n_e', 't_e')
-            quantity: MDS+ quantity name (e.g., 'DENSITY', 'TEMP')
+            quantity: MDSplus quantity name (e.g., 'DENSITY', 'TEMP')
 
         Returns:
             Awkward array with ragged measurement data per channel
@@ -463,9 +463,9 @@ class ThomsonScatteringMapper(IDSMapper):
 
         Args:
             shot: Shot number
-            raw_data: Raw MDS+ data
+            raw_data: Raw MDSplus data
             measurement: IMAS measurement name (e.g., 'n_e', 't_e')
-            quantity: MDS+ quantity name (e.g., 'DENSITY', 'TEMP')
+            quantity: MDSplus quantity name (e.g., 'DENSITY', 'TEMP')
 
         Returns:
             Awkward array with ragged uncertainty data per channel
