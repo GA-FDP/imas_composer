@@ -43,14 +43,14 @@ composer = ImasComposer()
 # For equilibrium with specific EFIT tree
 composer = ImasComposer(efit_tree='EFIT01')
 
-# Resolve requirements iteratively
+# Resolve requirements iteratively (batch API)
 shot = 200000
-ids_path = 'equilibrium.time'
+ids_paths = ['equilibrium.time', 'equilibrium.time_slice.profiles_1d.psi']
 raw_data = {}
 
 while True:
-    fully_resolved, requirements = composer.resolve(ids_path, shot, raw_data)
-    if fully_resolved:
+    status, requirements = composer.resolve(ids_paths, shot, raw_data)
+    if all(status.values()):
         break
 
     # Fetch requirements from MDSplus
@@ -58,8 +58,9 @@ while True:
         mds_data = fetch_from_mdsplus(req)  # Your fetching logic
         raw_data[req.as_key()] = mds_data
 
-# Compose final IMAS data
-result = composer.compose(ids_path, shot, raw_data)
+# Compose final IMAS data for all paths at once
+results = composer.compose(ids_paths, shot, raw_data)
+# results = {'equilibrium.time': array(...), 'equilibrium.time_slice.profiles_1d.psi': array(...)}
 ```
 
 ## Working with Claude Code to Add New Fields

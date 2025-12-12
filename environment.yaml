@@ -28,3 +28,4 @@ dependencies:
   - pyyaml
   - h5py
   - conda-build
+  - pytest-benchmark
