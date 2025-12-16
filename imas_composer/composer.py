@@ -5,12 +5,37 @@ This is the main interface for external applications to use imas_composer.
 """
 
 from typing import Dict, List, Tuple, Any, Optional
+from pathlib import Path
+import yaml
 from .core import Requirement, RequirementStage
 from .ids.ece import ElectronCyclotronEmissionMapper
 from .ids.thomson_scattering import ThomsonScatteringMapper
 from .ids.equilibrium import EquilibriumMapper
 from .ids.core_profiles import CoreProfilesMapper
 from .ids.ec_launchers import ECLaunchersMapper
+
+
+def _load_default_from_yaml(yaml_filename: str, key: str, fallback: Any) -> Any:
+    """
+    Load a default value from an IDS YAML configuration file.
+
+    Args:
+        yaml_filename: Name of the YAML file (e.g., 'equilibrium.yaml')
+        key: Configuration key to retrieve (e.g., 'default_efit_tree')
+        fallback: Fallback value if key not found
+
+    Returns:
+        Value from YAML config, or fallback if not found
+    """
+    yaml_path = Path(__file__).parent / 'ids' / yaml_filename
+    if yaml_path.exists():
+        try:
+            with open(yaml_path, 'r') as f:
+                config = yaml.safe_load(f) or {}
+                return config.get(key, fallback)
+        except Exception:
+            return fallback
+    return fallback
 
 class ImasComposer:
     """
@@ -37,25 +62,39 @@ class ImasComposer:
         # results is a dict: {'ece.channel.t_e.data': array(...), 'ece.channel.time': array(...)}
     """
 
-    def __init__(self, device: str = 'd3d', efit_tree: str = 'EFIT01', profiles_tree: str = 'ZIPFIT01'):
+    def __init__(self, device: str = 'd3d',
+                 efit_tree: str = None,
+                 profiles_tree: str = None,
+                 profiles_run_id: str = None):
         """
         Initialize ImasComposer.
 
         Args:
             device: Device identifier (currently only 'd3d' supported)
-            efit_tree: EFIT tree to use for equilibrium data (e.g., 'EFIT01', 'EFIT02')
-            profiles_tree: Profiles tree to use for core_profiles data (e.g., 'ZIPFIT01', 'OMFIT_PROFS')
+            efit_tree: EFIT tree to use for equilibrium data (e.g., 'EFIT01', 'EFIT02').
+                      If None, reads default from equilibrium.yaml
+            profiles_tree: Profiles tree to use for core_profiles data (e.g., 'ZIPFIT01', 'OMFIT_PROFS').
+                          If None, reads default from core_profiles.yaml
+            profiles_run_id: Run ID to append to pulse for OMFIT_PROFS tree.
+                            If None, reads default from core_profiles.yaml
         """
         self.device = device
-        self.efit_tree = efit_tree
-        self.profiles_tree = profiles_tree
+
+        # Load defaults from YAML configs if not provided
+        self.efit_tree = efit_tree if efit_tree is not None else _load_default_from_yaml(
+            'equilibrium.yaml', 'default_efit_tree', 'EFIT01')
+        self.profiles_tree = profiles_tree if profiles_tree is not None else _load_default_from_yaml(
+            'core_profiles.yaml', 'default_profiles_tree', 'ZIPFIT01')
+        self.profiles_run_id = profiles_run_id if profiles_run_id is not None else _load_default_from_yaml(
+            'core_profiles.yaml', 'default_profiles_run_id', '001')
+
         self._mappers = {}
 
         # Register available mappers
         self._register_mapper('ece', ElectronCyclotronEmissionMapper(fast_ece=False))
         self._register_mapper('thomson_scattering', ThomsonScatteringMapper())
-        self._register_mapper('equilibrium', EquilibriumMapper(efit_tree=efit_tree))
-        self._register_mapper('core_profiles', CoreProfilesMapper(profiles_tree=profiles_tree))
+        self._register_mapper('equilibrium', EquilibriumMapper(efit_tree=self.efit_tree))
+        self._register_mapper('core_profiles', CoreProfilesMapper(profiles_tree=self.profiles_tree, run_id=self.profiles_run_id))
         self._register_mapper('ec_launchers', ECLaunchersMapper())
 
     def _register_mapper(self, ids_name: str, mapper):

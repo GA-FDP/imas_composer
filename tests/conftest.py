@@ -21,6 +21,19 @@ from imas_composer.core import Requirement
 # Reference shot used across most tests
 REFERENCE_SHOT = 200000
 
+
+def _load_yaml_default(yaml_filename: str, key: str, fallback):
+    """Load default value from IDS YAML configuration file."""
+    yaml_path = Path(__file__).parent.parent / 'imas_composer' / 'ids' / yaml_filename
+    if yaml_path.exists():
+        try:
+            with open(yaml_path, 'r') as f:
+                config = yaml.safe_load(f) or {}
+                return config.get(key, fallback)
+        except Exception:
+            return fallback
+    return fallback
+
 # Shots to test across (parametrized in test_shot fixture)
 #          Bt | Ip
 # 202161:  -  | -
@@ -106,12 +119,14 @@ def test_shot(request):
     return shot
 
 
-def load_ids_fields(ids_name):
+def load_ids_fields(ids_name, tree_filter=None):
     """
     Load field list from IDS YAML configuration file.
 
     Args:
         ids_name: IDS identifier (e.g., 'ece', 'thomson_scattering')
+        tree_filter: Optional tree name to filter fields (e.g., 'ZIPFIT', 'OMFIT_PROFS').
+                    If None, returns all fields regardless of tree restrictions.
 
     Returns:
         List of full IDS paths with IDS prefix (e.g., ['ece.channel.name', ...])
@@ -120,6 +135,12 @@ def load_ids_fields(ids_name):
         >>> fields = load_ids_fields('ece')
         >>> print(fields[:3])
         ['ece.ids_properties.homogeneous_time', 'ece.line_of_sight.first_point.r', ...]
+        >>> fields = load_ids_fields('core_profiles', tree_filter='ZIPFIT')
+        >>> 'core_profiles.profiles_1d.ion.1.rotation_frequency_tor' in fields
+        True
+        >>> fields = load_ids_fields('core_profiles', tree_filter='OMFIT_PROFS')
+        >>> 'core_profiles.profiles_1d.ion.1.rotation_frequency_tor' in fields
+        False
     """
     # Path to YAML file in ids directory
     yaml_path = Path(__file__).parent.parent / 'imas_composer' / 'ids' / f'{ids_name}.yaml'
@@ -131,10 +152,34 @@ def load_ids_fields(ids_name):
         config = yaml.safe_load(f)
 
     # Get fields list from config
-    fields = config.get('fields', [])
+    fields_config = config.get('fields', [])
+
+    # Process each field entry
+    filtered_fields = []
+    for entry in fields_config:
+        # Handle both string and dict formats
+        if isinstance(entry, str):
+            # Simple string - available for all trees
+            field_name = entry
+            field_trees = None  # Available for all trees
+        elif isinstance(entry, dict):
+            # Dict format with 'field' and optional 'trees'
+            field_name = entry.get('field')
+            field_trees = entry.get('trees')  # List of tree names, or None for all
+        else:
+            continue  # Skip invalid entries
+
+        # Apply tree filter if specified
+        if tree_filter is not None and field_trees is not None:
+            # Field has tree restrictions, check if our tree is in the list
+            if tree_filter not in field_trees:
+                continue  # Skip this field for this tree
+
+        # Add field to the result
+        filtered_fields.append(field_name)
 
     # Prepend IDS name to each field to make full paths
-    return [f'{ids_name}.{field}' for field in fields]
+    return [f'{ids_name}.{field}' for field in filtered_fields]
 
 
 # ============================================================================
@@ -362,9 +407,83 @@ def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float
 # ============================================================================
 
 @pytest.fixture(scope='module')
-def composer():
-    """Create ImasComposer instance once per module."""
-    return ImasComposer(efit_tree='EFIT01')
+def composer_params(request):
+    """
+    Provide composer parameters based on test module.
+
+    This is an indirect fixture that receives values from pytest_generate_tests.
+    """
+    # If parametrized, request.param will contain the dict
+    if hasattr(request, 'param'):
+        return request.param
+    # Default for non-parametrized tests (use None to read from YAML)
+    return {'efit_tree': None, 'profiles_tree': None, 'profiles_run_id': None}
+
+
+def pytest_generate_tests(metafunc):
+    """
+    Dynamically parametrize the composer fixture and ids_path based on the test module.
+
+    For core_profiles tests, parametrize across both ZIPFIT and OMFIT_PROFS trees,
+    and filter the fields list to match each tree's capabilities.
+    For other IDS tests, use only the default values from YAML configs.
+    """
+    if 'composer' in metafunc.fixturenames:
+        # Check if this is a core_profiles test
+        if 'core_profiles' in metafunc.module.__name__:
+            # For core_profiles, also parametrize ids_path if present
+            if 'ids_path' in metafunc.fixturenames:
+                # Generate (composer_params, ids_path) combinations
+                # Each tree type gets its own filtered field list
+                zipfit_fields = load_ids_fields('core_profiles', tree_filter='ZIPFIT')
+                omfit_fields = load_ids_fields('core_profiles', tree_filter='OMFIT_PROFS')
+
+                # Create parameter combinations: (composer_params, ids_path)
+                param_list = []
+                ids_list = []
+
+                for field in zipfit_fields:
+                    param_list.append((
+                        {'efit_tree': None, 'profiles_tree': 'ZIPFIT01', 'profiles_run_id': None},
+                        field
+                    ))
+                    ids_list.append(f"ZIPFIT-{field}")
+
+                for field in omfit_fields:
+                    param_list.append((
+                        {'efit_tree': None, 'profiles_tree': 'OMFIT_PROFS', 'profiles_run_id': None},
+                        field
+                    ))
+                    ids_list.append(f"OMFIT_PROFS-{field}")
+
+                # Parametrize both fixtures together
+                metafunc.parametrize('composer_params,ids_path', param_list, ids=ids_list, indirect=['composer_params'])
+            else:
+                # No ids_path, just parametrize composer
+                metafunc.parametrize('composer_params', [
+                    {'efit_tree': None, 'profiles_tree': 'ZIPFIT01', 'profiles_run_id': None},
+                    {'efit_tree': None, 'profiles_tree': 'OMFIT_PROFS', 'profiles_run_id': None}
+                ], ids=['ZIPFIT', 'OMFIT_PROFS'], indirect=True)
+        else:
+            # Use defaults from YAML for non-core_profiles tests
+            metafunc.parametrize('composer_params', [
+                {'efit_tree': None, 'profiles_tree': None, 'profiles_run_id': None}
+            ], ids=['default'], indirect=True)
+
+
+@pytest.fixture(scope='module')
+def composer(composer_params):
+    """
+    Create ImasComposer instance once per module.
+
+    For core_profiles tests, parametrized across ZIPFIT and OMFIT_PROFS trees.
+    For other tests, uses default values from YAML configuration files.
+    """
+    return ImasComposer(
+        efit_tree=composer_params['efit_tree'],
+        profiles_tree=composer_params['profiles_tree'],
+        profiles_run_id=composer_params['profiles_run_id']
+    )
 
 
 @pytest.fixture(scope='session')
@@ -404,24 +523,43 @@ def omas_data():
     """
     cache = {}
 
-    def _fetch_omas_data(ids_name, ids_path=None, shot=REFERENCE_SHOT, reset_cache=False):
+    def _fetch_omas_data(ids_name, ids_path=None, shot=REFERENCE_SHOT, reset_cache=False,
+                         efit_tree=None, profiles_tree=None, profiles_run_id=None):
+        # Load defaults from YAML if not provided
+        if efit_tree is None:
+            efit_tree = _load_yaml_default('equilibrium.yaml', 'default_efit_tree', 'EFIT01')
+        if profiles_tree is None:
+            profiles_tree = _load_yaml_default('core_profiles.yaml', 'default_profiles_tree', 'ZIPFIT01')
+        if profiles_run_id is None:
+            profiles_run_id = _load_yaml_default('core_profiles.yaml', 'default_profiles_run_id', '001')
         # Default to wildcard fetch for non-equilibrium IDS
         if ids_path is None:
             ids_path = f'{ids_name}.*'
 
-        # Use shot as cache key to handle future tests that iterate over several shots
+        # Use shot + profiles_tree as cache key to handle different tree types
+        cache_key = (shot, profiles_tree, profiles_run_id)
+
         # If reset_cache=True, clear cache and create new ODS
-        if reset_cache or shot not in cache:
+        if reset_cache or cache_key not in cache:
             ods = ODS()
-            cache[shot] = ods
+            cache[cache_key] = ods
         else:
-            ods = cache[shot]
+            ods = cache[cache_key]
+
+        # Build options dict for machine_to_omas
+        options = {}
+        if ids_name == 'equilibrium':
+            options['EFIT_tree'] = efit_tree
+        elif ids_name == 'core_profiles':
+            options['PROFILES_tree'] = profiles_tree
+            if 'OMFIT_PROFS' in profiles_tree:
+                options['PROFILES_run_id'] = profiles_run_id
 
         # For equilibrium with specific path, fetch only that field
         # For others, use wildcard
-        machine_to_omas(ods, 'd3d', shot, ids_path, options={'EFIT_tree': 'EFIT01'})
+        machine_to_omas(ods, 'd3d', shot, ids_path, options=options)
 
-        return cache[shot]
+        return cache[cache_key]
 
     return _fetch_omas_data
 
@@ -587,6 +725,10 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
     omas_fetch_spec = omas_fetch_map.get(ids_path, omas_path_map.get(ids_path, ids_path))
     omas_access_path = omas_path_map.get(ids_path, ids_path)
 
+    # Get profiles tree parameters from composer (if core_profiles)
+    profiles_tree = getattr(composer, 'profiles_tree', 'ZIPFIT01')
+    profiles_run_id = getattr(composer, 'profiles_run_id', '001')
+
     # Fetch OMAS ODS object
     # For equilibrium and ec_launchers, fetch only specific fields to avoid loading unwanted data
     # For other IDS, still fetch entire IDS with wildcard for backward compatibility
@@ -596,15 +738,19 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
             # Fetch each path in order (important for OMAS broadcasting)
             # Reset cache on first fetch for equilibrium (to avoid field accumulation interference)
             reset_first = (ids_name == 'equilibrium')
-            ods = omas_data(ids_name, omas_fetch_spec[0], shot=shot, reset_cache=reset_first)
+            ods = omas_data(ids_name, omas_fetch_spec[0], shot=shot, reset_cache=reset_first,
+                          profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
             for fetch_path in omas_fetch_spec[1:]:
-                omas_data(ids_name, fetch_path, shot=shot)  # Additional fetches to same ODS
+                omas_data(ids_name, fetch_path, shot=shot,
+                         profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)  # Additional fetches to same ODS
         else:
             # Reset cache for equilibrium (to avoid field accumulation interference)
             reset = (ids_name == 'equilibrium')
-            ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=reset)
+            ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=reset,
+                          profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
     else:
-        ods = omas_data(ids_name, shot=shot)
+        ods = omas_data(ids_name, shot=shot,
+                       profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
 
     # Recursively compare using ndim-based logic with field-specific tolerances
     _compare_recursive(composer_value, ods, omas_access_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
