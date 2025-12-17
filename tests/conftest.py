@@ -143,7 +143,7 @@ def load_ids_fields(ids_name):
 
 def fetch_requirements(requirements: list[Requirement]) -> dict:
     """
-    Fetch multiple requirements from MDS+ in a single query.
+    Fetch multiple requirements from MDSplus in a single query.
 
     Args:
         requirements: List of Requirement objects to fetch
@@ -251,7 +251,7 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
         # Fetch requirements
         fetched = fetch_requirements(requirements)
 
-        # Check if any fetched values are exceptions (from failed MDS+ access)
+        # Check if any fetched values are exceptions (from failed MDSplus access)
         for key, value in fetched.items():
             if isinstance(value, Exception):
                 raise RuntimeError(f"Failed to fetch requirement {key}: {value}") from value
@@ -278,12 +278,12 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
 
 def _matches_optional_pattern(mds_path, pattern):
     """
-    Check if an MDS path matches an optional requirement pattern.
+    Check if an MDSplus path matches an optional requirement pattern.
 
     Supports {system_no} placeholder for dynamic system numbers.
 
     Args:
-        mds_path: Actual MDS path (e.g., '.ECH.SYSTEM_1.ANTENNA.GB_RCURVE')
+        mds_path: Actual MDSplus path (e.g., '.ECH.SYSTEM_1.ANTENNA.GB_RCURVE')
         pattern: Pattern with placeholders (e.g., '.ECH.SYSTEM_{system_no}.ANTENNA.GB_RCURVE')
 
     Returns:
@@ -475,15 +475,15 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
             assert hasattr(req, 'shot'), "Requirement must have shot"
             assert hasattr(req, 'treename'), "Requirement must have treename"
 
-            # Check if this specific MDS+ path is in the allow_different_shot list
-            # allow_different_shot contains MDS+ paths (e.g., '.ts.BLESSED.header.calib_nums')
+            # Check if this specific MDSplus path is in the allow_different_shot list
+            # allow_different_shot contains MDSplus paths (e.g., '.ts.BLESSED.header.calib_nums')
             is_calibration_data = req.mds_path in allow_different_shot
 
-            # Check shot number (unless this MDS+ path is marked as calibration data)
+            # Check shot number (unless this MDSplus path is marked as calibration data)
             if not is_calibration_data:
                 assert req.shot == shot, (
                     f"Requirement shot must match requested shot. "
-                    f"Got {req.shot}, expected {shot} for MDS+ path '{req.mds_path}'. "
+                    f"Got {req.shot}, expected {shot} for MDSplus path '{req.mds_path}'. "
                     f"If this is expected (e.g., calibration data), add '{req.mds_path}' "
                     f"to allow_different_shot in test_config_{ids_name}.yaml"
                 )

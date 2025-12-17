@@ -11,7 +11,7 @@ system_overview: |
   Revision: BLESSED (standard blessed data set)
 
 special_considerations:
-  - Multi-step MDS+ fetch required (calibration → hardware map → measurements)
+  - Multi-step MDSplus fetch required (calibration → hardware map → measurements)
   - Hardware maps stored in separate TSCAL tree, indexed by calibration number
   - Not all systems may be active for a given shot
   - Phi coordinate is negated and converted from degrees to radians
@@ -133,7 +133,7 @@ entries:
     summary: Time base for electron density measurements
     description: |
       All active systems share the same time base in DIII-D Thomson.
-      Time in MDS+ is in milliseconds, converted to seconds (divide by 1000).
+      Time in MDSplus is in milliseconds, converted to seconds (divide by 1000).
     mds_path: .TS.BLESSED.{SYSTEM}:TIME
     units: seconds
     conversion: ms to s (divide by 1000)

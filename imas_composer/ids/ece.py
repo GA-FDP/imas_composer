@@ -28,7 +28,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self.fast_ece = fast_ece
         self.fast_suffix = 'F' if fast_ece else ''
 
-        # MDS+ path prefixes
+        # MDSplus path prefixes
         self.setup_node = '\\ECE::TOP.SETUP.'
         self.cal_node = f'\\ECE::TOP.CAL{self.fast_suffix}.'
         self.tece_node = f'\\ECE::TOP.TECE.TECE{self.fast_suffix}'
@@ -40,7 +40,7 @@ class ElectronCyclotronEmissionMapper(IDSMapper):
         self._build_specs()
     
     def _get_numch_path(self) -> str:
-        """Get MDS+ path for NUMCH node."""
+        """Get MDSplus path for NUMCH node."""
         return f'{self.cal_node}NUMCH{self.fast_suffix}'
 
     def _build_specs(self):

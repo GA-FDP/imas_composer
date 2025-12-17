@@ -20,7 +20,7 @@ class ECLaunchersMapper(IDSMapper):
 
     def __init__(self):
         """Initialize EC launchers mapper."""
-        # MDS+ path prefixes
+        # MDSplus path prefixes
         self.setup_node = '.ECH.'
 
         # Initialize base class (loads config, static_values, supported_fields)
@@ -276,7 +276,7 @@ class ECLaunchersMapper(IDSMapper):
         Args:
             shot: Shot number
             raw_data: Raw data dictionary
-            mds_path_template: MDS+ path template with {system_no} placeholder
+            mds_path_template: MDSplus path template with {system_no} placeholder
                               e.g., '.ECH.SYSTEM_{system_no}.GYROTRON.NAME'
 
         Returns:

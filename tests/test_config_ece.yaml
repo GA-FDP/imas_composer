@@ -5,7 +5,7 @@ field_exceptions: {}
 
 # Requirement validation settings
 requirement_validation:
-  # MDS+ paths that use calibration/setup data (shot 0), not the requested shot
+  # MDSplus paths that use calibration/setup data (shot 0), not the requested shot
   allow_different_shot: []
 # OMAS path mapping
 # Maps imas_composer notation to OMAS notation for fetching reference data

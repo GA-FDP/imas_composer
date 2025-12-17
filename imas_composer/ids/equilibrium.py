@@ -58,7 +58,7 @@ class EquilibriumMapper(IDSMapper):
         """
         self.efit_tree = efit_tree
 
-        # MDS+ path prefixes
+        # MDSplus path prefixes
         self.geqdsk_node = f'\\{efit_tree}::TOP.RESULTS.GEQDSK'
         self.aeqdsk_node = f'\\{efit_tree}::TOP.RESULTS.AEQDSK'
         self.measurements_node = f'\\{efit_tree}::TOP.MEASUREMENTS'
@@ -2946,7 +2946,7 @@ class EquilibriumMapper(IDSMapper):
 
         Args:
             shot: Shot number
-            raw_data: Dictionary containing fetched MDS+ data
+            raw_data: Dictionary containing fetched MDSplus data
 
         Returns:
             COCOS number (1, 3, 5, or 7 typically)
@@ -2983,7 +2983,7 @@ class EquilibriumMapper(IDSMapper):
         Args:
             data: Data to transform
             shot: Shot number
-            raw_data: Dictionary containing fetched MDS+ data (for COCOS identification)
+            raw_data: Dictionary containing fetched MDSplus data (for COCOS identification)
             ids_path: IDS path to determine transformation type
 
         Returns:

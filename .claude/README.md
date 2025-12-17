@@ -37,7 +37,7 @@ Claude will read this index and know where to find detailed information when nee
 
 - **`EQUILIBRIUM_IMPLEMENTATION.md`** - Equilibrium mapper implementation details
   - Field-by-field mapping documentation
-  - MDS+ paths and transforms
+  - MDSplus paths and transforms
   - Ragged array handling
   - Test configuration
 

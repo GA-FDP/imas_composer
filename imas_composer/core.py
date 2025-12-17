@@ -66,7 +66,7 @@ class IDSEntrySpec:
         return self.documentation.get('description', '')
     
     def get_mds_paths(self) -> list[str]:
-        """Get list of MDS+ paths used by this entry"""
+        """Get list of MDSplus paths used by this entry"""
         doc = self.documentation
         if 'mds_path' in doc:
             return [doc['mds_path']]
