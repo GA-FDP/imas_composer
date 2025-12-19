@@ -1,5 +1,5 @@
 """
-Base class for IDS mappers.
+Base class for IDS mappers and factory pattern.
 
 Provides common functionality shared across all IDS implementations.
 
@@ -25,6 +25,15 @@ Pattern for simple pass-through fields:
         ids_path="ids.user.field",
         docs_file=self.DOCS_PATH
     )
+
+Factory Pattern:
+----------------
+IDS mappers should use a factory function to create mapper instances.
+This allows for tree-specific or configuration-specific mapper implementations.
+
+Example:
+    def create_equilibrium_mapper(efit_tree: str = 'EFIT01') -> IDSMapper:
+        return EquilibriumMapper(efit_tree=efit_tree)
 """
 
 from typing import Dict, List

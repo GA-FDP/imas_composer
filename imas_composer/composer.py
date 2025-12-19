@@ -8,11 +8,11 @@ from typing import Dict, List, Tuple, Any, Optional
 from pathlib import Path
 import yaml
 from .core import Requirement, RequirementStage
-from .ids.ece import ElectronCyclotronEmissionMapper
-from .ids.thomson_scattering import ThomsonScatteringMapper
-from .ids.equilibrium import EquilibriumMapper
-from .ids.core_profiles import CoreProfilesMapper
-from .ids.ec_launchers import ECLaunchersMapper
+from .ids.ece_factory import create_ece_mapper
+from .ids.thomson_scattering_factory import create_thomson_scattering_mapper
+from .ids.equilibrium_factory import create_equilibrium_mapper
+from .ids.core_profiles_factory import create_core_profiles_mapper
+from .ids.ec_launchers_factory import create_ec_launchers_mapper
 
 
 def _load_default_from_yaml(yaml_filename: str, key: str, fallback: Any) -> Any:
@@ -84,18 +84,21 @@ class ImasComposer:
         self.efit_tree = efit_tree if efit_tree is not None else _load_default_from_yaml(
             'equilibrium.yaml', 'default_efit_tree', 'EFIT01')
         self.profiles_tree = profiles_tree if profiles_tree is not None else _load_default_from_yaml(
-            'core_profiles.yaml', 'default_profiles_tree', 'ZIPFIT01')
+            'core_profiles_zipfit.yaml', 'default_tree', 'ZIPFIT01')
         self.profiles_run_id = profiles_run_id if profiles_run_id is not None else _load_default_from_yaml(
-            'core_profiles.yaml', 'default_profiles_run_id', '001')
+            'core_profiles_omfit.yaml', 'default_run_id', '001')
 
         self._mappers = {}
 
-        # Register available mappers
-        self._register_mapper('ece', ElectronCyclotronEmissionMapper(fast_ece=False))
-        self._register_mapper('thomson_scattering', ThomsonScatteringMapper())
-        self._register_mapper('equilibrium', EquilibriumMapper(efit_tree=self.efit_tree))
-        self._register_mapper('core_profiles', CoreProfilesMapper(profiles_tree=self.profiles_tree, run_id=self.profiles_run_id))
-        self._register_mapper('ec_launchers', ECLaunchersMapper())
+        # Register available mappers using factory functions
+        self._register_mapper('ece', create_ece_mapper(fast_ece=False))
+        self._register_mapper('thomson_scattering', create_thomson_scattering_mapper())
+        self._register_mapper('equilibrium', create_equilibrium_mapper(efit_tree=self.efit_tree))
+        self._register_mapper('core_profiles', create_core_profiles_mapper(
+            profiles_tree=self.profiles_tree,
+            run_id=self.profiles_run_id
+        ))
+        self._register_mapper('ec_launchers', create_ec_launchers_mapper())
 
     def _register_mapper(self, ids_name: str, mapper):
         """Register an IDS mapper."""
