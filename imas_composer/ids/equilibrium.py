@@ -49,7 +49,7 @@ class EquilibriumMapper(IDSMapper):
     DOCS_PATH = "equilibrium.yaml"
     CONFIG_PATH = "equilibrium.yaml"
 
-    def __init__(self, efit_tree: str = 'EFIT01'):
+    def __init__(self, efit_tree: str = 'EFIT01', **kwargs):
         """
         Initialize Equilibrium mapper.
 

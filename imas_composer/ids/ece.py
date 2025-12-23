@@ -11,14 +11,14 @@ from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
 
 
-class ElectronCyclotronEmissionMapper(IDSMapper):
+class EceMapper(IDSMapper):
     """Maps DIII-D ECE data to IMAS ece IDS."""
 
     # Configuration YAML file contains static values and field ledger
     DOCS_PATH = "electron_cyclotron_emission.yaml"
     CONFIG_PATH = "ece.yaml"
 
-    def __init__(self, fast_ece: bool = False):
+    def __init__(self, fast_ece: bool = False, **kwargs):
         """
         Initialize ECE mapper.
 
