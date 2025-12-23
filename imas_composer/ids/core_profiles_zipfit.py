@@ -13,13 +13,13 @@ from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
 
 
-class CoreProfilesZIPFITMapper(IDSMapper):
+class CoreProfilesZipfitMapper(IDSMapper):
     """Maps DIII-D ZIPFIT tree data to IMAS core_profiles IDS."""
 
     DOCS_PATH = "core_profiles_zipfit.yaml"
     CONFIG_PATH = "core_profiles_zipfit.yaml"
 
-    def __init__(self, zipfit_tree: str = 'ZIPFIT01'):
+    def __init__(self, zipfit_tree: str = 'ZIPFIT01', **kwargs):
         """
         Initialize CoreProfilesZIPFITMapper.
 

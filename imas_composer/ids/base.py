@@ -48,7 +48,7 @@ class IDSMapper:
     CONFIG_PATH: str = None  # e.g., "ece.yaml"
     DOCS_PATH: str = None    # e.g., "electron_cyclotron_emission.yaml"
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         """Initialize the IDS mapper."""
         # Load configuration (static values and field list)
         config = self._load_config()

@@ -11,14 +11,14 @@ from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
 
 
-class ECLaunchersMapper(IDSMapper):
+class EcLaunchersMapper(IDSMapper):
     """Maps DIII-D EC launcher data to IMAS ec_launchers IDS."""
 
     # Configuration YAML file contains static values and field ledger
     DOCS_PATH = "ec_launchers.yaml"
     CONFIG_PATH = "ec_launchers.yaml"
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         """Initialize EC launchers mapper."""
         # MDSplus path prefixes
         self.setup_node = '.ECH.'

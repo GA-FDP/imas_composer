@@ -14,13 +14,13 @@ from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
 
 
-class CoreProfilesOMFITMapper(IDSMapper):
+class CoreProfilesOmfitMapper(IDSMapper):
     """Maps DIII-D OMFIT_PROFS data to IMAS core_profiles IDS."""
 
     DOCS_PATH = "core_profiles_omfit.yaml"
     CONFIG_PATH = "core_profiles_omfit.yaml"
 
-    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', run_id: str = '001'):
+    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', run_id: str = '001', **kwargs):
         """
         Initialize CoreProfilesOMFITMapper.
 

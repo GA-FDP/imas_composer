@@ -416,8 +416,8 @@ def composer_params(request):
     # If parametrized, request.param will contain the dict
     if hasattr(request, 'param'):
         return request.param
-    # Default for non-parametrized tests (use None to read from YAML)
-    return {'efit_tree': None, 'profiles_tree': None, 'profiles_run_id': None}
+    # Default to empty dict so we don't override the IMASComposer defaults
+    return {}
 
 
 def pytest_generate_tests(metafunc):
@@ -444,14 +444,14 @@ def pytest_generate_tests(metafunc):
 
                 for field in zipfit_fields:
                     param_list.append((
-                        {'efit_tree': None, 'profiles_tree': 'ZIPFIT01', 'profiles_run_id': None},
+                        {'profiles_tree': 'ZIPFIT01'},
                         field
                     ))
                     ids_list.append(f"ZIPFIT-{field}")
 
                 for field in omfit_fields:
                     param_list.append((
-                        {'efit_tree': None, 'profiles_tree': 'OMFIT_PROFS', 'profiles_run_id': None},
+                        {'profiles_tree': 'OMFIT_PROFS'},
                         field
                     ))
                     ids_list.append(f"OMFIT_PROFS-{field}")
@@ -461,14 +461,9 @@ def pytest_generate_tests(metafunc):
             else:
                 # No ids_path, just parametrize composer
                 metafunc.parametrize('composer_params', [
-                    {'efit_tree': None, 'profiles_tree': 'ZIPFIT01', 'profiles_run_id': None},
-                    {'efit_tree': None, 'profiles_tree': 'OMFIT_PROFS', 'profiles_run_id': None}
+                    {'profiles_tree': 'ZIPFIT01'},
+                    {'profiles_tree': 'OMFIT_PROFS'}
                 ], ids=['ZIPFIT', 'OMFIT_PROFS'], indirect=True)
-        else:
-            # Use defaults from YAML for non-core_profiles tests
-            metafunc.parametrize('composer_params', [
-                {'efit_tree': None, 'profiles_tree': None, 'profiles_run_id': None}
-            ], ids=['default'], indirect=True)
 
 
 @pytest.fixture(scope='module')
@@ -479,11 +474,7 @@ def composer(composer_params):
     For core_profiles tests, parametrized across ZIPFIT and OMFIT_PROFS trees.
     For other tests, uses default values from YAML configuration files.
     """
-    return ImasComposer(
-        efit_tree=composer_params['efit_tree'],
-        profiles_tree=composer_params['profiles_tree'],
-        profiles_run_id=composer_params['profiles_run_id']
-    )
+    return ImasComposer(**composer_params)
 
 
 @pytest.fixture(scope='session')

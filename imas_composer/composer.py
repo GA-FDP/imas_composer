@@ -7,12 +7,9 @@ This is the main interface for external applications to use imas_composer.
 from typing import Dict, List, Tuple, Any, Optional
 from pathlib import Path
 import yaml
-from .core import Requirement, RequirementStage
-from .ids.ece_factory import create_ece_mapper
-from .ids.thomson_scattering_factory import create_thomson_scattering_mapper
-from .ids.equilibrium_factory import create_equilibrium_mapper
-from .ids.core_profiles_factory import create_core_profiles_mapper
-from .ids.ec_launchers_factory import create_ec_launchers_mapper
+from imas_composer.core import Requirement, RequirementStage
+from imas_composer.ids.ids_factory import IDSFactory
+
 
 
 def _load_default_from_yaml(yaml_filename: str, key: str, fallback: Any) -> Any:
@@ -62,44 +59,38 @@ class ImasComposer:
         # results is a dict: {'ece.channel.t_e.data': array(...), 'ece.channel.time': array(...)}
     """
 
-    def __init__(self, device: str = 'd3d',
-                 efit_tree: str = None,
-                 profiles_tree: str = None,
-                 profiles_run_id: str = None):
+    def __init__(self,
+                 efit_tree: str = "EFIT01",
+                 efit_run_id: str = "01",
+                 profiles_tree: str = "ZIPFIT01",
+                 profiles_run_id: str = "001",
+                 fast_ece:bool = False):
         """
         Initialize ImasComposer.
 
         Args:
             device: Device identifier (currently only 'd3d' supported)
             efit_tree: EFIT tree to use for equilibrium data (e.g., 'EFIT01', 'EFIT02').
-                      If None, reads default from equilibrium.yaml
+            efit_run_id: Run id to append to pulse for 'EFIT' tree.
             profiles_tree: Profiles tree to use for core_profiles data (e.g., 'ZIPFIT01', 'OMFIT_PROFS').
-                          If None, reads default from core_profiles.yaml
             profiles_run_id: Run ID to append to pulse for OMFIT_PROFS tree.
-                            If None, reads default from core_profiles.yaml
+            fast_ece: Whether to load fast_ece data, defaults to false.
         """
-        self.device = device
-
-        # Load defaults from YAML configs if not provided
-        self.efit_tree = efit_tree if efit_tree is not None else _load_default_from_yaml(
-            'equilibrium.yaml', 'default_efit_tree', 'EFIT01')
-        self.profiles_tree = profiles_tree if profiles_tree is not None else _load_default_from_yaml(
-            'core_profiles_zipfit.yaml', 'default_tree', 'ZIPFIT01')
-        self.profiles_run_id = profiles_run_id if profiles_run_id is not None else _load_default_from_yaml(
-            'core_profiles_omfit.yaml', 'default_run_id', '001')
-
+        self.efit_tree = efit_tree
+        self.efit_run_id = efit_run_id
+        self.profiles_tree = profiles_tree
+        self.profiles_run_id = profiles_run_id
+        self.fast_ece = fast_ece
+        self.ids_factory = IDSFactory()
         self._mappers = {}
-
-        # Register available mappers using factory functions
-        self._register_mapper('ece', create_ece_mapper(fast_ece=False))
-        self._register_mapper('thomson_scattering', create_thomson_scattering_mapper())
-        self._register_mapper('equilibrium', create_equilibrium_mapper(efit_tree=self.efit_tree))
-        self._register_mapper('core_profiles', create_core_profiles_mapper(
-            profiles_tree=self.profiles_tree,
-            run_id=self.profiles_run_id
-        ))
-        self._register_mapper('ec_launchers', create_ec_launchers_mapper())
-
+        for ids_name in self.ids_factory.list_ids():
+            # Register available mappers using factory functions
+            self._register_mapper(ids_name, self.ids_factory(ids_name, efit_tree=efit_tree, 
+                                                             efit_run_id=efit_run_id, 
+                                                             profiles_tree=self.profiles_tree,
+                                                             profiles_run_id=self.profiles_run_id,
+                                                             fast_ece=self.fast_ece))
+            
     def _register_mapper(self, ids_name: str, mapper):
         """Register an IDS mapper."""
         self._mappers[ids_name] = mapper
