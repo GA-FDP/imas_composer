@@ -1,15 +1,8 @@
 """
-Core Profiles IDS Mapper Factory for DIII-D
+IDS Mapper Factory
 
-This module provides a factory function to create the appropriate core profiles mapper
-based on the specified tree type (ZIPFIT or OMFIT_PROFS).
-
-Factory Pattern:
-    mapper = create_core_profiles_mapper(profiles_tree='ZIPFIT01')
-    # Returns CoreProfilesZIPFITMapper instance
-
-    mapper = create_core_profiles_mapper(profiles_tree='OMFIT_PROFS', run_id='001')
-    # Returns CoreProfilesOMFITMapper instance
+This module provides a factory function to create the appropriate IDSMapper depending on 
+tree selection
 """
 from imas_composer.ids.base import IDSMapper
 import importlib
@@ -28,22 +21,6 @@ class IDSFactory:
     def __init__(self):
         """
         Factory Class to create the appropriate mapper depending on tree choice.
-
-        
-
-        Raises:
-            ValueError: If tree type is not recognized
-
-        Examples:
-            >>> # ZIPFIT tree
-            >>> mapper = create_core_profiles_mapper('ZIPFIT01')
-            >>> isinstance(mapper, CoreProfilesZIPFITMapper)
-            True
-
-            >>> # OMFIT_PROFS tree
-            >>> mapper = create_core_profiles_mapper('OMFIT_PROFS', run_id='001')
-            >>> isinstance(mapper, CoreProfilesOMFITMapper)
-            True
         """
         package_name = "imas_composer.ids"
         package = importlib.import_module(package_name)
