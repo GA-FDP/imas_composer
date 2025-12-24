@@ -1,0 +1,24 @@
+# Test configuration for NBI IDS
+
+# Field-level exceptions for validation
+field_exceptions: {}
+
+# Requirement validation settings
+requirement_validation:
+  # MDSplus paths that use calibration/setup data (shot 0), not the requested shot
+  allow_different_shot: []
+  # Optional MDSplus paths that may not exist (exceptions are allowed)
+  optional_requirements:
+    - '\\NB::TOP.NB{beam_name}.VBEAM'
+
+# OMAS path mapping
+# Maps imas_composer notation to OMAS notation for fetching reference data
+# For unit fields, OMAS uses .: to index all units at once
+omas_path_map:
+  # Unit fields (add .: to fetch all units)
+  nbi.unit.name: nbi.unit.:.name
+  nbi.unit.power_launched.time: nbi.unit.:.power_launched.time
+  nbi.unit.power_launched.data: nbi.unit.:.power_launched.data
+  nbi.unit.energy.time: nbi.unit.:.energy.time
+  nbi.unit.energy.data: nbi.unit.:.energy.data
+  nbi.unit.species.a: nbi.unit.:.species.a
