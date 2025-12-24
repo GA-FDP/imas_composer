@@ -1,0 +1,36 @@
+# Test configuration for reflectometer_profile IDS
+# Maps imas_composer paths to OMAS paths
+
+# Shots that don't have reflectometer data
+exclude_shots: [203321, 204602]
+
+# Field-level exceptions for validation
+field_exceptions: {}
+
+# Requirement validation settings
+requirement_validation:
+  # MDSplus paths that use calibration/setup data (shot 0), not the requested shot
+  allow_different_shot: []
+
+# OMAS path mapping
+# Maps imas_composer notation to OMAS notation for fetching reference data
+# For channel fields, OMAS uses .: to index all channels at once
+omas_path_map:
+  # Hardware geometry fields
+  reflectometer_profile.channel.identifier: reflectometer_profile.channel.:.identifier
+  reflectometer_profile.channel.name: reflectometer_profile.channel.:.name
+  reflectometer_profile.channel.mode: reflectometer_profile.channel.:.mode
+  reflectometer_profile.channel.line_of_sight_emission.first_point.r: reflectometer_profile.channel.:.line_of_sight_emission.first_point.r
+  reflectometer_profile.channel.line_of_sight_emission.first_point.z: reflectometer_profile.channel.:.line_of_sight_emission.first_point.z
+  reflectometer_profile.channel.line_of_sight_emission.first_point.phi: reflectometer_profile.channel.:.line_of_sight_emission.first_point.phi
+  reflectometer_profile.channel.line_of_sight_emission.second_point.r: reflectometer_profile.channel.:.line_of_sight_emission.second_point.r
+  reflectometer_profile.channel.line_of_sight_emission.second_point.z: reflectometer_profile.channel.:.line_of_sight_emission.second_point.z
+  reflectometer_profile.channel.line_of_sight_emission.second_point.phi: reflectometer_profile.channel.:.line_of_sight_emission.second_point.phi
+  # Measurement data fields
+  reflectometer_profile.channel.phase.time: reflectometer_profile.channel.:.phase.time
+  reflectometer_profile.channel.frequencies: reflectometer_profile.channel.:.frequencies
+  reflectometer_profile.channel.phase.data: reflectometer_profile.channel.:.phase.data
+  reflectometer_profile.position.r: reflectometer_profile.position.r
+  reflectometer_profile.position.z: reflectometer_profile.position.z
+  reflectometer_profile.n_e.time: reflectometer_profile.n_e.time
+  reflectometer_profile.n_e.data: reflectometer_profile.n_e.data

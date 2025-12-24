@@ -1,0 +1,88 @@
+# Reflectometer Profile IDS Configuration for DIII-D
+#
+# Hardware based on OMAS: omas/machine_mappings/d3d.py::reflectometer_hardware
+# Measurement data based on OMAS: omas/machine_mappings/d3d.py::reflectometer_data
+# Source: IDA-lite REFL.py
+# https://github.com/GA-IDA/ida_lite/blob/c1398c826b7a327d6629b5518c3219b8870436ce/D3D/synt_diags/REFL.py#L41
+#
+# Note: Chord endpoints are approximative and don't account for vessel wall contour
+
+# Static values (all hardware geometry data)
+static_values:
+  # Z position for profile data (constant)
+  position_z: 0.0254
+  # Channel configurations
+  # Each channel has: identifier, name, mode, line_of_sight_emission (first_point, second_point)
+  channels:
+    - identifier: "QBAND"
+      name: "QBAND"
+      mode: "X"  # X-mode polarization
+      line_of_sight_emission:
+        first_point:
+          r: 2.377  # r_out
+          z: 0.0254  # z0
+          phi: -4.45059
+        second_point:
+          r: 1.6  # r_in
+          z: 0.0254  # z0
+          phi: -4.45059
+
+    - identifier: "VBAND"
+      name: "VBAND"
+      mode: "X"  # X-mode polarization
+      line_of_sight_emission:
+        first_point:
+          r: 2.377
+          z: 0.0254
+          phi: -4.45059
+        second_point:
+          r: 1.6
+          z: 0.0254
+          phi: -4.45059
+
+    - identifier: "QOBAND"
+      name: "QOBAND"
+      mode: "O"  # O-mode polarization
+      line_of_sight_emission:
+        first_point:
+          r: 2.377
+          z: 0.0254
+          phi: -4.45059
+        second_point:
+          r: 1.6
+          z: 0.0254
+          phi: -4.45059
+
+    - identifier: "VOBAND"
+      name: "VOBAND"
+      mode: "O"  # O-mode polarization
+      line_of_sight_emission:
+        first_point:
+          r: 2.377
+          z: 0.0254
+          phi: -4.45059
+        second_point:
+          r: 1.6
+          z: 0.0254
+          phi: -4.45059
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  # Hardware geometry (static)
+  - channel.identifier
+  - channel.name
+  - channel.mode
+  - channel.line_of_sight_emission.first_point.r
+  - channel.line_of_sight_emission.first_point.z
+  - channel.line_of_sight_emission.first_point.phi
+  - channel.line_of_sight_emission.second_point.r
+  - channel.line_of_sight_emission.second_point.z
+  - channel.line_of_sight_emission.second_point.phi
+  # Measurement data (from MDSplus)
+  - channel.phase.time
+  - channel.frequencies
+  - channel.phase.data
+  - position.r
+  - position.z
+  - n_e.time
+  - n_e.data
