@@ -1,0 +1,463 @@
+# Gas Injection IDS Configuration for DIII-D
+#
+# Based on OMAS: omas/machine_mappings/d3d.py::gas_injection_hardware
+# Sources:
+#   - EFITVIEWER puff_loc.pro (revised 20090317)
+#   - DIII-D Gas Schematic webpage
+#   - DIII-D Gas Puff Locations webpage
+#
+# Note: Configuration valid for pulses >= 100775 (2000 JAN 17)
+
+# Static values (all hardware geometry data)
+static_values:
+  # Pipe configurations
+  # Each pipe has: name, exit_position (r, z, phi), second_point (r, z, phi), valve_indices
+  pipes:
+    # PFX1 pipes (3 pipes at different toroidal angles)
+    - name: "PFX1_012"
+      exit_position:
+        r: 1.286  # m
+        z: 1.279  # m
+        phi: -0.209439510239  # -12 degrees in radians
+      second_point:
+        r: 1.456  # 1.286 + (-1.116 + 1.286)
+        z: 1.178  # 1.279 + (-1.38 + 1.279)
+        phi: -0.209439510239
+      valve_indices: [0]
+
+    - name: "PFX1_139"
+      exit_position:
+        r: 1.286
+        z: 1.279
+        phi: -2.426007939289  # -139 degrees
+      second_point:
+        r: 1.456
+        z: 1.178
+        phi: -2.426007939289
+      valve_indices: [0]
+
+    - name: "PFX1_259"
+      exit_position:
+        r: 1.286
+        z: 1.279
+        phi: -4.520402866770  # -259 degrees
+      second_point:
+        r: 1.456
+        z: 1.178
+        phi: -4.520402866770
+      valve_indices: [0]
+
+    # PFX2 pipes (3 pipes, same poloidal location as PFX1, different toroidal angles)
+    - name: "PFX2_079"
+      exit_position:
+        r: 1.286
+        z: 1.279
+        phi: -1.378809924643  # -79 degrees
+      second_point:
+        r: 1.456
+        z: 1.178
+        phi: -1.378809924643
+      valve_indices: [1]
+
+    - name: "PFX2_199"
+      exit_position:
+        r: 1.286
+        z: 1.279
+        phi: -3.473205503932  # -199 degrees
+      second_point:
+        r: 1.456
+        z: 1.178
+        phi: -3.473205503932
+      valve_indices: [1]
+
+    - name: "PFX2_319"
+      exit_position:
+        r: 1.286
+        z: 1.279
+        phi: -5.567600315285  # -319 degrees
+      second_point:
+        r: 1.456
+        z: 1.178
+        phi: -5.567600315285
+      valve_indices: [1]
+
+    # GAS pipes
+    - name: "GASA_300"
+      exit_position:
+        r: 1.941
+        z: 1.01
+        phi: -5.235987755983  # -300 degrees
+      second_point:
+        r: 1.941
+        z: 1.00  # z - 0.01
+        phi: -5.235987755983
+      valve_indices: [2]
+
+    - name: "GASB_300"
+      exit_position:
+        r: 1.941
+        z: 1.01
+        phi: -5.235987755983
+      second_point:
+        r: 1.941
+        z: 1.00
+        phi: -5.235987755983
+      valve_indices: [3]
+
+    - name: "GASC_000"
+      exit_position:
+        r: 1.481
+        z: -1.33
+        phi: 0.0  # 0 degrees
+      second_point:
+        r: 1.481
+        z: -1.32  # z + 0.01
+        phi: 0.0
+      valve_indices: [4, 9]  # GASC and GASE
+
+    - name: "GASD_225"
+      exit_position:
+        r: 1.941
+        z: 1.01
+        phi: -3.926990816987  # -225 degrees
+      second_point:
+        r: 1.941
+        z: 1.00
+        phi: -3.926990816987
+      valve_indices: [5]
+
+    - name: "Spare_225"
+      exit_position:
+        r: 1.941
+        z: 1.01
+        phi: -3.926990816987
+      second_point:
+        r: 1.941
+        z: 1.00
+        phi: -3.926990816987
+      valve_indices: [5]
+
+    - name: "RF_170"
+      exit_position:
+        r: 2.38
+        z: -0.13
+        phi: -2.967059728390  # -170 degrees
+      second_point:
+        r: 2.48
+        z: -0.13
+        phi: -2.967059728390
+      valve_indices: [5]
+
+    - name: "RF_190"
+      exit_position:
+        r: 2.38
+        z: -0.13
+        phi: -3.316125578789  # -190 degrees
+      second_point:
+        r: 2.48
+        z: -0.13
+        phi: -3.316125578789
+      valve_indices: [5]
+
+    - name: "DRDP_225"
+      exit_position:
+        r: 1.941
+        z: 1.01
+        phi: -3.926990816987
+      second_point:
+        r: 1.941
+        z: 1.00
+        phi: -3.926990816987
+      valve_indices: [7]
+
+    # UOB pipes (3 pipes)
+    - name: "UOB_045"
+      exit_position:
+        r: 1.517
+        z: 1.267
+        phi: -0.785398163397  # -45 degrees
+      second_point:
+        r: 1.517
+        z: 1.257
+        phi: -0.785398163397
+      valve_indices: [8]
+
+    - name: "UOB_165"
+      exit_position:
+        r: 1.517
+        z: 1.267
+        phi: -2.879793265791  # -165 degrees
+      second_point:
+        r: 1.517
+        z: 1.257
+        phi: -2.879793265791
+      valve_indices: [8]
+
+    - name: "UOB_285"
+      exit_position:
+        r: 1.517
+        z: 1.267
+        phi: -4.974188368184  # -285 degrees
+      second_point:
+        r: 1.517
+        z: 1.257
+        phi: -4.974188368184
+      valve_indices: [8]
+
+    # LOB1 pipes
+    - name: "LOB1_030"
+      exit_position:
+        r: 1.941
+        z: -1.202
+        phi: -0.523598775598  # -30 degrees
+      second_point:
+        r: 2.041
+        z: -1.202
+        phi: -0.523598775598
+      valve_indices: [9]
+
+    - name: "LOB1_120"
+      exit_position:
+        r: 1.941
+        z: -1.202
+        phi: -2.094395102393  # -120 degrees
+      second_point:
+        r: 2.041
+        z: -1.202
+        phi: -2.094395102393
+      valve_indices: [9]
+
+    - name: "Spare_075"
+      exit_position:
+        r: 2.249
+        z: -0.797
+        phi: 1.308996938996  # 75 degrees (note: positive in OMAS)
+      second_point:
+        r: 2.349
+        z: -0.797
+        phi: 1.308996938996
+      valve_indices: [9]
+
+    # RF pipes on LOB1 line
+    - name: "RF_010"
+      exit_position:
+        r: 2.38
+        z: -0.13
+        phi: -0.174532925199  # -10 degrees
+      second_point:
+        r: 2.48
+        z: -0.13
+        phi: -0.174532925199
+      valve_indices: [9]
+
+    - name: "RF_350"
+      exit_position:
+        r: 2.38
+        z: -0.13
+        phi: -6.108652381980  # -350 degrees
+      second_point:
+        r: 2.48
+        z: -0.13
+        phi: -6.108652381980
+      valve_indices: [9]
+
+    # DiMES and CPBOT pipes (240R-2 valve)
+    - name: "DiMES_Chimney_165"
+      exit_position:
+        r: 1.481
+        z: -1.33
+        phi: -2.879793265791  # -165 degrees
+      second_point:
+        r: 1.481
+        z: -1.32
+        phi: -2.879793265791
+      valve_indices: [10]
+
+    - name: "CPBOT_150"
+      exit_position:
+        r: 1.11
+        z: -1.33
+        phi: -2.617993877991  # -150 degrees
+      second_point:
+        r: 1.01
+        z: -1.33
+        phi: -2.617993877991
+      valve_indices: [10]
+
+    # LOB2 pipes
+    - name: "LOB2_210"
+      exit_position:
+        r: 1.941
+        z: -1.202
+        phi: -3.665191429188  # -210 degrees
+      second_point:
+        r: 2.041
+        z: -1.202
+        phi: -3.665191429188
+      valve_indices: [11]
+
+    - name: "LOB2_300"
+      exit_position:
+        r: 1.941
+        z: -1.202
+        phi: -5.235987755983  # -300 degrees
+      second_point:
+        r: 2.041
+        z: -1.202
+        phi: -5.235987755983
+      valve_indices: [11]
+
+    - name: "DiMES_Tile_160"
+      exit_position:
+        r: 1.481
+        z: -1.33
+        phi: -2.879793265791  # -165 degrees (same as DiMES_Chimney)
+      second_point:
+        r: 1.481
+        z: -1.32
+        phi: -2.879793265791
+      valve_indices: [11]
+
+    - name: "RF_COMB_"
+      exit_position:
+        r: 2.38
+        z: -0.13
+        phi: .nan  # Unknown
+      second_point:
+        r: 2.48
+        z: -0.13
+        phi: .nan
+      valve_indices: [11]
+
+    - name: "RF_307"
+      exit_position:
+        r: 2.38
+        z: -0.13
+        phi: -5.358160960785  # -307 degrees
+      second_point:
+        r: 2.48
+        z: -0.13
+        phi: -5.358160960785
+      valve_indices: [11]
+
+    - name: "RF_260"
+      exit_position:
+        r: 2.38
+        z: 0.14  # Note: positive Z
+        phi: -4.537856055186  # -260 degrees
+      second_point:
+        r: 2.48
+        z: 0.14
+        phi: -4.537856055186
+      valve_indices: [11]
+
+    # GASH pipe (same location as GASC)
+    - name: "GASH_000"
+      exit_position:
+        r: 1.481
+        z: -1.33
+        phi: 0.0
+      second_point:
+        r: 1.481
+        z: -1.32
+        phi: 0.0
+      valve_indices: [12]
+
+    # GASI pipe (same location as GASC)
+    - name: "GASI_000"
+      exit_position:
+        r: 1.481
+        z: -1.33
+        phi: 0.0
+      second_point:
+        r: 1.481
+        z: -1.32
+        phi: 0.0
+      valve_indices: [13]
+
+    # GASJ pipe (same location as GASD)
+    - name: "GASJ_225"
+      exit_position:
+        r: 1.941
+        z: 1.01
+        phi: -3.926990816987  # -225 degrees
+      second_point:
+        r: 1.941
+        z: 1.00
+        phi: -3.926990816987
+      valve_indices: [14]
+
+    - name: "CPMID"
+      exit_position:
+        r: 0.9
+        z: -0.2
+        phi: .nan  # Unknown
+      second_point:
+        r: 0.8
+        z: -0.2
+        phi: .nan
+      valve_indices: [15]
+
+  # Valve configurations
+  # Each valve has: identifier, pipe_indices
+  valves:
+    - identifier: "PFX1"
+      pipe_indices: [0, 1, 2]
+
+    - identifier: "PFX2"
+      pipe_indices: [3, 4, 5]
+
+    - identifier: "GASA"
+      pipe_indices: [6]
+
+    - identifier: "GASB"
+      pipe_indices: [7]
+
+    - identifier: "GASC"
+      pipe_indices: [8]
+
+    - identifier: "GASD"
+      pipe_indices: [9, 10, 11, 12]
+
+    - identifier: "GASE"
+      pipe_indices: [8]  # Shares GASC_000 pipe (index 8)
+
+    - identifier: "DRDP"
+      pipe_indices: [13]
+
+    - identifier: "UOB"
+      pipe_indices: [14, 15, 16]
+
+    - identifier: "LOB1"
+      pipe_indices: [17, 18, 19, 20, 21]  # Includes RF_010 and RF_350
+
+    - identifier: "240R-2"
+      pipe_indices: [22, 23]  # DiMES_Chimney_165 and CPBOT_150
+
+    - identifier: "LOB2"
+      pipe_indices: [24, 25, 26, 27, 28, 29]  # LOB2_210, LOB2_300, DiMES_Tile_160, RF_COMB_, RF_307, RF_260
+
+    - identifier: "???"  # GASH
+      pipe_indices: [30]
+
+    - identifier: "???"  # GASI
+      pipe_indices: [31]
+
+    - identifier: "???"  # GASJ
+      pipe_indices: [32]
+
+    - identifier: "???"  # CPMID
+      pipe_indices: [33]
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  - pipe.name
+  - pipe.valve_indices
+  - pipe.exit_position.r
+  - pipe.exit_position.z
+  - pipe.exit_position.phi
+  - pipe.second_point.r
+  - pipe.second_point.z
+  - pipe.second_point.phi
+  - valve.identifier
+  - valve.pipe_indices
