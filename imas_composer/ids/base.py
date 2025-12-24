@@ -25,6 +25,12 @@ Pattern for simple pass-through fields:
         ids_path="ids.user.field",
         docs_file=self.DOCS_PATH
     )
+
+Factory Pattern:
+----------------
+IDS mappers should use IDSFactory to create mapper instances.
+This allows for tree-specific or configuration-specific mapper implementations.
+
 """
 
 from typing import Dict, List
@@ -39,7 +45,7 @@ class IDSMapper:
     CONFIG_PATH: str = None  # e.g., "ece.yaml"
     DOCS_PATH: str = None    # e.g., "electron_cyclotron_emission.yaml"
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         """Initialize the IDS mapper."""
         # Load configuration (static values and field list)
         config = self._load_config()

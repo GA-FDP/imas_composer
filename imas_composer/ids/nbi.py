@@ -11,14 +11,14 @@ from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
 
 
-class NBIMapper(IDSMapper):
+class NbiMapper(IDSMapper):
     """Maps DIII-D NBI data to IMAS nbi IDS."""
 
     # Configuration YAML file contains static values and field ledger
     DOCS_PATH = "nbi.yaml"
     CONFIG_PATH = "nbi.yaml"
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         """Initialize NBI mapper."""
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
