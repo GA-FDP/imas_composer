@@ -21,7 +21,7 @@ class ThomsonScatteringMapper(IDSMapper):
     DOCS_PATH = "thomson_scattering.yaml"
     CONFIG_PATH = "thomson_scattering.yaml"
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
 

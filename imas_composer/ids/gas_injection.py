@@ -21,7 +21,7 @@ class GasInjectionMapper(IDSMapper):
     DOCS_PATH = "gas_injection.yaml"
     CONFIG_PATH = "gas_injection.yaml"
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         """Initialize gas injection mapper."""
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
