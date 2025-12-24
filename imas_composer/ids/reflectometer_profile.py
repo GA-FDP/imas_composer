@@ -22,7 +22,7 @@ class ReflectometerProfileMapper(IDSMapper):
     DOCS_PATH = "reflectometer_profile.yaml"
     CONFIG_PATH = "reflectometer_profile.yaml"
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         """Initialize reflectometer profile mapper."""
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()

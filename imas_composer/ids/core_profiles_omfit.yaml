@@ -1,0 +1,72 @@
+# Core Profiles IDS Configuration for DIII-D - OMFIT_PROFS Tree
+#
+# This configuration is for OMFIT_PROFS tree with extended metadata and uncertainties
+
+# Static values (hardcoded, not from MDSplus)
+static_values:
+  ids_properties.homogeneous_time: 1
+
+# Default OMFIT_PROFS tree and run_id
+default_tree: OMFIT_PROFS
+default_run_id: '001'
+
+# Supported fields for OMFIT_PROFS tree
+fields:
+  # Time
+  - time
+  - profiles_1d.time
+  - ids_properties.homogeneous_time
+
+  # Grid
+  - profiles_1d.grid.rho_tor_norm
+  - profiles_1d.grid.rho_pol_norm
+
+  # Electrons
+  - profiles_1d.electrons.density_thermal
+  - profiles_1d.electrons.density_thermal_error_upper
+  - profiles_1d.electrons.temperature
+  - profiles_1d.electrons.temperature_error_upper
+
+  # Electrons - Fit fields (raw measurements)
+  - profiles_1d.electrons.density_fit.measured
+  - profiles_1d.electrons.density_fit.psi_norm
+  - profiles_1d.electrons.density_fit.rho_tor_norm
+  - profiles_1d.electrons.density_fit.measured_error_upper
+  - profiles_1d.electrons.temperature_fit.measured
+  - profiles_1d.electrons.temperature_fit.psi_norm
+  - profiles_1d.electrons.temperature_fit.rho_tor_norm
+  - profiles_1d.electrons.temperature_fit.measured_error_upper
+
+  # Ion[0] - Deuterium
+  - profiles_1d.ion.0.density_thermal
+  - profiles_1d.ion.0.density_thermal_error_upper
+  - profiles_1d.ion.0.temperature
+  - profiles_1d.ion.0.temperature_error_upper
+  - profiles_1d.ion.0.label
+  - profiles_1d.ion.0.element.0.z_n
+  - profiles_1d.ion.0.element.0.a
+
+  # Ion[1] - Carbon
+  - profiles_1d.ion.1.density_thermal
+  - profiles_1d.ion.1.density_thermal_error_upper
+  - profiles_1d.ion.1.temperature
+  - profiles_1d.ion.1.temperature_error_upper
+  - profiles_1d.ion.1.label
+  - profiles_1d.ion.1.element.0.z_n
+  - profiles_1d.ion.1.element.0.a
+
+  # Ion[1] - Carbon fit fields (raw measurements)
+  - profiles_1d.ion.1.density_fit.measured
+  - profiles_1d.ion.1.density_fit.psi_norm
+  - profiles_1d.ion.1.density_fit.rho_tor_norm
+  - profiles_1d.ion.1.density_fit.measured_error_upper
+  - profiles_1d.ion.1.temperature_fit.measured
+  - profiles_1d.ion.1.temperature_fit.psi_norm
+  - profiles_1d.ion.1.temperature_fit.rho_tor_norm
+  - profiles_1d.ion.1.temperature_fit.measured_error_upper
+
+  # E-field
+  - profiles_1d.e_field.radial
+
+  # Global quantities
+  - global_quantities.v_loop

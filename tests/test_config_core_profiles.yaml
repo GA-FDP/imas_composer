@@ -8,6 +8,17 @@ requirement_validation:
   # MDSplus paths that use calibration data (shot 0 or cal_set), not the requested shot
   allow_different_shot: []
 
+field_tolerances:
+  core_profiles.time:
+  # This uses interpolation so accuracy is limited
+    rtol: 1.0e-8
+    atol: 1.0e-8
+
+  core_profiles.profiles_1d.time:
+  # This uses interpolation so accuracy is limited
+    rtol: 1.0e-8
+    atol: 1.0e-8
+
 # OMAS path mapping
 # Maps imas_composer notation to OMAS notation for fetching reference data
 omas_path_map:
@@ -16,12 +27,27 @@ omas_path_map:
   core_profiles.profiles_1d.time: core_profiles.profiles_1d.:.time
   core_profiles.ids_properties.homogeneous_time: core_profiles.ids_properties.homogeneous_time
 
-  # Grid field
-  core_profiles.profiles_1d.grid.rho_tor_norm: core_profiles.profiles_1d.0.grid.rho_tor_norm
+  # Grid fields
+  core_profiles.profiles_1d.grid.rho_tor_norm: core_profiles.profiles_1d.:.grid.rho_tor_norm
+  core_profiles.profiles_1d.grid.rho_pol_norm: core_profiles.profiles_1d.:.grid.rho_pol_norm
 
   # Electron profiles
   core_profiles.profiles_1d.electrons.density_thermal: core_profiles.profiles_1d.:.electrons.density_thermal
   core_profiles.profiles_1d.electrons.temperature: core_profiles.profiles_1d.:.electrons.temperature
+
+  # Electron uncertainties (OMFIT_PROFS only)
+  core_profiles.profiles_1d.electrons.density_thermal_error_upper: core_profiles.profiles_1d.:.electrons.density_thermal_error_upper
+  core_profiles.profiles_1d.electrons.temperature_error_upper: core_profiles.profiles_1d.:.electrons.temperature_error_upper
+
+  # Electron fit fields (OMFIT_PROFS only)
+  core_profiles.profiles_1d.electrons.density_fit.measured: core_profiles.profiles_1d.:.electrons.density_fit.measured
+  core_profiles.profiles_1d.electrons.density_fit.psi_norm: core_profiles.profiles_1d.:.electrons.density_fit.psi_norm
+  core_profiles.profiles_1d.electrons.density_fit.rho_tor_norm: core_profiles.profiles_1d.:.electrons.density_fit.rho_tor_norm
+  core_profiles.profiles_1d.electrons.density_fit.measured_error_upper: core_profiles.profiles_1d.:.electrons.density_fit.measured_error_upper
+  core_profiles.profiles_1d.electrons.temperature_fit.measured: core_profiles.profiles_1d.:.electrons.temperature_fit.measured
+  core_profiles.profiles_1d.electrons.temperature_fit.psi_norm: core_profiles.profiles_1d.:.electrons.temperature_fit.psi_norm
+  core_profiles.profiles_1d.electrons.temperature_fit.rho_tor_norm: core_profiles.profiles_1d.:.electrons.temperature_fit.rho_tor_norm
+  core_profiles.profiles_1d.electrons.temperature_fit.measured_error_upper: core_profiles.profiles_1d.:.electrons.temperature_fit.measured_error_upper
 
   # Ion[0] - Deuterium profiles
   core_profiles.profiles_1d.ion.0.density_thermal: core_profiles.profiles_1d.:.ion.0.density_thermal
@@ -30,6 +56,10 @@ omas_path_map:
   core_profiles.profiles_1d.ion.0.element.0.z_n: core_profiles.profiles_1d.0.ion.0.element.0.z_n
   core_profiles.profiles_1d.ion.0.element.0.a: core_profiles.profiles_1d.0.ion.0.element.0.a
 
+  # Ion[0] - Deuterium uncertainties (OMFIT_PROFS only)
+  core_profiles.profiles_1d.ion.0.density_thermal_error_upper: core_profiles.profiles_1d.:.ion.0.density_thermal_error_upper
+  core_profiles.profiles_1d.ion.0.temperature_error_upper: core_profiles.profiles_1d.:.ion.0.temperature_error_upper
+
   # Ion[1] - Carbon profiles
   core_profiles.profiles_1d.ion.1.density_thermal: core_profiles.profiles_1d.:.ion.1.density_thermal
   core_profiles.profiles_1d.ion.1.temperature: core_profiles.profiles_1d.:.ion.1.temperature
@@ -37,6 +67,23 @@ omas_path_map:
   core_profiles.profiles_1d.ion.1.label: core_profiles.profiles_1d.0.ion.1.label
   core_profiles.profiles_1d.ion.1.element.0.z_n: core_profiles.profiles_1d.0.ion.1.element.0.z_n
   core_profiles.profiles_1d.ion.1.element.0.a: core_profiles.profiles_1d.0.ion.1.element.0.a
+
+  # Ion[1] - Carbon uncertainties (OMFIT_PROFS only)
+  core_profiles.profiles_1d.ion.1.density_thermal_error_upper: core_profiles.profiles_1d.:.ion.1.density_thermal_error_upper
+  core_profiles.profiles_1d.ion.1.temperature_error_upper: core_profiles.profiles_1d.:.ion.1.temperature_error_upper
+
+  # Ion[1] - Carbon fit fields (OMFIT_PROFS only)
+  core_profiles.profiles_1d.ion.1.density_fit.measured: core_profiles.profiles_1d.:.ion.1.density_fit.measured
+  core_profiles.profiles_1d.ion.1.density_fit.psi_norm: core_profiles.profiles_1d.:.ion.1.density_fit.psi_norm
+  core_profiles.profiles_1d.ion.1.density_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.1.density_fit.rho_tor_norm
+  core_profiles.profiles_1d.ion.1.density_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.1.density_fit.measured_error_upper
+  core_profiles.profiles_1d.ion.1.temperature_fit.measured: core_profiles.profiles_1d.:.ion.1.temperature_fit.measured
+  core_profiles.profiles_1d.ion.1.temperature_fit.psi_norm: core_profiles.profiles_1d.:.ion.1.temperature_fit.psi_norm
+  core_profiles.profiles_1d.ion.1.temperature_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.1.temperature_fit.rho_tor_norm
+  core_profiles.profiles_1d.ion.1.temperature_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.1.temperature_fit.measured_error_upper
+
+  # E-field (OMFIT_PROFS only)
+  core_profiles.profiles_1d.e_field.radial: core_profiles.profiles_1d.:.e_field.radial
 
   # Global quantities
   core_profiles.global_quantities.v_loop: core_profiles.global_quantities.v_loop
