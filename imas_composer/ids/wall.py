@@ -18,7 +18,7 @@ class WallMapper(IDSMapper):
     DOCS_PATH = "wall.yaml"
     CONFIG_PATH = "wall.yaml"
 
-    def __init__(self, efit_tree: str = "EFIT01"):
+    def __init__(self, efit_tree: str = "EFIT01", **kwargs):
         """
         Initialize wall mapper.
 
