@@ -49,14 +49,16 @@ class EquilibriumMapper(IDSMapper):
     DOCS_PATH = "equilibrium.yaml"
     CONFIG_PATH = "equilibrium.yaml"
 
-    def __init__(self, efit_tree: str = 'EFIT01', **kwargs):
+    def __init__(self, efit_tree: str = 'EFIT01', efit_run_id: Optional[str] = None, **kwargs):
         """
         Initialize Equilibrium mapper.
 
         Args:
             efit_tree: EFIT tree name (e.g., 'EFIT01', 'EFIT02')
+            efit_run_id: Run ID to append to shot for EFIT tree (e.g., '01', '02')
         """
         self.efit_tree = efit_tree
+        self.efit_run_id = efit_run_id
 
         # MDSplus path prefixes
         self.geqdsk_node = f'\\{efit_tree}::TOP.RESULTS.GEQDSK'
@@ -72,6 +74,28 @@ class EquilibriumMapper(IDSMapper):
 
         # Build IDS specs
         self._build_specs()
+
+    def _get_efit_shot(self, shot: int) -> int:
+        """
+        Combine shot number with efit_run_id if provided.
+
+        Args:
+            shot: Base shot number
+
+        Returns:
+            Combined shot number with run_id appended if efit_run_id is not None
+
+        Example:
+            >>> mapper = EquilibriumMapper(efit_run_id='01')
+            >>> mapper._get_efit_shot(200000)
+            20000001
+            >>> mapper = EquilibriumMapper(efit_run_id=None)
+            >>> mapper._get_efit_shot(200000)
+            200000
+        """
+        if self.efit_run_id is not None:
+            return int(str(shot) + self.efit_run_id)
+        return shot
 
     def _build_specs(self):
         """Build all IDS entry specifications"""
@@ -518,7 +542,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium.time_slice.boundary_separatrix.triangularity_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._tritop"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.TRITOP', shot, self.efit_tree).as_key()],
+            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.TRITOP', self._get_efit_shot(shot), self.efit_tree).as_key()],
             ids_path="equilibrium.time_slice.boundary_separatrix.triangularity_upper",
             docs_file=self.DOCS_PATH
         )
@@ -535,7 +559,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium.time_slice.boundary_separatrix.triangularity_lower"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._tribot"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.TRIBOT', shot, self.efit_tree).as_key()],
+            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.TRIBOT', self._get_efit_shot(shot), self.efit_tree).as_key()],
             ids_path="equilibrium.time_slice.boundary_separatrix.triangularity_lower",
             docs_file=self.DOCS_PATH
         )
@@ -552,7 +576,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium.time_slice.boundary_separatrix.elongation"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._kappa"],
-            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.KAPPA', shot, self.efit_tree).as_key()],
+            compose=lambda shot, raw: raw[Requirement(f'{self.aeqdsk_node}.KAPPA', self._get_efit_shot(shot), self.efit_tree).as_key()],
             ids_path="equilibrium.time_slice.boundary_separatrix.elongation",
             docs_file=self.DOCS_PATH
         )
@@ -1731,7 +1755,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: \\EFIT::TOP.RESULTS.GEQDSK.GTIME / 1000.
         """
-        gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', shot, self.efit_tree).as_key()
+        gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', self._get_efit_shot(shot), self.efit_tree).as_key()
         gtime_ms = raw_data[gtime_key]
         return gtime_ms / 1000.0  # Convert milliseconds to seconds
 
@@ -1757,8 +1781,8 @@ class EquilibriumMapper(IDSMapper):
         Returns:
             Array of indices into MTIME for each GTIME value
         """
-        gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', shot, self.efit_tree).as_key()
-        mtime_key = Requirement(f'{self.measurements_node}.MTIME', shot, self.efit_tree).as_key()
+        gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', self._get_efit_shot(shot), self.efit_tree).as_key()
+        mtime_key = Requirement(f'{self.measurements_node}.MTIME', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         gtime = raw_data[gtime_key]
         mtime = raw_data[mtime_key]
@@ -1783,7 +1807,7 @@ class EquilibriumMapper(IDSMapper):
         Returns:
             Ragged awkward array (n_time, var) where each time slice has different number of points
         """
-        rbbbs_key = Requirement(f'{self.geqdsk_node}.RBBBS', shot, self.efit_tree).as_key()
+        rbbbs_key = Requirement(f'{self.geqdsk_node}.RBBBS', self._get_efit_shot(shot), self.efit_tree).as_key()
         rbbbs = raw_data[rbbbs_key]
 
         # Filter out padding (where R==0)
@@ -1800,8 +1824,8 @@ class EquilibriumMapper(IDSMapper):
         Returns:
             Ragged awkward array (n_time, var) where each time slice has different number of points
         """
-        rbbbs_key = Requirement(f'{self.geqdsk_node}.RBBBS', shot, self.efit_tree).as_key()
-        zbbbs_key = Requirement(f'{self.geqdsk_node}.ZBBBS', shot, self.efit_tree).as_key()
+        rbbbs_key = Requirement(f'{self.geqdsk_node}.RBBBS', self._get_efit_shot(shot), self.efit_tree).as_key()
+        zbbbs_key = Requirement(f'{self.geqdsk_node}.ZBBBS', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         rbbbs = raw_data[rbbbs_key]
         zbbbs = raw_data[zbbbs_key]
@@ -1819,8 +1843,8 @@ class EquilibriumMapper(IDSMapper):
         Returns:
             Ragged awkward array (n_time, var) where each time slice has 0-2 X-points
         """
-        rxpt1_key = Requirement(f'{self.aeqdsk_node}.RXPT1', shot, self.efit_tree).as_key()
-        rxpt2_key = Requirement(f'{self.aeqdsk_node}.RXPT2', shot, self.efit_tree).as_key()
+        rxpt1_key = Requirement(f'{self.aeqdsk_node}.RXPT1', self._get_efit_shot(shot), self.efit_tree).as_key()
+        rxpt2_key = Requirement(f'{self.aeqdsk_node}.RXPT2', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         rxpt1 = raw_data[rxpt1_key]
         rxpt2 = raw_data[rxpt2_key]
@@ -1843,8 +1867,8 @@ class EquilibriumMapper(IDSMapper):
         Returns:
             Ragged awkward array (n_time, var) where each time slice has 0-2 X-points
         """
-        zxpt1_key = Requirement(f'{self.aeqdsk_node}.ZXPT1', shot, self.efit_tree).as_key()
-        zxpt2_key = Requirement(f'{self.aeqdsk_node}.ZXPT2', shot, self.efit_tree).as_key()
+        zxpt1_key = Requirement(f'{self.aeqdsk_node}.ZXPT1', self._get_efit_shot(shot), self.efit_tree).as_key()
+        zxpt2_key = Requirement(f'{self.aeqdsk_node}.ZXPT2', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         zxpt1 = raw_data[zxpt1_key]
         zxpt2 = raw_data[zxpt2_key]
@@ -1863,7 +1887,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.RSURF) / 100.
         """
-        rsurf_key = Requirement(f'{self.aeqdsk_node}.RSURF', shot, self.efit_tree).as_key()
+        rsurf_key = Requirement(f'{self.aeqdsk_node}.RSURF', self._get_efit_shot(shot), self.efit_tree).as_key()
         rsurf_cm = raw_data[rsurf_key]
         return rsurf_cm / 100.0  # Convert cm to meters
 
@@ -1873,7 +1897,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.ZSURF) / 100.
         """
-        zsurf_key = Requirement(f'{self.aeqdsk_node}.ZSURF', shot, self.efit_tree).as_key()
+        zsurf_key = Requirement(f'{self.aeqdsk_node}.ZSURF', self._get_efit_shot(shot), self.efit_tree).as_key()
         zsurf_cm = raw_data[zsurf_key]
         return zsurf_cm / 100.0  # Convert cm to meters
 
@@ -1883,7 +1907,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.SEPLIM) / 100.
         """
-        seplim_key = Requirement(f'{self.aeqdsk_node}.SEPLIM', shot, self.efit_tree).as_key()
+        seplim_key = Requirement(f'{self.aeqdsk_node}.SEPLIM', self._get_efit_shot(shot), self.efit_tree).as_key()
         seplim_cm = raw_data[seplim_key]
         return seplim_cm / 100.0  # Convert cm to meters
 
@@ -1897,7 +1921,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS deviation: OMAS only defines names once, but IMAS schema expects
         names per time_slice, so we tile across time dimension.
         """
-        gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', shot, self.efit_tree).as_key()
+        gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', self._get_efit_shot(shot), self.efit_tree).as_key()
         gtime_ms = raw_data[gtime_key]
         n_time = len(gtime_ms)
 
@@ -1913,10 +1937,10 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.GAPIN/GAPOUT/GAPTOP/GAPBOT) / 100.
         """
-        gapin_key = Requirement(f'{self.aeqdsk_node}.GAPIN', shot, self.efit_tree).as_key()
-        gapout_key = Requirement(f'{self.aeqdsk_node}.GAPOUT', shot, self.efit_tree).as_key()
-        gaptop_key = Requirement(f'{self.aeqdsk_node}.GAPTOP', shot, self.efit_tree).as_key()
-        gapbot_key = Requirement(f'{self.aeqdsk_node}.GAPBOT', shot, self.efit_tree).as_key()
+        gapin_key = Requirement(f'{self.aeqdsk_node}.GAPIN', self._get_efit_shot(shot), self.efit_tree).as_key()
+        gapout_key = Requirement(f'{self.aeqdsk_node}.GAPOUT', self._get_efit_shot(shot), self.efit_tree).as_key()
+        gaptop_key = Requirement(f'{self.aeqdsk_node}.GAPTOP', self._get_efit_shot(shot), self.efit_tree).as_key()
+        gapbot_key = Requirement(f'{self.aeqdsk_node}.GAPBOT', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         gapin_cm = raw_data[gapin_key]
         gapout_cm = raw_data[gapout_key]
@@ -1937,10 +1961,10 @@ class EquilibriumMapper(IDSMapper):
         Returns:
             Ragged awkward array (n_time, var) where each time slice has 0-4 strike points
         """
-        rvsid_key = Requirement(f'{self.aeqdsk_node}.RVSID', shot, self.efit_tree).as_key()
-        rvsod_key = Requirement(f'{self.aeqdsk_node}.RVSOD', shot, self.efit_tree).as_key()
-        rvsiu_key = Requirement(f'{self.aeqdsk_node}.RVSIU', shot, self.efit_tree).as_key()
-        rvsou_key = Requirement(f'{self.aeqdsk_node}.RVSOU', shot, self.efit_tree).as_key()
+        rvsid_key = Requirement(f'{self.aeqdsk_node}.RVSID', self._get_efit_shot(shot), self.efit_tree).as_key()
+        rvsod_key = Requirement(f'{self.aeqdsk_node}.RVSOD', self._get_efit_shot(shot), self.efit_tree).as_key()
+        rvsiu_key = Requirement(f'{self.aeqdsk_node}.RVSIU', self._get_efit_shot(shot), self.efit_tree).as_key()
+        rvsou_key = Requirement(f'{self.aeqdsk_node}.RVSOU', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         rvsid_cm = raw_data[rvsid_key]
         rvsod_cm = raw_data[rvsod_key]
@@ -1964,14 +1988,14 @@ class EquilibriumMapper(IDSMapper):
         Returns:
             Ragged awkward array (n_time, var) where each time slice has 0-4 strike points
         """
-        rvsid_key = Requirement(f'{self.aeqdsk_node}.RVSID', shot, self.efit_tree).as_key()
-        rvsod_key = Requirement(f'{self.aeqdsk_node}.RVSOD', shot, self.efit_tree).as_key()
-        rvsiu_key = Requirement(f'{self.aeqdsk_node}.RVSIU', shot, self.efit_tree).as_key()
-        rvsou_key = Requirement(f'{self.aeqdsk_node}.RVSOU', shot, self.efit_tree).as_key()
-        zvsid_key = Requirement(f'{self.aeqdsk_node}.ZVSID', shot, self.efit_tree).as_key()
-        zvsod_key = Requirement(f'{self.aeqdsk_node}.ZVSOD', shot, self.efit_tree).as_key()
-        zvsiu_key = Requirement(f'{self.aeqdsk_node}.ZVSIU', shot, self.efit_tree).as_key()
-        zvsou_key = Requirement(f'{self.aeqdsk_node}.ZVSOU', shot, self.efit_tree).as_key()
+        rvsid_key = Requirement(f'{self.aeqdsk_node}.RVSID', self._get_efit_shot(shot), self.efit_tree).as_key()
+        rvsod_key = Requirement(f'{self.aeqdsk_node}.RVSOD', self._get_efit_shot(shot), self.efit_tree).as_key()
+        rvsiu_key = Requirement(f'{self.aeqdsk_node}.RVSIU', self._get_efit_shot(shot), self.efit_tree).as_key()
+        rvsou_key = Requirement(f'{self.aeqdsk_node}.RVSOU', self._get_efit_shot(shot), self.efit_tree).as_key()
+        zvsid_key = Requirement(f'{self.aeqdsk_node}.ZVSID', self._get_efit_shot(shot), self.efit_tree).as_key()
+        zvsod_key = Requirement(f'{self.aeqdsk_node}.ZVSOD', self._get_efit_shot(shot), self.efit_tree).as_key()
+        zvsiu_key = Requirement(f'{self.aeqdsk_node}.ZVSIU', self._get_efit_shot(shot), self.efit_tree).as_key()
+        zvsou_key = Requirement(f'{self.aeqdsk_node}.ZVSOU', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         rvsid_cm = raw_data[rvsid_key]
         rvsod_cm = raw_data[rvsod_key]
@@ -1997,7 +2021,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: \\EFIT::TOP.RESULTS.AEQDSK.AMINOR / 100.
         """
-        aminor_key = Requirement(f'{self.aeqdsk_node}.AMINOR', shot, self.efit_tree).as_key()
+        aminor_key = Requirement(f'{self.aeqdsk_node}.AMINOR', self._get_efit_shot(shot), self.efit_tree).as_key()
         aminor_cm = raw_data[aminor_key]
         return aminor_cm / 100.0  # Convert cm to meters
 
@@ -2007,7 +2031,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: ATAN(data(\\EFIT::TOP.MEASUREMENTS.TANGAM))
         """
-        tangam_key = Requirement(f'{self.measurements_node}.TANGAM', shot, self.efit_tree).as_key()
+        tangam_key = Requirement(f'{self.measurements_node}.TANGAM', self._get_efit_shot(shot), self.efit_tree).as_key()
         tangam_all_times = raw_data[tangam_key]
 
         # Apply time filtering
@@ -2022,7 +2046,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: ATAN(data(\\EFIT::TOP.MEASUREMENTS.SIGGAM))
         """
-        siggam_key = Requirement(f'{self.measurements_node}.SIGGAM', shot, self.efit_tree).as_key()
+        siggam_key = Requirement(f'{self.measurements_node}.SIGGAM', self._get_efit_shot(shot), self.efit_tree).as_key()
         siggam_all_times = raw_data[siggam_key]
 
         # Apply time filtering
@@ -2039,8 +2063,8 @@ class EquilibriumMapper(IDSMapper):
 
         Stacks ECCURT and FCCURT along outer dimension.
         """
-        eccurt_key = Requirement(f'{self.measurements_node}.ECCURT', shot, self.efit_tree).as_key()
-        fccurt_key = Requirement(f'{self.measurements_node}.FCCURT', shot, self.efit_tree).as_key()
+        eccurt_key = Requirement(f'{self.measurements_node}.ECCURT', self._get_efit_shot(shot), self.efit_tree).as_key()
+        fccurt_key = Requirement(f'{self.measurements_node}.FCCURT', self._get_efit_shot(shot), self.efit_tree).as_key()
         eccurt_all_times = raw_data[eccurt_key]
         fccurt_all_times = raw_data[fccurt_key]
 
@@ -2059,8 +2083,8 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.SIGECC','\\EFIT::TOP.MEASUREMENTS.SIGFCC')
         """
-        sigecc_key = Requirement(f'{self.measurements_node}.SIGECC', shot, self.efit_tree).as_key()
-        sigfcc_key = Requirement(f'{self.measurements_node}.SIGFCC', shot, self.efit_tree).as_key()
+        sigecc_key = Requirement(f'{self.measurements_node}.SIGECC', self._get_efit_shot(shot), self.efit_tree).as_key()
+        sigfcc_key = Requirement(f'{self.measurements_node}.SIGFCC', self._get_efit_shot(shot), self.efit_tree).as_key()
         sigecc_all_times = raw_data[sigecc_key]
         sigfcc_all_times = raw_data[sigfcc_key]
 
@@ -2077,8 +2101,8 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.FWTEC','\\EFIT::TOP.MEASUREMENTS.FWTFC')
         """
-        fwtec_key = Requirement(f'{self.measurements_node}.FWTEC', shot, self.efit_tree).as_key()
-        fwtfc_key = Requirement(f'{self.measurements_node}.FWTFC', shot, self.efit_tree).as_key()
+        fwtec_key = Requirement(f'{self.measurements_node}.FWTEC', self._get_efit_shot(shot), self.efit_tree).as_key()
+        fwtfc_key = Requirement(f'{self.measurements_node}.FWTFC', self._get_efit_shot(shot), self.efit_tree).as_key()
         fwtec_all_times = raw_data[fwtec_key]
         fwtfc_all_times = raw_data[fwtfc_key]
 
@@ -2095,8 +2119,8 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.CECURR','\\EFIT::TOP.MEASUREMENTS.CCBRSP')
         """
-        cecurr_key = Requirement(f'{self.measurements_node}.CECURR', shot, self.efit_tree).as_key()
-        ccbrsp_key = Requirement(f'{self.measurements_node}.CCBRSP', shot, self.efit_tree).as_key()
+        cecurr_key = Requirement(f'{self.measurements_node}.CECURR', self._get_efit_shot(shot), self.efit_tree).as_key()
+        ccbrsp_key = Requirement(f'{self.measurements_node}.CCBRSP', self._get_efit_shot(shot), self.efit_tree).as_key()
         cecurr_all_times = raw_data[cecurr_key]
         ccbrsp_all_times = raw_data[ccbrsp_key]
 
@@ -2113,8 +2137,8 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(stack_outer_2,'\\EFIT::TOP.MEASUREMENTS.CHIECC','\\EFIT::TOP.MEASUREMENTS.CHIFCC')
         """
-        chiecc_key = Requirement(f'{self.measurements_node}.CHIECC', shot, self.efit_tree).as_key()
-        chifcc_key = Requirement(f'{self.measurements_node}.CHIFCC', shot, self.efit_tree).as_key()
+        chiecc_key = Requirement(f'{self.measurements_node}.CHIECC', self._get_efit_shot(shot), self.efit_tree).as_key()
+        chifcc_key = Requirement(f'{self.measurements_node}.CHIFCC', self._get_efit_shot(shot), self.efit_tree).as_key()
         chiecc_all_times = raw_data[chiecc_key]
         chifcc_all_times = raw_data[chifcc_key]
 
@@ -2132,7 +2156,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY)
         Transform: PSI (requires COCOS conversion)
         """
-        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self._get_efit_shot(shot), self.efit_tree).as_key()
         psi = raw_data[ssibry_key]
         return self._apply_cocos_transform(psi, shot, raw_data, "equilibrium.time_slice.boundary_separatrix.psi")
 
@@ -2146,7 +2170,7 @@ class EquilibriumMapper(IDSMapper):
         Time filtering: MEASUREMENTS have different time dimension (MTIME) than
         equilibrium time base (GTIME). Apply index mapping to align with GTIME.
         """
-        plasma_key = Requirement(f'{self.measurements_node}.PLASMA', shot, self.efit_tree).as_key()
+        plasma_key = Requirement(f'{self.measurements_node}.PLASMA', self._get_efit_shot(shot), self.efit_tree).as_key()
         ip_all_times = raw_data[plasma_key]
 
         # Apply time filtering: get indices mapping GTIME to MTIME
@@ -2162,7 +2186,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.MEASUREMENTS.CPASMA)
         Transform: TOR (requires COCOS conversion)
         """
-        cpasma_key = Requirement(f'{self.measurements_node}.CPASMA', shot, self.efit_tree).as_key()
+        cpasma_key = Requirement(f'{self.measurements_node}.CPASMA', self._get_efit_shot(shot), self.efit_tree).as_key()
         ip_all_times = raw_data[cpasma_key]
 
         # Apply time filtering
@@ -2178,7 +2202,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.MEASUREMENTS.SILOPT)
         Transform: PSI (magnetic flux requires COCOS conversion, factor of 2π for COCOS 1→11)
         """
-        silopt_key = Requirement(f'{self.measurements_node}.SILOPT', shot, self.efit_tree).as_key()
+        silopt_key = Requirement(f'{self.measurements_node}.SILOPT', self._get_efit_shot(shot), self.efit_tree).as_key()
         flux_all_times = raw_data[silopt_key]
 
         # Apply time filtering
@@ -2194,7 +2218,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.MEASUREMENTS.SIGSIL)
         Transform: PSI (error on magnetic flux requires same COCOS conversion as flux)
         """
-        sigsil_key = Requirement(f'{self.measurements_node}.SIGSIL', shot, self.efit_tree).as_key()
+        sigsil_key = Requirement(f'{self.measurements_node}.SIGSIL', self._get_efit_shot(shot), self.efit_tree).as_key()
         error_all_times = raw_data[sigsil_key]
 
         # Apply time filtering
@@ -2211,7 +2235,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.MEASUREMENTS.CSILOP)
         Transform: PSI (magnetic flux requires COCOS conversion, factor of 2π for COCOS 1→11)
         """
-        csilop_key = Requirement(f'{self.measurements_node}.CSILOP', shot, self.efit_tree).as_key()
+        csilop_key = Requirement(f'{self.measurements_node}.CSILOP', self._get_efit_shot(shot), self.efit_tree).as_key()
         flux_all_times = raw_data[csilop_key]
 
         # Apply time filtering
@@ -2228,9 +2252,9 @@ class EquilibriumMapper(IDSMapper):
                      '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY')
         Transform: (-RPRESS.T * (SSIBRY - SSIMAG) + SSIMAG).T with COCOS PSI conversion
         """
-        rpress_key = Requirement(f'{self.measurements_node}.RPRESS', shot, self.efit_tree).as_key()
-        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
-        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+        rpress_key = Requirement(f'{self.measurements_node}.RPRESS', self._get_efit_shot(shot), self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', self._get_efit_shot(shot), self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         rpress_all_times = -raw_data[rpress_key]
         ssimag = raw_data[ssimag_key]
@@ -2255,7 +2279,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.PRESSR')
         Transform: ensure_2d (adds dimension if 1D)
         """
-        pressr_key = Requirement(f'{self.measurements_node}.PRESSR', shot, self.efit_tree).as_key()
+        pressr_key = Requirement(f'{self.measurements_node}.PRESSR', self._get_efit_shot(shot), self.efit_tree).as_key()
         pressure_all_times = raw_data[pressr_key]
 
         # Apply time filtering
@@ -2276,7 +2300,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.SIGPRE')
         Transform: ensure_2d (adds dimension if 1D)
         """
-        sigpre_key = Requirement(f'{self.measurements_node}.SIGPRE', shot, self.efit_tree).as_key()
+        sigpre_key = Requirement(f'{self.measurements_node}.SIGPRE', self._get_efit_shot(shot), self.efit_tree).as_key()
         error_all_times = raw_data[sigpre_key]
 
         # Apply time filtering
@@ -2297,7 +2321,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.FWTPRE')
         Transform: ensure_2d (adds dimension if 1D)
         """
-        fwtpre_key = Requirement(f'{self.measurements_node}.FWTPRE', shot, self.efit_tree).as_key()
+        fwtpre_key = Requirement(f'{self.measurements_node}.FWTPRE', self._get_efit_shot(shot), self.efit_tree).as_key()
         weight_all_times = raw_data[fwtpre_key]
 
         # Apply time filtering
@@ -2318,7 +2342,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.CPRESS')
         Transform: ensure_2d (adds dimension if 1D)
         """
-        cpress_key = Requirement(f'{self.measurements_node}.CPRESS', shot, self.efit_tree).as_key()
+        cpress_key = Requirement(f'{self.measurements_node}.CPRESS', self._get_efit_shot(shot), self.efit_tree).as_key()
         pressure_all_times = raw_data[cpress_key]
 
         # Apply time filtering
@@ -2339,7 +2363,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: py2tdi(ensure_2d,'-\\EFIT::TOP.MEASUREMENTS.SAIPRE')
         Transform: ensure_2d + negate
         """
-        saipre_key = Requirement(f'{self.measurements_node}.SAIPRE', shot, self.efit_tree).as_key()
+        saipre_key = Requirement(f'{self.measurements_node}.SAIPRE', self._get_efit_shot(shot), self.efit_tree).as_key()
         chi_sq_all_times = raw_data[saipre_key]
 
         # Apply time filtering
@@ -2361,9 +2385,9 @@ class EquilibriumMapper(IDSMapper):
                      '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY')
         Transform: (SIZEROJ.T * (SSIBRY - SSIMAG) + SSIMAG).T with COCOS PSI conversion
         """
-        sizeroj_key = Requirement(f'{self.measurements_node}.SIZEROJ', shot, self.efit_tree).as_key()
-        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
-        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+        sizeroj_key = Requirement(f'{self.measurements_node}.SIZEROJ', self._get_efit_shot(shot), self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', self._get_efit_shot(shot), self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         sizeroj_all_times = raw_data[sizeroj_key]
         ssimag = raw_data[ssimag_key]
@@ -2388,7 +2412,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.VZEROJ')
         Transform: ensure_2d (convert to 2D array)
         """
-        vzeroj_key = Requirement(f'{self.measurements_node}.VZEROJ', shot, self.efit_tree).as_key()
+        vzeroj_key = Requirement(f'{self.measurements_node}.VZEROJ', self._get_efit_shot(shot), self.efit_tree).as_key()
         j_tor_all_times = raw_data[vzeroj_key]
 
         # Apply time filtering
@@ -2406,126 +2430,126 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_ip_measured_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose IP measured error with time filtering."""
-        sigpasma_key = Requirement(f'{self.measurements_node}.SIGPASMA', shot, self.efit_tree).as_key()
+        sigpasma_key = Requirement(f'{self.measurements_node}.SIGPASMA', self._get_efit_shot(shot), self.efit_tree).as_key()
         error_all_times = raw_data[sigpasma_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return error_all_times[time_indices]
 
     def _compose_ip_weight(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose IP weight with time filtering."""
-        fwtpasma_key = Requirement(f'{self.measurements_node}.FWTPASMA', shot, self.efit_tree).as_key()
+        fwtpasma_key = Requirement(f'{self.measurements_node}.FWTPASMA', self._get_efit_shot(shot), self.efit_tree).as_key()
         weight_all_times = raw_data[fwtpasma_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return weight_all_times[time_indices]
 
     def _compose_ip_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose IP chi squared with time filtering."""
-        chipasma_key = Requirement(f'{self.measurements_node}.CHIPASMA', shot, self.efit_tree).as_key()
+        chipasma_key = Requirement(f'{self.measurements_node}.CHIPASMA', self._get_efit_shot(shot), self.efit_tree).as_key()
         chi_sq_all_times = raw_data[chipasma_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return chi_sq_all_times[time_indices]
 
     def _compose_bpol_probe_measured(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose bpol probe measured with time filtering."""
-        expmpi_key = Requirement(f'{self.measurements_node}.EXPMPI', shot, self.efit_tree).as_key()
+        expmpi_key = Requirement(f'{self.measurements_node}.EXPMPI', self._get_efit_shot(shot), self.efit_tree).as_key()
         measured_all_times = raw_data[expmpi_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return measured_all_times[time_indices]
 
     def _compose_bpol_probe_measured_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose bpol probe measured error with time filtering."""
-        sigmpi_key = Requirement(f'{self.measurements_node}.SIGMPI', shot, self.efit_tree).as_key()
+        sigmpi_key = Requirement(f'{self.measurements_node}.SIGMPI', self._get_efit_shot(shot), self.efit_tree).as_key()
         error_all_times = raw_data[sigmpi_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return error_all_times[time_indices]
 
     def _compose_bpol_probe_weight(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose bpol probe weight with time filtering."""
-        fwtmp2_key = Requirement(f'{self.measurements_node}.FWTMP2', shot, self.efit_tree).as_key()
+        fwtmp2_key = Requirement(f'{self.measurements_node}.FWTMP2', self._get_efit_shot(shot), self.efit_tree).as_key()
         weight_all_times = raw_data[fwtmp2_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return weight_all_times[time_indices]
 
     def _compose_bpol_probe_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose bpol probe reconstructed with time filtering."""
-        cmpr2_key = Requirement(f'{self.measurements_node}.CMPR2', shot, self.efit_tree).as_key()
+        cmpr2_key = Requirement(f'{self.measurements_node}.CMPR2', self._get_efit_shot(shot), self.efit_tree).as_key()
         reconstructed_all_times = raw_data[cmpr2_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return reconstructed_all_times[time_indices]
 
     def _compose_bpol_probe_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose bpol probe chi squared with time filtering."""
-        saimpi_key = Requirement(f'{self.measurements_node}.SAIMPI', shot, self.efit_tree).as_key()
+        saimpi_key = Requirement(f'{self.measurements_node}.SAIMPI', self._get_efit_shot(shot), self.efit_tree).as_key()
         chi_sq_all_times = raw_data[saimpi_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return chi_sq_all_times[time_indices]
 
     def _compose_diamagnetic_flux_measured(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose diamagnetic flux measured with time filtering."""
-        diamag_key = Requirement(f'{self.measurements_node}.DIAMAG', shot, self.efit_tree).as_key()
+        diamag_key = Requirement(f'{self.measurements_node}.DIAMAG', self._get_efit_shot(shot), self.efit_tree).as_key()
         measured_all_times = raw_data[diamag_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return measured_all_times[time_indices]
 
     def _compose_diamagnetic_flux_measured_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose diamagnetic flux measured error with time filtering."""
-        sigdia_key = Requirement(f'{self.measurements_node}.SIGDIA', shot, self.efit_tree).as_key()
+        sigdia_key = Requirement(f'{self.measurements_node}.SIGDIA', self._get_efit_shot(shot), self.efit_tree).as_key()
         error_all_times = raw_data[sigdia_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return error_all_times[time_indices]
 
     def _compose_diamagnetic_flux_weight(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose diamagnetic flux weight with time filtering."""
-        fwtdia_key = Requirement(f'{self.measurements_node}.FWTDIA', shot, self.efit_tree).as_key()
+        fwtdia_key = Requirement(f'{self.measurements_node}.FWTDIA', self._get_efit_shot(shot), self.efit_tree).as_key()
         weight_all_times = raw_data[fwtdia_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return weight_all_times[time_indices]
 
     def _compose_diamagnetic_flux_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose diamagnetic flux reconstructed with time filtering."""
-        cdflux_key = Requirement(f'{self.measurements_node}.CDFLUX', shot, self.efit_tree).as_key()
+        cdflux_key = Requirement(f'{self.measurements_node}.CDFLUX', self._get_efit_shot(shot), self.efit_tree).as_key()
         reconstructed_all_times = raw_data[cdflux_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return reconstructed_all_times[time_indices]
 
     def _compose_diamagnetic_flux_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose diamagnetic flux chi squared with time filtering."""
-        chidflux_key = Requirement(f'{self.measurements_node}.CHIDFLUX', shot, self.efit_tree).as_key()
+        chidflux_key = Requirement(f'{self.measurements_node}.CHIDFLUX', self._get_efit_shot(shot), self.efit_tree).as_key()
         chi_sq_all_times = raw_data[chidflux_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return chi_sq_all_times[time_indices]
 
     def _compose_flux_loop_weight(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose flux loop weight with time filtering."""
-        fwtsi_key = Requirement(f'{self.measurements_node}.FWTSI', shot, self.efit_tree).as_key()
+        fwtsi_key = Requirement(f'{self.measurements_node}.FWTSI', self._get_efit_shot(shot), self.efit_tree).as_key()
         weight_all_times = raw_data[fwtsi_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return weight_all_times[time_indices]
 
     def _compose_flux_loop_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose flux loop chi squared with time filtering."""
-        saisil_key = Requirement(f'{self.measurements_node}.SAISIL', shot, self.efit_tree).as_key()
+        saisil_key = Requirement(f'{self.measurements_node}.SAISIL', self._get_efit_shot(shot), self.efit_tree).as_key()
         chi_sq_all_times = raw_data[saisil_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return chi_sq_all_times[time_indices]
 
     def _compose_mse_weight(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose MSE weight with time filtering."""
-        fwtgam_key = Requirement(f'{self.measurements_node}.FWTGAM', shot, self.efit_tree).as_key()
+        fwtgam_key = Requirement(f'{self.measurements_node}.FWTGAM', self._get_efit_shot(shot), self.efit_tree).as_key()
         weight_all_times = raw_data[fwtgam_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return weight_all_times[time_indices]
 
     def _compose_mse_reconstructed(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose MSE reconstructed with time filtering."""
-        cmgam_key = Requirement(f'{self.measurements_node}.CMGAM', shot, self.efit_tree).as_key()
+        cmgam_key = Requirement(f'{self.measurements_node}.CMGAM', self._get_efit_shot(shot), self.efit_tree).as_key()
         reconstructed_all_times = raw_data[cmgam_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return reconstructed_all_times[time_indices]
 
     def _compose_mse_chi_squared(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose MSE chi squared with time filtering."""
-        chigam_key = Requirement(f'{self.measurements_node}.CHIGAM', shot, self.efit_tree).as_key()
+        chigam_key = Requirement(f'{self.measurements_node}.CHIGAM', self._get_efit_shot(shot), self.efit_tree).as_key()
         chi_sq_all_times = raw_data[chigam_key]
         time_indices = self._compose_constraint_time_indices(shot, raw_data)
         return chi_sq_all_times[time_indices]
@@ -2537,7 +2561,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.CPASMA)
         Transform: COCOS TOR (toroidal current)
         """
-        cpasma_key = Requirement(f'{self.geqdsk_node}.CPASMA', shot, self.efit_tree).as_key()
+        cpasma_key = Requirement(f'{self.geqdsk_node}.CPASMA', self._get_efit_shot(shot), self.efit_tree).as_key()
         ip = raw_data[cpasma_key]
         return self._apply_cocos_transform(ip, shot, raw_data, "equilibrium.time_slice.global_quantities.ip")
 
@@ -2548,7 +2572,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG)
         Transform: COCOS PSI (magnetic flux)
         """
-        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', self._get_efit_shot(shot), self.efit_tree).as_key()
         psi_axis = raw_data[ssimag_key]
         return self._apply_cocos_transform(psi_axis, shot, raw_data, "equilibrium.time_slice.global_quantities.psi_axis")
 
@@ -2559,7 +2583,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY)
         Transform: COCOS PSI (magnetic flux)
         """
-        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self._get_efit_shot(shot), self.efit_tree).as_key()
         psi_boundary = raw_data[ssibry_key]
         return self._apply_cocos_transform(psi_boundary, shot, raw_data, "equilibrium.time_slice.global_quantities.psi_boundary")
 
@@ -2570,53 +2594,53 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.AREA)/10000.
         Transform: cm² to m² (divide by 10000)
         """
-        area_key = Requirement(f'{self.aeqdsk_node}.AREA', shot, self.efit_tree).as_key()
+        area_key = Requirement(f'{self.aeqdsk_node}.AREA', self._get_efit_shot(shot), self.efit_tree).as_key()
         area_cm2 = raw_data[area_key]
         return area_cm2 / 10000.0
 
     def _compose_global_li_3(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for li_3."""
-        li3_key = Requirement(f'{self.aeqdsk_node}.LI3', shot, self.efit_tree).as_key()
+        li3_key = Requirement(f'{self.aeqdsk_node}.LI3', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[li3_key]
 
     def _compose_global_magnetic_axis_r(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for magnetic_axis.r."""
-        rmaxis_key = Requirement(f'{self.geqdsk_node}.RMAXIS', shot, self.efit_tree).as_key()
+        rmaxis_key = Requirement(f'{self.geqdsk_node}.RMAXIS', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[rmaxis_key]
 
     def _compose_global_magnetic_axis_z(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for magnetic_axis.z."""
-        zmaxis_key = Requirement(f'{self.geqdsk_node}.ZMAXIS', shot, self.efit_tree).as_key()
+        zmaxis_key = Requirement(f'{self.geqdsk_node}.ZMAXIS', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[zmaxis_key]
 
     def _compose_global_magnetic_axis_b_field_tor(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for magnetic_axis.b_field_tor."""
-        bt0_key = Requirement(f'{self.aeqdsk_node}.BT0', shot, self.efit_tree).as_key()
+        bt0_key = Requirement(f'{self.aeqdsk_node}.BT0', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[bt0_key]
 
     def _compose_global_surface(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for surface."""
-        psurfa_key = Requirement(f'{self.aeqdsk_node}.PSURFA', shot, self.efit_tree).as_key()
+        psurfa_key = Requirement(f'{self.aeqdsk_node}.PSURFA', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[psurfa_key]
 
     def _compose_global_volume(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for volume."""
-        volume_key = Requirement(f'{self.aeqdsk_node}.VOLUME', shot, self.efit_tree).as_key()
+        volume_key = Requirement(f'{self.aeqdsk_node}.VOLUME', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[volume_key]
 
     def _compose_global_beta_pol(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for beta_pol."""
-        betap_key = Requirement(f'{self.aeqdsk_node}.BETAP', shot, self.efit_tree).as_key()
+        betap_key = Requirement(f'{self.aeqdsk_node}.BETAP', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[betap_key]
 
     def _compose_global_beta_tor(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for beta_tor."""
-        betat_key = Requirement(f'{self.aeqdsk_node}.BETAT', shot, self.efit_tree).as_key()
+        betat_key = Requirement(f'{self.aeqdsk_node}.BETAT', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[betat_key]
 
     def _compose_global_beta_normal(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for beta_normal."""
-        betan_key = Requirement(f'{self.aeqdsk_node}.BETAN', shot, self.efit_tree).as_key()
+        betan_key = Requirement(f'{self.aeqdsk_node}.BETAN', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[betan_key]
 
     def _compose_global_q_95(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -2626,7 +2650,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.Q95)
         Transform: COCOS Q (safety factor)
         """
-        q95_key = Requirement(f'{self.aeqdsk_node}.Q95', shot, self.efit_tree).as_key()
+        q95_key = Requirement(f'{self.aeqdsk_node}.Q95', self._get_efit_shot(shot), self.efit_tree).as_key()
         q95 = raw_data[q95_key]
         return self._apply_cocos_transform(q95, shot, raw_data, "equilibrium.time_slice.global_quantities.q_95")
 
@@ -2637,7 +2661,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.Q0)
         Transform: COCOS Q (safety factor)
         """
-        q0_key = Requirement(f'{self.aeqdsk_node}.Q0', shot, self.efit_tree).as_key()
+        q0_key = Requirement(f'{self.aeqdsk_node}.Q0', self._get_efit_shot(shot), self.efit_tree).as_key()
         q_axis = raw_data[q0_key]
         return self._apply_cocos_transform(q_axis, shot, raw_data, "equilibrium.time_slice.global_quantities.q_axis")
 
@@ -2648,7 +2672,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.QMIN)
         Transform: COCOS Q (safety factor)
         """
-        qmin_key = Requirement(f'{self.aeqdsk_node}.QMIN', shot, self.efit_tree).as_key()
+        qmin_key = Requirement(f'{self.aeqdsk_node}.QMIN', self._get_efit_shot(shot), self.efit_tree).as_key()
         q_min = raw_data[qmin_key]
         return self._apply_cocos_transform(q_min, shot, raw_data, "equilibrium.time_slice.global_quantities.q_min.value")
 
@@ -2659,13 +2683,13 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.PPRIME)
         Transform: COCOS dPSI (inverse PSI, 1/(2π) factor)
         """
-        pprime_key = Requirement(f'{self.geqdsk_node}.PPRIME', shot, self.efit_tree).as_key()
+        pprime_key = Requirement(f'{self.geqdsk_node}.PPRIME', self._get_efit_shot(shot), self.efit_tree).as_key()
         dpressure_dpsi = raw_data[pprime_key]
         return self._apply_cocos_transform(dpressure_dpsi, shot, raw_data, "equilibrium.time_slice.profiles_1d.dpressure_dpsi")
 
     def _compose_profiles_1d_f(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for f (poloidal current function)."""
-        fpol_key = Requirement(f'{self.geqdsk_node}.FPOL', shot, self.efit_tree).as_key()
+        fpol_key = Requirement(f'{self.geqdsk_node}.FPOL', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[fpol_key]
 
     def _compose_profiles_1d_f_df_dpsi(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -2675,13 +2699,13 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.FFPRIM)
         Transform: COCOS dPSI (inverse PSI, 1/(2π) factor)
         """
-        ffprim_key = Requirement(f'{self.geqdsk_node}.FFPRIM', shot, self.efit_tree).as_key()
+        ffprim_key = Requirement(f'{self.geqdsk_node}.FFPRIM', self._get_efit_shot(shot), self.efit_tree).as_key()
         f_df_dpsi = raw_data[ffprim_key]
         return self._apply_cocos_transform(f_df_dpsi, shot, raw_data, "equilibrium.time_slice.profiles_1d.f_df_dpsi")
 
     def _compose_profiles_1d_pressure(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for pressure profile."""
-        pres_key = Requirement(f'{self.geqdsk_node}.PRES', shot, self.efit_tree).as_key()
+        pres_key = Requirement(f'{self.geqdsk_node}.PRES', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[pres_key]
 
     def _compose_profiles_1d_psi(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -2691,9 +2715,9 @@ class EquilibriumMapper(IDSMapper):
         OMAS: py2tdi(geqdsk_psi,'\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY','\\EFIT::TOP.RESULTS.GEQDSK.PSIN')
         Transform: PSIN * (SSIBRY - SSIMAG) + SSIMAG, then apply COCOS PSI
         """
-        psin_key = Requirement(f'{self.geqdsk_node}.PSIN', shot, self.efit_tree).as_key()
-        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
-        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
+        psin_key = Requirement(f'{self.geqdsk_node}.PSIN', self._get_efit_shot(shot), self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', self._get_efit_shot(shot), self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         psin = raw_data[psin_key]
         ssimag = raw_data[ssimag_key]
@@ -2710,13 +2734,13 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.QPSI)
         Transform: COCOS Q (safety factor)
         """
-        qpsi_key = Requirement(f'{self.geqdsk_node}.QPSI', shot, self.efit_tree).as_key()
+        qpsi_key = Requirement(f'{self.geqdsk_node}.QPSI', self._get_efit_shot(shot), self.efit_tree).as_key()
         q = raw_data[qpsi_key]
         return self._apply_cocos_transform(q, shot, raw_data, "equilibrium.time_slice.profiles_1d.q")
 
     def _compose_profiles_1d_rho_tor_norm(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for rho_tor_norm."""
-        rhovn_key = Requirement(f'{self.geqdsk_node}.RHOVN', shot, self.efit_tree).as_key()
+        rhovn_key = Requirement(f'{self.geqdsk_node}.RHOVN', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[rhovn_key]
 
     def _compose_profiles_1d_j_tor(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -2727,11 +2751,11 @@ class EquilibriumMapper(IDSMapper):
                      '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY','\\EFIT::TOP.RESULTS.GEQDSK.PSIN')
         Transform: Interpolate from FLUXFUN.PSI/JEFF to GEQDSK.PSIN grid
         """
-        fluxfun_psi_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.PSI', shot, self.efit_tree).as_key()
-        fluxfun_jeff_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.JEFF', shot, self.efit_tree).as_key()
-        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
-        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
-        psin_key = Requirement(f'{self.geqdsk_node}.PSIN', shot, self.efit_tree).as_key()
+        fluxfun_psi_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.PSI', self._get_efit_shot(shot), self.efit_tree).as_key()
+        fluxfun_jeff_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.JEFF', self._get_efit_shot(shot), self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', self._get_efit_shot(shot), self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self._get_efit_shot(shot), self.efit_tree).as_key()
+        psin_key = Requirement(f'{self.geqdsk_node}.PSIN', self._get_efit_shot(shot), self.efit_tree).as_key()
         # Fluxfun quantities comes as (radial direction, time), but we need (time, radial direction/psi)
         fluxfun_psi = raw_data[fluxfun_psi_key].T
         fluxfun_jeff = raw_data[fluxfun_jeff_key].T
@@ -2759,11 +2783,11 @@ class EquilibriumMapper(IDSMapper):
                      '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY','\\EFIT::TOP.RESULTS.GEQDSK.PSIN')
         Transform: Interpolate from FLUXFUN.PSI/VOL to GEQDSK.PSIN grid
         """
-        fluxfun_psi_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.PSI', shot, self.efit_tree).as_key()
-        fluxfun_vol_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.VOL', shot, self.efit_tree).as_key()
-        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()
-        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()
-        psin_key = Requirement(f'{self.geqdsk_node}.PSIN', shot, self.efit_tree).as_key()
+        fluxfun_psi_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.PSI', self._get_efit_shot(shot), self.efit_tree).as_key()
+        fluxfun_vol_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.VOL', self._get_efit_shot(shot), self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', self._get_efit_shot(shot), self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self._get_efit_shot(shot), self.efit_tree).as_key()
+        psin_key = Requirement(f'{self.geqdsk_node}.PSIN', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         # Fluxfun quantities comes as (radial direction, time), but we need (time, radial direction/psi)
         fluxfun_psi = raw_data[fluxfun_psi_key].T
@@ -2792,8 +2816,8 @@ class EquilibriumMapper(IDSMapper):
         Transform: Tile R grid array to match time dimension
         TRANSPOSE: [1,0,2] - swap time and radial axes
         """
-        r_grid_key = Requirement(f'{self.geqdsk_node}.R', shot, self.efit_tree).as_key()
-        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+        r_grid_key = Requirement(f'{self.geqdsk_node}.R', self._get_efit_shot(shot), self.efit_tree).as_key()
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         r_grid = raw_data[r_grid_key]
         bcentr = raw_data[bcentr_key]
@@ -2815,8 +2839,8 @@ class EquilibriumMapper(IDSMapper):
         Transform: Tile Z grid array to match time dimension
         TRANSPOSE: [1,0,2] - swap time and vertical axes
         """
-        z_grid_key = Requirement(f'{self.geqdsk_node}.Z', shot, self.efit_tree).as_key()
-        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+        z_grid_key = Requirement(f'{self.geqdsk_node}.Z', self._get_efit_shot(shot), self.efit_tree).as_key()
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         z_grid = raw_data[z_grid_key]
         bcentr = raw_data[bcentr_key]
@@ -2835,7 +2859,7 @@ class EquilibriumMapper(IDSMapper):
         Transform: Create array of 1s matching time dimension
         TRANSPOSE: [1,0] - but result is 1D so no transpose needed
         """
-        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self._get_efit_shot(shot), self.efit_tree).as_key()
         bcentr = raw_data[bcentr_key]
         n_time = len(bcentr)
 
@@ -2849,7 +2873,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: [data(\\EFIT::TOP.RESULTS.GEQDSK.PSIRZ)]
         TRANSPOSE: [1, 0, 3, 2] - swap axes for (time, r, z) ordering
         """
-        psirz_key = Requirement(f'{self.geqdsk_node}.PSIRZ', shot, self.efit_tree).as_key()
+        psirz_key = Requirement(f'{self.geqdsk_node}.PSIRZ', self._get_efit_shot(shot), self.efit_tree).as_key()
         # Add grid dimension
         psirz = np.swapaxes(raw_data[psirz_key], 1,2)[:,None,:]
 
@@ -2862,7 +2886,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.BCENTR)
         """
-        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[bcentr_key]
 
     def _compose_vacuum_r0(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -2871,7 +2895,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: data(\\EFIT::TOP.RESULTS.GEQDSK.RZERO)[0]
         """
-        rzero_key = Requirement(f'{self.geqdsk_node}.RZERO', shot, self.efit_tree).as_key()
+        rzero_key = Requirement(f'{self.geqdsk_node}.RZERO', self._get_efit_shot(shot), self.efit_tree).as_key()
         rzero = raw_data[rzero_key]
         # RZERO is scalar per time slice, but OMAS takes [0] suggesting it might be an array
         # If it's already scalar, just return it; if array, take first element
@@ -2889,7 +2913,7 @@ class EquilibriumMapper(IDSMapper):
         Time filtering: CERROR is from MEASUREMENTS which has different time dimension (MTIME)
         than equilibrium time base (GTIME). Apply index mapping to align with GTIME.
         """
-        cerror_key = Requirement(f'\\{self.efit_tree}::TOP.MEASUREMENTS.CERROR', shot, self.efit_tree).as_key()
+        cerror_key = Requirement(f'\\{self.efit_tree}::TOP.MEASUREMENTS.CERROR', self._get_efit_shot(shot), self.efit_tree).as_key()
         cerror_all_times = raw_data[cerror_key]
 
         # Apply time filtering
@@ -2920,7 +2944,7 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.ERROR)
         """
-        error_key = Requirement(f'{self.aeqdsk_node}.ERROR', shot, self.efit_tree).as_key()
+        error_key = Requirement(f'{self.aeqdsk_node}.ERROR', self._get_efit_shot(shot), self.efit_tree).as_key()
         return raw_data[error_key]
 
     def _compose_convergence_grad_shafranov_deviation_expression_index(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -2930,7 +2954,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: EVAL 3
         Expression index 3 indicates a specific formulation of the GS equation residual.
         """
-        error_key = Requirement(f'{self.aeqdsk_node}.ERROR', shot, self.efit_tree).as_key()
+        error_key = Requirement(f'{self.aeqdsk_node}.ERROR', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         # Return array of 3s for each time slice
         return np.full(len(raw_data[error_key]), 3, dtype=int)
@@ -2959,8 +2983,8 @@ class EquilibriumMapper(IDSMapper):
 
         # Get Bt and Ip from GEQDSK data
         # Use mean values like OMAS does
-        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
-        cpasma_key = Requirement(f'{self.geqdsk_node}.CPASMA', shot, self.efit_tree).as_key()
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self._get_efit_shot(shot), self.efit_tree).as_key()
+        cpasma_key = Requirement(f'{self.geqdsk_node}.CPASMA', self._get_efit_shot(shot), self.efit_tree).as_key()
 
         bt = raw_data[bcentr_key]
         ip = raw_data[cpasma_key]
