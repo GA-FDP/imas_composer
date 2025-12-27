@@ -7,8 +7,16 @@ This is the main interface for external applications to use imas_composer.
 from typing import Dict, List, Tuple, Any, Optional
 from pathlib import Path
 import yaml
-from imas_composer.core import Requirement, RequirementStage
-from imas_composer.ids.ids_factory import IDSFactory
+from .core import Requirement, RequirementStage
+from .ids.ids_factory import IDSFactory
+
+# Optional OMAS import for simple_add utility
+try:
+    from omas import mdsvalue
+    OMAS_AVAILABLE = True
+except ImportError:
+    OMAS_AVAILABLE = False
+    mdsvalue = None
 
 
 
@@ -401,3 +409,159 @@ class ImasComposer:
             path for path, spec in mapper.specs.items()
             if spec.stage == RequirementStage.COMPUTED
         ]
+
+    def _fetch_requirements(self, requirements: List[Requirement]) -> Dict[Tuple[str, int, str], Any]:
+        """
+        Fetch multiple requirements from MDSplus in a single query.
+
+        This is a private method that requires OMAS to be installed.
+
+        Args:
+            requirements: List of Requirement objects to fetch
+
+        Returns:
+            Dict mapping requirement keys to fetched data
+
+        Raises:
+            RuntimeError: If OMAS is not available
+        """
+        if not OMAS_AVAILABLE:
+            raise RuntimeError(
+                "OMAS is required for _fetch_requirements but is not installed. "
+                "Install OMAS or use your own fetching mechanism."
+            )
+
+        if not requirements:
+            return {}
+
+        # Group by (treename, shot)
+        by_tree_shot = {}
+        for req in requirements:
+            key = (req.treename, req.shot)
+            if key not in by_tree_shot:
+                by_tree_shot[key] = []
+            by_tree_shot[key].append(req)
+
+        # Fetch each tree/shot combination separately
+        raw_data = {}
+        for (treename, shot), reqs in by_tree_shot.items():
+            tdi_query = {req.mds_path: req.mds_path for req in reqs}
+
+            try:
+                result = mdsvalue('d3d', treename=treename, pulse=shot, TDI=tdi_query)
+                tree_data = result.raw()
+
+                for req in reqs:
+                    try:
+                        raw_data[req.as_key()] = tree_data[req.mds_path]
+                    except Exception as e:
+                        raw_data[req.as_key()] = e
+            except Exception as e:
+                for req in reqs:
+                    raw_data[req.as_key()] = e
+
+        return raw_data
+
+
+def simple_load(
+    ids_paths: List[str],
+    shot: int,
+    composer: Optional[ImasComposer] = None,
+    efit_tree: str = "EFIT01",
+    efit_run_id: str = "01",
+    profiles_tree: str = "ZIPFIT01",
+    profiles_run_id: str = "001",
+    fast_ece: bool = False,
+    max_iterations: int = 10
+) -> Dict[str, Any]:
+    """
+    Simple utility function to resolve and compose IDS data in one call.
+
+    This function performs the resolve-fetch loop automatically, similar to
+    the benchmark_batch_resolve_compose pattern. It requires OMAS to be installed
+    for fetching data from MDSplus.
+
+    Args:
+        ids_paths: List of full IDS paths to compose (e.g., ['ece.channel.t_e.data'])
+        shot: Shot number
+        composer: Optional pre-configured ImasComposer instance. If None, creates new instance.
+        efit_tree: EFIT tree to use for equilibrium data (default: 'EFIT01', ignored if composer provided)
+        efit_run_id: Run id to append to pulse for 'EFIT' tree (default: '01', ignored if composer provided)
+        profiles_tree: Profiles tree to use for core_profiles data (default: 'ZIPFIT01', ignored if composer provided)
+        profiles_run_id: Run ID to append to pulse for OMFIT_PROFS tree (default: '001', ignored if composer provided)
+        fast_ece: Whether to load fast_ece data (default: False, ignored if composer provided)
+        max_iterations: Maximum number of resolve-fetch iterations (default: 10)
+
+    Returns:
+        Dict mapping each ids_path -> composed IDS data
+
+    Raises:
+        RuntimeError: If OMAS is not available, or if requirements cannot be resolved
+        Exception: If any requirement fetch fails
+
+    Example:
+        >>> # Simple single field
+        >>> result = simple_load(['equilibrium.time'], 200000)
+        >>> print(result['equilibrium.time'])
+
+        >>> # Multiple fields with custom EFIT tree
+        >>> result = simple_load(
+        ...     ['ece.channel.t_e.data', 'ece.channel.time'],
+        ...     180000,
+        ...     efit_tree='EFIT02'
+        ... )
+        >>> print(result['ece.channel.t_e.data'].shape)
+
+        >>> # With pre-configured composer
+        >>> composer = ImasComposer(efit_tree='EFIT02')
+        >>> result = simple_load(['equilibrium.time'], 200000, composer=composer)
+    """
+    if not OMAS_AVAILABLE:
+        raise RuntimeError(
+            "OMAS is required for simple_load but is not installed. "
+            "Please install OMAS or use the composer.resolve()/compose() API "
+            "with your own fetching mechanism."
+        )
+
+    # Use provided composer or create new instance
+    if composer is None:
+        composer = ImasComposer(
+            efit_tree=efit_tree,
+            efit_run_id=efit_run_id,
+            profiles_tree=profiles_tree,
+            profiles_run_id=profiles_run_id,
+            fast_ece=fast_ece
+        )
+
+    raw_data = {}
+
+    # Resolve-fetch loop
+    for iteration in range(max_iterations):
+        status, requirements = composer.resolve(ids_paths, shot, raw_data)
+
+        # Check if all paths are resolved
+        if all(status.values()):
+            break
+
+        # Fetch requirements using the private method
+        fetched = composer._fetch_requirements(requirements)
+
+        # Check for fetch errors
+        for key, value in fetched.items():
+            if isinstance(value, Exception):
+                raise RuntimeError(
+                    f"Failed to fetch requirement {key}: {value}"
+                ) from value
+
+        # Update raw_data
+        raw_data.update(fetched)
+    else:
+        # Loop completed without breaking (not all resolved)
+        unresolved = [path for path, resolved in status.items() if not resolved]
+        raise RuntimeError(
+            f"Could not resolve {unresolved} within {max_iterations} iterations"
+        )
+
+    # Compose final data
+    results = composer.compose(ids_paths, shot, raw_data)
+    return results

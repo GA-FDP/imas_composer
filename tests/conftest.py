@@ -186,47 +186,6 @@ def load_ids_fields(ids_name, tree_filter=None):
 # Utility Functions
 # ============================================================================
 
-def fetch_requirements(requirements: list[Requirement]) -> dict:
-    """
-    Fetch multiple requirements from MDSplus in a single query.
-
-    Args:
-        requirements: List of Requirement objects to fetch
-
-    Returns:
-        Dict mapping requirement keys to fetched data
-    """
-    if not requirements:
-        return {}
-
-    # Group by (treename, shot)
-    by_tree_shot = {}
-    for req in requirements:
-        key = (req.treename, req.shot)
-        if key not in by_tree_shot:
-            by_tree_shot[key] = []
-        by_tree_shot[key].append(req)
-
-    # Fetch each tree/shot combination separately
-    raw_data = {}
-    for (treename, shot), reqs in by_tree_shot.items():
-        tdi_query = {req.mds_path: req.mds_path for req in reqs}
-
-        try:
-            result = mdsvalue('d3d', treename=treename, pulse=shot, TDI=tdi_query)
-            tree_data = result.raw()
-
-            for req in reqs:
-                try:
-                    raw_data[req.as_key()] = tree_data[req.mds_path]
-                except Exception as e:
-                    raw_data[req.as_key()] = e
-        except Exception as e:
-            for req in reqs:
-                raw_data[req.as_key()] = e
-
-    return raw_data
-
 
 def check_field_shot_exclusion(ids_name, ids_path, shot):
     """
@@ -294,7 +253,7 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
             break
 
         # Fetch requirements
-        fetched = fetch_requirements(requirements)
+        fetched = composer._fetch_requirements(requirements)
 
         # Check if any fetched values are exceptions (from failed MDSplus access)
         for key, value in fetched.items():
