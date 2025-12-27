@@ -290,14 +290,17 @@ class ImasComposer:
             # Collect requirements based on stage
             if spec.stage == RequirementStage.DIRECT:
                 for req in spec.static_requirements:
+                    # Use mapper's resolve_shot to allow IDS-specific shot transformations
+                    resolved_shot = mapper.resolve_shot(shot)
                     requirements_by_path[original_path].append(
-                        Requirement(req.mds_path, shot, req.treename)
+                        Requirement(req.mds_path, resolved_shot, req.treename)
                     )
 
             elif spec.stage == RequirementStage.DERIVED:
                 if spec.derive_requirements:
                     # Try to derive requirements if we have the dependency data
                     try:
+                        # Pass original shot to derive_requirements - it will call resolve_shot if needed
                         derived_reqs = spec.derive_requirements(shot, raw_data)
                         requirements_by_path[original_path].extend(derived_reqs)
                     except (KeyError, Exception):
