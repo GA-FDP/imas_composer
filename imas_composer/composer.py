@@ -69,7 +69,7 @@ class ImasComposer:
 
     def __init__(self,
                  efit_tree: str = "EFIT01",
-                 efit_run_id: str = "01",
+                 efit_run_id: str|None = None,
                  profiles_tree: str = "ZIPFIT01",
                  profiles_run_id: str = "001",
                  fast_ece:bool = False):

@@ -1,4 +1,4 @@
-name: imas_composer
+name: imas_composer_312
 
 
 channels:
@@ -10,7 +10,7 @@ dependencies:
   - awkward
   - pyyaml
   - pytest
-  - numpy
+  - numpy 1.*
   - mdsplus
   - matplotlib
   - cython

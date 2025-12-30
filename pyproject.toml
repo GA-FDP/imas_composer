@@ -81,10 +81,18 @@ python_functions = ["test_*"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "benchmark: marks tests as benchmarks (deselect with '-m \"not benchmark\"')",
+    "baseline_validation: marks tests that validate data fetching against baseline (for cross-environment testing)",
+    "summary: marks tests that print summary information",
+    "omas_validation: marks tests that validate against OMAS reference implementation",
+    "integration: marks tests as integration tests that require external services",
+    "requires_mdsplus: marks tests that require MDSplus access to DIII-D data servers",
 ]
 addopts = [
     "-v",
     "--strict-markers",
+    "-x",  # Stop on first failure (fail-fast)
+    # Skip baseline_validation tests by default (opt-in only)
+    "-m", "not baseline_validation",
 ]
 
 [tool.black]
