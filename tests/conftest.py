@@ -336,7 +336,7 @@ def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float
         assert len(composer_val) == len(omas_val), f"{label}: array length mismatch"
 
         # Check dtype - handle strings and ints separately from floats
-        if np.issubdtype(omas_val.dtype, np.str_) or np.issubdtype(omas_val.dtype, np.unicode_):
+        if np.issubdtype(omas_val.dtype, np.str_):
             # String arrays - use exact comparison
             np.testing.assert_array_equal(
                 composer_val, omas_val,

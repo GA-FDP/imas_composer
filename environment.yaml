@@ -6,11 +6,11 @@ channels:
   - ga-fdp
 
 dependencies:
-  - python==3.12
+  - python==3.13
   - awkward
   - pyyaml
   - pytest
-  - numpy
+  - numpy 2.*
   - mdsplus
   - matplotlib
   - cython
