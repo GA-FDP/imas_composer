@@ -471,9 +471,9 @@ def simple_load(
     shot: int,
     composer: Optional[ImasComposer] = None,
     efit_tree: str = "EFIT01",
-    efit_run_id: str = "01",
+    efit_run_id: str|None = None,
     profiles_tree: str = "ZIPFIT01",
-    profiles_run_id: str = "001",
+    profiles_run_id: str|None = None,
     fast_ece: bool = False,
     max_iterations: int = 10
 ) -> Dict[str, Any]:
