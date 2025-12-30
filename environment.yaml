@@ -1,4 +1,4 @@
-name: imas_composer
+name: imas_composer_312
 
 
 channels:
@@ -6,11 +6,11 @@ channels:
   - ga-fdp
 
 dependencies:
-  - python==3.13
+  - python==3.12
   - awkward
   - pyyaml
   - pytest
-  - numpy 2.*
+  - numpy 1.*
   - mdsplus
   - matplotlib
   - cython
