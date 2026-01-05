@@ -1,0 +1,113 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "imas_composer"
+version = "0.1.0"
+description = "A Python library for converting DIII-D MDSplus data to IMAS (ITER Integrated Modelling & Analysis Suite) format"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "DIII-D Team"}
+]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+keywords = ["IMAS", "ITER", "fusion", "plasma", "MDSplus", "DIII-D"]
+
+# Core dependencies (required)
+dependencies = [
+    "numpy>=1.20",
+    "pyyaml>=5.4",
+    "awkward>=2.0",
+]
+
+[project.optional-dependencies]
+# Optional dependency for MDSplus data fetching
+# Users can install with: pip install imas_composer[mds]
+mds = [
+    "mdsplus",
+]
+
+# Optional dependency for OMAS integration (includes simple_load functionality)
+# Users can install with: pip install imas_composer[omas]
+omas = [
+    "mdsplus",
+    # Note: OMAS not included as it may need special installation
+    # Users should install OMAS separately from the appropriate branch
+]
+
+# Development dependencies
+# Install with: pip install imas_composer[dev]
+dev = [
+    "pytest>=7.0",
+    "pytest-benchmark>=4.0",
+]
+
+# Full installation (all optional dependencies except omas which needs manual install)
+# Install with: pip install imas_composer[full]
+full = [
+    "mdsplus",
+    "pytest>=7.0",
+    "pytest-benchmark>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/DIII-D/imas_composer"
+Repository = "https://github.com/DIII-D/imas_composer"
+Documentation = "https://github.com/DIII-D/imas_composer/blob/main/README.md"
+"Bug Tracker" = "https://github.com/DIII-D/imas_composer/issues"
+
+[tool.setuptools]
+packages = ["imas_composer", "imas_composer.ids"]
+
+[tool.setuptools.package-data]
+imas_composer = ["ids/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "benchmark: marks tests as benchmarks (deselect with '-m \"not benchmark\"')",
+    "baseline_validation: marks tests that validate data fetching against baseline (for cross-environment testing)",
+    "summary: marks tests that print summary information",
+    "omas_validation: marks tests that validate against OMAS reference implementation",
+    "integration: marks tests as integration tests that require external services",
+    "requires_mdsplus: marks tests that require MDSplus access to DIII-D data servers",
+]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "-x",  # Stop on first failure (fail-fast)
+    # Skip baseline_validation tests by default (opt-in only)
+    "-m", "not baseline_validation",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
