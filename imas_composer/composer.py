@@ -69,9 +69,9 @@ class ImasComposer:
 
     def __init__(self,
                  efit_tree: str = "EFIT01",
-                 efit_run_id: str|None = None,
+                 efit_run_id: str = "",
                  profiles_tree: str = "ZIPFIT01",
-                 profiles_run_id: str = "001",
+                 profiles_run_id: str = "",
                  fast_ece:bool = False):
         """
         Initialize ImasComposer.
@@ -471,9 +471,9 @@ def simple_load(
     shot: int,
     composer: Optional[ImasComposer] = None,
     efit_tree: str = "EFIT01",
-    efit_run_id: str|None = None,
+    efit_run_id: str = "",
     profiles_tree: str = "ZIPFIT01",
-    profiles_run_id: str|None = None,
+    profiles_run_id: str = "",
     fast_ece: bool = False,
     max_iterations: int = 10
 ) -> Dict[str, Any]:
@@ -489,9 +489,9 @@ def simple_load(
         shot: Shot number
         composer: Optional pre-configured ImasComposer instance. If None, creates new instance.
         efit_tree: EFIT tree to use for equilibrium data (default: 'EFIT01', ignored if composer provided)
-        efit_run_id: Run id to append to pulse for 'EFIT' tree (default: '01', ignored if composer provided)
+        efit_run_id: Run id to append to pulse for 'EFIT' tree (default: '', ignored if composer provided)
         profiles_tree: Profiles tree to use for core_profiles data (default: 'ZIPFIT01', ignored if composer provided)
-        profiles_run_id: Run ID to append to pulse for OMFIT_PROFS tree (default: '001', ignored if composer provided)
+        profiles_run_id: Run ID to append to pulse for OMFIT_PROFS tree (default: '', ignored if composer provided)
         fast_ece: Whether to load fast_ece data (default: False, ignored if composer provided)
         max_iterations: Maximum number of resolve-fetch iterations (default: 10)
 
