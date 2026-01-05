@@ -58,6 +58,6 @@ class IDSFactory:
             return self.IDS_list[ids_type + "_omfit"](**kwargs)
         else:
             raise ValueError(
-                f"Unknown profiles tree type: '{kwargs["profiles_tree"]}'. "
+                f"Unknown profiles tree type: '{kwargs['profiles_tree']}'. "
                 f"Expected tree name containing 'ZIPFIT' or 'OMFIT_PROFS'"
         )
