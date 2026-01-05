@@ -11,8 +11,8 @@ Run with: pytest tests/test_performance_benchmark.py -v --benchmark-only
 View stats: pytest tests/test_performance_benchmark.py --benchmark-autosave
 """
 import pytest
-from imas_composer import ImasComposer
-from tests.conftest import fetch_requirements, TEST_SHOTS
+from imas_composer import ImasComposer, simple_load
+from tests.conftest import TEST_SHOTS
 
 
 pytestmark = pytest.mark.benchmark
@@ -57,22 +57,9 @@ def benchmark_batch_resolve_compose(composer, fields, shot_cycler):
     Uses shot_cycler to avoid MDSplus caching effects.
     """
     shot = shot_cycler()
-    raw_data = {}
 
-    # Resolve all fields at once
-    for _ in range(10):  # Max iterations
-        status, requirements = composer.resolve(fields, shot, raw_data)
-
-        if all(status.values()):
-            break
-
-        # Fetch requirements
-        fetched = fetch_requirements(requirements)
-        raw_data.update(fetched)
-
-    # Compose all fields at once
-    results = composer.compose(fields, shot, raw_data)
-    return results
+    # Use simple_load with the pre-configured composer
+    return simple_load(fields, shot, composer=composer)
 
 
 def benchmark_sequential_resolve_compose(composer, fields, shot_cycler):
@@ -96,8 +83,8 @@ def benchmark_sequential_resolve_compose(composer, fields, shot_cycler):
             if all(status.values()):
                 break
 
-            # Fetch requirements
-            fetched = fetch_requirements(requirements)
+            # Fetch requirements using the private method
+            fetched = composer._fetch_requirements(requirements)
             raw_data.update(fetched)
 
         # Compose single field (as list of 1)
