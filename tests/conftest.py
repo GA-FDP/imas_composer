@@ -504,7 +504,8 @@ def pytest_generate_tests(metafunc):
 
                 for field in omfit_fields:
                     param_list.append((
-                        {'profiles_tree': 'OMFIT_PROFS'},
+                        {'profiles_tree': 'OMFIT_PROFS',
+                         'profiles_run_id': "001"},
                         field
                     ))
                     ids_list.append(f"OMFIT_PROFS-{field}")
