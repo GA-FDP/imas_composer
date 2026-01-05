@@ -1,4 +1,4 @@
-name: imas_composer
+name: imas_composer_312
 
 
 channels:
@@ -10,7 +10,7 @@ dependencies:
   - awkward
   - pyyaml
   - pytest
-  - numpy
+  - numpy 1.*
   - mdsplus
   - matplotlib
   - cython
@@ -25,7 +25,10 @@ dependencies:
   - xarray
   - pyro5
   - scipy
-  - pyyaml
   - h5py
   - conda-build
   - pytest-benchmark
+  - pip
+  - pip:
+    # Install imas_composer in editable mode from current directory
+    - -e .

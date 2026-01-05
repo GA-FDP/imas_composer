@@ -11,11 +11,42 @@ IMAS Composer provides a clean, declarative API for mapping DIII-D diagnostic an
 - **COCOS conversions**: Handling magnetic coordinate conventions
 - **Composition**: Assembling final IMAS-compliant data structures
 
+## Installation
+
+### Development Installation
+
+For development, install the package in editable mode using pip:
+
+```bash
+# Navigate to the imas_composer directory
+cd imas_composer
+
+# Install in editable mode with development dependencies
+pip install -e ".[dev]"
+
+# Or install with all optional dependencies
+pip install -e ".[full]"
+```
+
+**Important:** Use `pip install -e .` instead of `conda develop .` to ensure proper package resolution and relative imports work correctly.
+
+### Optional Dependencies
+
+- `[dev]` - Development tools (pytest, pytest-benchmark)
+- `[mds]` - MDSplus support for data fetching
+- `[full]` - All optional dependencies except OMAS
+
+OMAS should be installed separately from the appropriate branch:
+```bash
+# Install OMAS from specific branch
+pip install git+https://github.com/gafusion/omas.git@omas_mds_convert_to_64bit
+```
+
 ## VSCode Setup
 
 **Requirements:**
 - Python extension for VSCode
-- Python environment with `pytest` and `omas` (installed from the `omas_mds_convert_to_64bit` branch)
+- Package installed in editable mode (see Installation above)
 - MDSplus access configured (connection to DIII-D data servers)
 
 **Test Explorer Setup:**

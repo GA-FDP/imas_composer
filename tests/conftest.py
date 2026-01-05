@@ -45,6 +45,24 @@ TEST_SHOTS = [202161, 203321, 204602, 204601]
 
 
 # ============================================================================
+# Pytest Configuration
+# ============================================================================
+
+def pytest_addoption(parser):
+    """Add custom command line options for pytest."""
+    # Default to baseline_data.pkl in repo root
+    repo_root = Path(__file__).parent.parent
+    default_baseline = str(repo_root / 'baseline_data.pkl')
+
+    parser.addoption(
+        "--baseline-file",
+        action="store",
+        default=default_baseline,
+        help=f"Path to baseline pickle file for baseline validation tests (default: {default_baseline})"
+    )
+
+
+# ============================================================================
 # YAML Configuration Utilities
 # ============================================================================
 
@@ -186,47 +204,6 @@ def load_ids_fields(ids_name, tree_filter=None):
 # Utility Functions
 # ============================================================================
 
-def fetch_requirements(requirements: list[Requirement]) -> dict:
-    """
-    Fetch multiple requirements from MDSplus in a single query.
-
-    Args:
-        requirements: List of Requirement objects to fetch
-
-    Returns:
-        Dict mapping requirement keys to fetched data
-    """
-    if not requirements:
-        return {}
-
-    # Group by (treename, shot)
-    by_tree_shot = {}
-    for req in requirements:
-        key = (req.treename, req.shot)
-        if key not in by_tree_shot:
-            by_tree_shot[key] = []
-        by_tree_shot[key].append(req)
-
-    # Fetch each tree/shot combination separately
-    raw_data = {}
-    for (treename, shot), reqs in by_tree_shot.items():
-        tdi_query = {req.mds_path: req.mds_path for req in reqs}
-
-        try:
-            result = mdsvalue('d3d', treename=treename, pulse=shot, TDI=tdi_query)
-            tree_data = result.raw()
-
-            for req in reqs:
-                try:
-                    raw_data[req.as_key()] = tree_data[req.mds_path]
-                except Exception as e:
-                    raw_data[req.as_key()] = e
-        except Exception as e:
-            for req in reqs:
-                raw_data[req.as_key()] = e
-
-    return raw_data
-
 
 def check_field_shot_exclusion(ids_name, ids_path, shot):
     """
@@ -294,7 +271,7 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
             break
 
         # Fetch requirements
-        fetched = fetch_requirements(requirements)
+        fetched = composer._fetch_requirements(requirements)
 
         # Check if any fetched values are exceptions (from failed MDSplus access)
         for key, value in fetched.items():
@@ -357,6 +334,82 @@ def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float
     Raises:
         AssertionError: If values don't match
     """
+    # Handle awkward arrays first (before other checks)
+    if isinstance(composer_val, ak.Array) or isinstance(omas_val, ak.Array):
+        # For awkward arrays, use awkward's comparison utilities
+        # This handles both regular and ragged arrays properly
+
+        # Convert to awkward if needed
+        if not isinstance(composer_val, ak.Array):
+            composer_ak = ak.Array(composer_val)
+        else:
+            composer_ak = composer_val
+
+        if not isinstance(omas_val, ak.Array):
+            omas_ak = ak.Array(omas_val)
+        else:
+            omas_ak = omas_val
+
+        # Check lengths match
+        assert len(composer_ak) == len(omas_ak), f"{label}: array length mismatch"
+
+        # For ragged arrays, we need to compare element by element
+        # Check if arrays are ragged by attempting to convert to numpy
+        try:
+            composer_np = np.asarray(composer_ak)
+            omas_np = np.asarray(omas_ak)
+            is_ragged = False
+        except ValueError:
+            # Arrays are ragged - can't convert to regular numpy
+            is_ragged = True
+
+        if is_ragged:
+            # Compare ragged arrays element by element
+            for i in range(len(composer_ak)):
+                composer_elem = np.asarray(composer_ak[i])
+                omas_elem = np.asarray(omas_ak[i])
+
+                # Check element lengths match
+                assert len(composer_elem) == len(omas_elem), \
+                    f"{label}[{i}]: element length mismatch ({len(composer_elem)} vs {len(omas_elem)})"
+
+                # Compare based on dtype
+                if np.issubdtype(omas_elem.dtype, np.str_):
+                    np.testing.assert_array_equal(
+                        composer_elem, omas_elem,
+                        err_msg=f"{label}[{i}]: string element mismatch"
+                    )
+                elif np.issubdtype(omas_elem.dtype, np.integer):
+                    np.testing.assert_array_equal(
+                        composer_elem, omas_elem,
+                        err_msg=f"{label}[{i}]: int element mismatch"
+                    )
+                else:
+                    np.testing.assert_allclose(
+                        composer_elem, omas_elem,
+                        rtol=rtol, atol=atol_array,
+                        err_msg=f"{label}[{i}]: float element mismatch"
+                    )
+        else:
+            # Regular arrays - compare directly
+            if np.issubdtype(omas_np.dtype, np.str_):
+                np.testing.assert_array_equal(
+                    composer_np, omas_np,
+                    err_msg=f"{label}: string array mismatch"
+                )
+            elif np.issubdtype(omas_np.dtype, np.integer):
+                np.testing.assert_array_equal(
+                    composer_np, omas_np,
+                    err_msg=f"{label}: int array mismatch"
+                )
+            else:
+                np.testing.assert_allclose(
+                    composer_np, omas_np,
+                    rtol=rtol, atol=atol_array,
+                    err_msg=f"{label}: float array mismatch"
+                )
+        return
+
     if isinstance(omas_val, str):
         assert composer_val == omas_val, f"{label}: string mismatch"
 
@@ -377,7 +430,7 @@ def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float
         assert len(composer_val) == len(omas_val), f"{label}: array length mismatch"
 
         # Check dtype - handle strings and ints separately from floats
-        if np.issubdtype(omas_val.dtype, np.str_) or np.issubdtype(omas_val.dtype, np.unicode_):
+        if np.issubdtype(omas_val.dtype, np.str_):
             # String arrays - use exact comparison
             np.testing.assert_array_equal(
                 composer_val, omas_val,

@@ -1,10 +1,10 @@
 """
 IDS Mapper Factory
 
-This module provides a factory function to create the appropriate IDSMapper depending on 
+This module provides a factory function to create the appropriate IDSMapper depending on
 tree selection
 """
-from imas_composer.ids.base import IDSMapper
+from .base import IDSMapper
 import importlib
 import pkgutil
 import pathlib
