@@ -38,8 +38,8 @@ def get_all_test_fields():
         'thomson_scattering',
         'ec_launchers',
         'core_profiles',
+        'nbi',
         'wall'
-        
     ]
 
     all_fields = {}

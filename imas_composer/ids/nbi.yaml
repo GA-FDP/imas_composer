@@ -1,0 +1,27 @@
+# NBI (Neutral Beam Injection) IDS Configuration for DIII-D
+
+# Static values (hardcoded, not from MDSplus)
+static_values:
+  # Default species mass number (deuterium)
+  default_species_a: 2.0
+
+# NBI configuration
+# DIII-D beam names
+beam_names:
+  - "30L"
+  - "30R"
+  - "15L"
+  - "15R"
+  - "21L"
+  - "21R"
+  - "33L"
+  - "33R"
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  - unit.name
+  - unit.power_launched.time
+  - unit.power_launched.data
+  - unit.energy.time
+  - unit.energy.data
+  - unit.species.a
