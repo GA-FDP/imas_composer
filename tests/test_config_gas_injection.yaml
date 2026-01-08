@@ -1,0 +1,27 @@
+# Test configuration for Gas Injection IDS
+
+# Field-level exceptions for validation
+field_exceptions: {}
+
+# Requirement validation settings
+requirement_validation:
+  # No MDSplus data needed - all fields are static hardware geometry
+  allow_different_shot: []
+
+# OMAS path mapping
+# Maps imas_composer notation to OMAS notation for fetching reference data
+# For pipe and valve fields, OMAS uses .: to index all pipes/valves at once
+omas_path_map:
+  # Pipe fields (add .: to fetch all pipes)
+  gas_injection.pipe.name: gas_injection.pipe.:.name
+  gas_injection.pipe.valve_indices: gas_injection.pipe.:.valve_indices
+  gas_injection.pipe.exit_position.r: gas_injection.pipe.:.exit_position.r
+  gas_injection.pipe.exit_position.z: gas_injection.pipe.:.exit_position.z
+  gas_injection.pipe.exit_position.phi: gas_injection.pipe.:.exit_position.phi
+  gas_injection.pipe.second_point.r: gas_injection.pipe.:.second_point.r
+  gas_injection.pipe.second_point.z: gas_injection.pipe.:.second_point.z
+  gas_injection.pipe.second_point.phi: gas_injection.pipe.:.second_point.phi
+
+  # Valve fields (add .: to fetch all valves)
+  gas_injection.valve.identifier: gas_injection.valve.:.identifier
+  gas_injection.valve.pipe_indices: gas_injection.valve.:.pipe_indices
