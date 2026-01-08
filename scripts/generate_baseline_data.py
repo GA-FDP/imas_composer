@@ -37,8 +37,9 @@ def get_all_test_fields():
         'ece',
         'thomson_scattering',
         'ec_launchers',
+        'reflectometer_profile',
         'core_profiles',
-        'gas_injection'
+        'gas_injection',
         'nbi',
         'wall'
     ]
