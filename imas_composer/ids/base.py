@@ -79,3 +79,29 @@ class IDSMapper:
             List of IMAS schema paths (e.g., ['channel.name', 'channel.t_e.data'])
         """
         return self.supported_fields
+
+    def resolve_shot(self, shot: int) -> int:
+        """
+        Resolve shot number for this IDS.
+
+        This method can be overridden by subclasses to modify the shot number
+        before it's used in Requirements (e.g., to append run IDs).
+
+        Args:
+            shot: Base shot number
+
+        Returns:
+            Resolved shot number (default: unchanged)
+
+        Example:
+            # Default behavior (most IDS mappers)
+            >>> mapper = IDSMapper()
+            >>> mapper.resolve_shot(200000)
+            200000
+
+            # Equilibrium with run_id (overridden)
+            >>> eq_mapper = EquilibriumMapper(efit_run_id='01')
+            >>> eq_mapper.resolve_shot(200000)
+            20000001
+        """
+        return shot

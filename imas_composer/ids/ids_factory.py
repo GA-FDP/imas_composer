@@ -1,10 +1,10 @@
 """
 IDS Mapper Factory
 
-This module provides a factory function to create the appropriate IDSMapper depending on 
+This module provides a factory function to create the appropriate IDSMapper depending on
 tree selection
 """
-from imas_composer.ids.base import IDSMapper
+from .base import IDSMapper
 import importlib
 import pkgutil
 import pathlib
@@ -58,6 +58,6 @@ class IDSFactory:
             return self.IDS_list[ids_type + "_omfit"](**kwargs)
         else:
             raise ValueError(
-                f"Unknown profiles tree type: '{kwargs["profiles_tree"]}'. "
+                f"Unknown profiles tree type: '{kwargs['profiles_tree']}'. "
                 f"Expected tree name containing 'ZIPFIT' or 'OMFIT_PROFS'"
         )

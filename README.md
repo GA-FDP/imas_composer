@@ -11,11 +11,42 @@ IMAS Composer provides a clean, declarative API for mapping DIII-D diagnostic an
 - **COCOS conversions**: Handling magnetic coordinate conventions
 - **Composition**: Assembling final IMAS-compliant data structures
 
+## Installation
+
+### Development Installation
+
+For development, install the package in editable mode using pip:
+
+```bash
+# Navigate to the imas_composer directory
+cd imas_composer
+
+# Install in editable mode with development dependencies
+pip install -e ".[dev]"
+
+# Or install with all optional dependencies
+pip install -e ".[full]"
+```
+
+**Important:** Use `pip install -e .` instead of `conda develop .` to ensure proper package resolution and relative imports work correctly.
+
+### Optional Dependencies
+
+- `[dev]` - Development tools (pytest, pytest-benchmark)
+- `[mds]` - MDSplus support for data fetching
+- `[full]` - All optional dependencies except OMAS
+
+OMAS should be installed separately from the appropriate branch:
+```bash
+# Install OMAS from specific branch
+pip install git+https://github.com/gafusion/omas.git@omas_mds_convert_to_64bit
+```
+
 ## VSCode Setup
 
 **Requirements:**
 - Python extension for VSCode
-- Python environment with `pytest` and `omas` (installed from the `omas_mds_convert_to_64bit` branch)
+- Package installed in editable mode (see Installation above)
 - MDSplus access configured (connection to DIII-D data servers)
 
 **Test Explorer Setup:**
@@ -119,9 +150,9 @@ Claude will read the OMAS implementation and create:
 - Test configuration mappings
 
 For most mappings the only changes that should be required are:
-- Creating a python file with the mappings and associated yaml settings in 'ids/' (2 files)
-- Importing the mapper and registering it in `composer.py` (2 lines)
-- Creating a the test files and settings `test_*.yaml`, `test_*_requirements.py`, and `test_*_composition.py` (3 files)
+- Create a python file with the mappings and associated yaml settings in `ids/` (2 files)
+- Create the test files and settings `test_*.yaml`, `test_*_requirements.py`, and `test_*_composition.py` (3 files)
+- Add the new IDS to the list in `scripts/generate_baseline_data.py` (1 new line)
 
 #### 2. Test and iterate
 
