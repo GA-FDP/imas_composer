@@ -37,7 +37,9 @@ def get_all_test_fields():
         'ece',
         'thomson_scattering',
         'ec_launchers',
-        'core_profiles'
+        'core_profiles',
+        'wall'
+        
     ]
 
     all_fields = {}
