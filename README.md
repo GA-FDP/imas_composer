@@ -150,9 +150,9 @@ Claude will read the OMAS implementation and create:
 - Test configuration mappings
 
 For most mappings the only changes that should be required are:
-- Creating a python file with the mappings and associated yaml settings in 'ids/' (2 files)
-- Importing the mapper and registering it in `composer.py` (2 lines)
-- Creating a the test files and settings `test_*.yaml`, `test_*_requirements.py`, and `test_*_composition.py` (3 files)
+- Create a python file with the mappings and associated yaml settings in `ids/` (2 files)
+- Create the test files and settings `test_*.yaml`, `test_*_requirements.py`, and `test_*_composition.py` (3 files)
+- Add the new IDS to the list in `scripts/generate_baseline_data.py` (1 new line)
 
 #### 2. Test and iterate
 
