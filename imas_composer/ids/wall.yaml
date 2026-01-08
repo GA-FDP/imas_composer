@@ -1,0 +1,20 @@
+# Wall IDS Configuration for DIII-D
+
+# Static values (hardcoded, not from MDSplus)
+static_values:
+  description_2d.0.limiter.type.index: 0
+  ids_properties.homogeneous_time: 1
+  time: [0.0]
+
+# EFIT tree configuration
+# Note: EFIT01, EFIT02, etc. are different equilibrium reconstructions
+# Wall data comes from EFIT GEQDSK results
+default_efit_tree: EFIT01
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  - description_2d.0.limiter.unit.0.outline.r
+  - description_2d.0.limiter.unit.0.outline.z
+  - description_2d.0.limiter.type.index
+  - time
+  - ids_properties.homogeneous_time
