@@ -38,6 +38,7 @@ def get_all_test_fields():
         'thomson_scattering',
         'ec_launchers',
         'core_profiles'
+        'gas_injection'
     ]
 
     all_fields = {}
