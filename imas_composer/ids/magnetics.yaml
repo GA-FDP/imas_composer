@@ -1,0 +1,10 @@
+# Magnetics IDS Configuration for DIII-D
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  - ip.0.data
+  - ip.0.time
+  - ip.0.data_error_upper
+  - diamagnetic_flux.0.data
+  - diamagnetic_flux.0.time
+  - diamagnetic_flux.0.data_error_upper
