@@ -54,6 +54,10 @@ field_tolerances:
   # OMAS does the cm^2 -> m^2 conversion on the MDSplus side where everything is 32 bit
     rtol: 1.0e-6
     atol: 1.0e-6
+  equilibrium.time_slice.boundary_separatrix.minor_radius:
+     # OMAS does the cm^2 -> m^2 conversion on the MDSplus side where everything is 32 bit
+      rtol: 1.0e-8
+      atol: 1.0e-8
 
 # Requirement validation settings
 requirement_validation:
