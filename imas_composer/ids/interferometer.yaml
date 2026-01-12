@@ -1,0 +1,34 @@
+# Interferometer IDS Configuration for DIII-D CO2 Interferometer and RIP
+
+# Static values (hardcoded, not from MDSplus)
+static_values: {}
+
+# Supported fields (complete list of implemented IDS paths)
+# Note: Number of channels varies based on include_rip parameter:
+#   - CO2 only: 4 channels (r0, v1, v2, v3)
+#   - CO2 + RIP: 7-8 channels (r0, v1, v2, v3, Z, P, N, [T])
+#     RIP only available for shots >= 168823
+#     T channel only available for shots > 202680
+fields:
+  # Channel metadata (arrays across all channels)
+  - channel.identifier
+  - channel.name
+
+  # Line of sight geometry (arrays across all channels)
+  - channel.line_of_sight.first_point.r
+  - channel.line_of_sight.first_point.z
+  - channel.line_of_sight.first_point.phi
+  - channel.line_of_sight.second_point.r
+  - channel.line_of_sight.second_point.z
+  - channel.line_of_sight.second_point.phi
+  - channel.line_of_sight.third_point.r
+  - channel.line_of_sight.third_point.z
+  - channel.line_of_sight.third_point.phi
+
+  # Wavelength (arrays across all channels)
+  - channel.wavelength.0.value
+
+  # Measurement data (arrays across all channels)
+  - channel.n_e_line.time
+  - channel.n_e_line.data
+  - channel.n_e_line.validity_timed

@@ -36,6 +36,7 @@ def get_all_test_fields():
         'equilibrium',
         'ece',
         'thomson_scattering',
+        'interferometer',
         'ec_launchers',
         'reflectometer_profile',
         'core_profiles',
