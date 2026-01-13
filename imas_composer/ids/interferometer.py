@@ -275,6 +275,19 @@ class InterferometerMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # Error estimate depends on density, validity, and time data
+        error_deps = density_deps.copy()
+        error_deps.extend([f"interferometer._co2_channel_{i}_validity" for i in range(self.N_CO2_CHANNELS)])
+        error_deps.extend(["interferometer._co2_time", "interferometer._co2_time_valid"])
+
+        self.specs["interferometer.channel.n_e_line.data_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=error_deps,
+            compose=self._compose_n_e_line_data_error_upper,
+            ids_path="interferometer.channel.n_e_line.data_error_upper",
+            docs_file=self.DOCS_PATH
+        )
+
         # Validity depends on all channel validity requirements plus time bases
         validity_deps = [f"interferometer._co2_channel_{i}_validity" for i in range(self.N_CO2_CHANNELS)]
         validity_deps.extend(["interferometer._co2_time", "interferometer._co2_time_valid"])
@@ -338,11 +351,12 @@ class InterferometerMapper(IDSMapper):
 
         return requirements
 
-    def _process_rip_phase_data(self, shot: int, raw_data: dict, channel: str) -> np.ndarray:
+    def _process_rip_phase_data(self, shot: int, raw_data: dict, channel: str):
         """
         Process RIP phase data for a single channel, applying all corrections.
 
-        Returns the processed phase data (not yet converted to density).
+        Returns:
+            tuple: (phase, phase_error) where phase_error is None for shots < 177052
         """
         tree = 'RPI'
         identifier = self._get_rip_identifier(channel, shot)
@@ -360,7 +374,7 @@ class InterferometerMapper(IDSMapper):
         ioff = np.searchsorted(time_s, 0)
 
         if shot < 177052:
-            # Old format - single measurement
+            # Old format - single measurement (no error estimate)
             rip_key = Requirement(f"\\{tree}::{identifier}", shot, tree).as_key()
             phase_data = raw_data[rip_key].copy()
 
@@ -371,6 +385,7 @@ class InterferometerMapper(IDSMapper):
 
             # Sign correction: ensure positivity
             phase = phase_data * np.sign(phase_data.mean())
+            phase_error = None
         else:
             # New format - process 4 measurements with unwrapping and fringe corrections
             phases = np.zeros([n_int, len(time_s)])
@@ -399,7 +414,10 @@ class InterferometerMapper(IDSMapper):
             # Use median across measurements (axis 0) for each time point
             phase = np.median(phases, axis=0)
 
-        return phase
+            # Calculate phase error (std across measurements + mean std before t=0)
+            phase_error = phases.std(axis=0) + phases[:, 1:ioff].std(axis=1).mean()
+
+        return phase, phase_error
 
     # Helper methods for geometry
     def _get_co2_geometry(self, channel_idx: int) -> dict:
@@ -700,7 +718,7 @@ class InterferometerMapper(IDSMapper):
             if rip_channels:
                 for ch in rip_channels:
                     # Process phase data using helper method
-                    phase = self._process_rip_phase_data(shot, raw_data, ch)
+                    phase, phase_error = self._process_rip_phase_data(shot, raw_data, ch)
 
                     # Apply conversion factor (phase to density)
                     conv = self._get_rip_conversion_factor(ch)
@@ -709,6 +727,87 @@ class InterferometerMapper(IDSMapper):
         # Return as awkward array if time bases differ
         import awkward as ak
         return ak.Array(all_data)
+
+    def _compose_n_e_line_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Return upper error estimate for line-integrated density data.
+
+        For CO2 channels: Error = median of absolute values before t=0 (pre-shot noise)
+        For RIP channels with shot >= 177052: Error from std of 4 measurements
+        For RIP channels with shot < 177052: No error estimate (empty arrays)
+
+        Returns:
+            Awkward array with shape matching n_e_line.data
+        """
+        import awkward as ak
+        all_errors = []
+
+        # CO2 channels: Error based on pre-shot noise level
+        bci_tree = self._get_bci_tree(shot)
+
+        # Get time array to find pre-shot region
+        time_key = Requirement(f"dim_of(\\{bci_tree}.DENR0)", shot, 'BCI').as_key()
+        time_ms = raw_data[time_key]
+        time_s = time_ms / 1e3
+
+        # Get validity for each CO2 channel
+        time_valid_key = Requirement(f"dim_of(\\{bci_tree}.STATR0)", shot, 'BCI').as_key()
+        time_valid_ms = raw_data[time_valid_key]
+
+        for name in self.CO2_CHANNEL_NAMES:
+            identifier = name.upper()
+            density_key = Requirement(f"\\{bci_tree}.DEN{identifier}", shot, 'BCI').as_key()
+            density = raw_data[density_key]
+
+            # Get validity for this channel
+            validity_key = Requirement(f"\\{bci_tree}.STAT{identifier}", shot, 'BCI').as_key()
+            validity = raw_data[validity_key]
+
+            # Interpolate validity to match data time base
+            from scipy.interpolate import interp1d
+            validity_interp = interp1d(
+                time_valid_ms / 1.0e3,
+                -validity,
+                kind='nearest',
+                bounds_error=False,
+                fill_value='extrapolate',
+                assume_sorted=True,
+            )(time_s)
+
+            # Calculate error as median of absolute values before t=0
+            ne_err = np.zeros(density.shape)
+            ne_err[:] = np.median(np.abs(density[time_s < 0])) * 1e6
+
+            # Set error to inf where validity is negative (invalid)
+            ne_err[validity_interp < 0] = np.inf
+
+            all_errors.append(ne_err)
+
+        # RIP data (if enabled and available)
+        if self.include_rip:
+            rip_channels = self._get_rip_channel_names(shot)
+            if rip_channels:
+                for ch in rip_channels:
+                    # Process phase data using helper method
+                    phase, phase_error = self._process_rip_phase_data(shot, raw_data, ch)
+
+                    if phase_error is not None:
+                        # Convert phase error to density error
+                        conv = self._get_rip_conversion_factor(ch)
+                        ne_line_err = phase_error * conv
+
+                        # Also need to get n_e_line data to set invalid points to inf
+                        ne_line = phase * conv
+
+                        # Set error to inf where data is negative (invalid)
+                        ne_line_err[ne_line < 0] = np.inf
+
+                        all_errors.append(ne_line_err)
+                    else:
+                        # Old shots (< 177052): no error estimate
+                        all_errors.append(np.array([]))
+
+        return ak.Array(all_errors)
 
     def _compose_n_e_line_validity_timed(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -752,7 +851,7 @@ class InterferometerMapper(IDSMapper):
             if rip_channels:
                 for ch in rip_channels:
                     # Process phase data using helper method
-                    phase = self._process_rip_phase_data(shot, raw_data, ch)
+                    phase, phase_error = self._process_rip_phase_data(shot, raw_data, ch)
 
                     # Convert to density
                     conv = self._get_rip_conversion_factor(ch)

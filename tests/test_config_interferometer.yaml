@@ -3,7 +3,7 @@
 # Override default TEST_SHOTS for interferometer
 # RIP data only available for shots >= 168823
 # T channel only available for shots > 202680
-override_shots: [200000, 202680]
+override_shots: [200000, 203886]
 
 # Field-level exceptions for validation
 field_exceptions: {}
@@ -63,4 +63,5 @@ omas_path_map:
   interferometer.channel.wavelength.0.value: interferometer.channel.:.wavelength.:.value
   interferometer.channel.n_e_line.time: interferometer.channel.:.n_e_line.time
   interferometer.channel.n_e_line.data: interferometer.channel.:.n_e_line.data
+  interferometer.channel.n_e_line.data_error_upper: interferometer.channel.:.n_e_line.data_error_upper
   interferometer.channel.n_e_line.validity_timed: interferometer.channel.:.n_e_line.validity_timed

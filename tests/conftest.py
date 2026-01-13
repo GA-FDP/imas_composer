@@ -566,6 +566,49 @@ def pytest_generate_tests(metafunc):
 
                 metafunc.parametrize('composer_params', param_list, ids=ids_list, indirect=True)
 
+        # Check if this is an ECE test
+        elif 'ece' in metafunc.module.__name__:
+            if 'ids_path' in metafunc.fixturenames:
+                # Load test config to get variants
+                test_config = load_test_config('ece')
+                test_variants = test_config.get('test_variants', {})
+
+                # Create parameter combinations: (composer_params, ids_path)
+                param_list = []
+                ids_list = []
+
+                for variant_name, variant_config in test_variants.items():
+                    composer_params = variant_config.get('composer_params', {})
+                    exclude_fields = variant_config.get('exclude_fields', [])
+
+                    # Get all fields and filter out excluded ones
+                    all_fields = load_ids_fields('ece')
+                    filtered_fields = [f for f in all_fields if f not in exclude_fields]
+
+                    for field in filtered_fields:
+                        param_list.append((
+                            composer_params,
+                            field
+                        ))
+                        ids_list.append(f"{variant_name}-{field}")
+
+                # Parametrize both fixtures together
+                metafunc.parametrize('composer_params,ids_path', param_list, ids=ids_list, indirect=['composer_params'])
+            else:
+                # No ids_path, just parametrize composer across variants
+                test_config = load_test_config('ece')
+                test_variants = test_config.get('test_variants', {})
+
+                param_list = []
+                ids_list = []
+
+                for variant_name, variant_config in test_variants.items():
+                    composer_params = variant_config.get('composer_params', {})
+                    param_list.append(composer_params)
+                    ids_list.append(variant_name)
+
+                metafunc.parametrize('composer_params', param_list, ids=ids_list, indirect=True)
+
 
 @pytest.fixture(scope='module')
 def composer(composer_params):
@@ -617,7 +660,7 @@ def omas_data():
 
     def _fetch_omas_data(ids_name, ids_path=None, shot=REFERENCE_SHOT, reset_cache=False,
                          efit_tree=None, profiles_tree=None, profiles_run_id=None,
-                         include_rip=None, include_CO2=None, include_RIP=None):
+                         include_rip=None, include_CO2=None, include_RIP=None, fast_ece=False):
         # Load defaults from YAML if not provided
         if efit_tree is None:
             efit_tree = _load_yaml_default('equilibrium.yaml', 'default_efit_tree', 'EFIT01')
@@ -637,8 +680,8 @@ def omas_data():
         if ids_path is None:
             ids_path = f'{ids_name}.*'
 
-        # Use shot + profiles_tree + interferometer params as cache key
-        cache_key = (shot, profiles_tree, profiles_run_id, include_CO2, include_RIP)
+        # Use shot + profiles_tree + interferometer params + ECE params as cache key
+        cache_key = (shot, profiles_tree, profiles_run_id, include_CO2, include_RIP, fast_ece)
 
         # If reset_cache=True, clear cache and create new ODS
         if reset_cache or cache_key not in cache:
@@ -659,6 +702,9 @@ def omas_data():
             # For interferometer, pass include_CO2 and include_RIP to OMAS
             options['include_CO2'] = include_CO2
             options['include_RIP'] = include_RIP
+        elif ids_name == 'ece':
+            # For ECE, pass fast_ece to OMAS
+            options['fast_ece'] = fast_ece
 
         # For equilibrium with specific path, fetch only that field
         # For others, use wildcard
@@ -832,6 +878,9 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
     # Get interferometer parameters from composer (if interferometer)
     include_rip = getattr(composer, 'include_rip', False)
 
+    # Get ECE parameters from composer (if ECE)
+    fast_ece = getattr(composer, 'fast_ece', False)
+
     # Get OMAS parameters from test config variants (if available)
     # This allows test config to override composer parameters for OMAS calls
     test_variants = test_config.get('test_variants', {})
@@ -845,10 +894,18 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
             if variant_composer_params.get('include_rip') == include_rip:
                 omas_params = variant_config.get('omas_params', {})
                 break
+    elif ids_name == 'ece' and test_variants:
+        for variant_name, variant_config in test_variants.items():
+            variant_composer_params = variant_config.get('composer_params', {})
+            # Check if this variant matches current composer config
+            if variant_composer_params.get('fast_ece') == fast_ece:
+                omas_params = variant_config.get('omas_params', {})
+                break
 
     # Extract OMAS-specific parameters
     include_CO2 = omas_params.get('include_CO2')
     include_RIP = omas_params.get('include_RIP')
+    fast_ece_omas = omas_params.get('fast_ece')
 
     # Fetch OMAS ODS object
     # For equilibrium and ec_launchers, fetch only specific fields to avoid loading unwanted data
@@ -873,6 +930,10 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
         # For interferometer, pass include_CO2 and include_RIP parameters
         ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
                        include_CO2=include_CO2, include_RIP=include_RIP)
+    elif ids_name == 'ece':
+        # For ECE, pass fast_ece parameter
+        ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
+                       fast_ece=fast_ece_omas)
     else:
         ods = omas_data(ids_name, shot=shot,
                        profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)

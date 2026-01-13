@@ -31,7 +31,7 @@ class EceMapper(IDSMapper):
         # MDSplus path prefixes
         self.setup_node = '\\ECE::TOP.SETUP.'
         self.cal_node = f'\\ECE::TOP.CAL{self.fast_suffix}.'
-        self.tece_node = f'\\ECE::TOP.TECE.TECE{self.fast_suffix}'
+        self.tece_node = f'\\ECE::TOP.TECE{self.fast_suffix}.TECE{self.fast_suffix}'
 
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
