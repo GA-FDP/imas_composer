@@ -1,0 +1,11 @@
+# Magnetics IDS Configuration for DIII-D
+
+# Supported fields (complete list of implemented IDS paths)
+# Note: ip and diamagnetic_flux are arrays of measurements (length 1 for DIII-D)
+fields:
+  - ip.data
+  - ip.time
+  - ip.data_error_upper
+  - diamagnetic_flux.data
+  - diamagnetic_flux.time
+  - diamagnetic_flux.data_error_upper

@@ -1,0 +1,12 @@
+# TF (Toroidal Field) IDS Configuration for DIII-D
+
+# Static values (hardcoded, not from MDSplus)
+static_values:
+  # Major radius for DIII-D vacuum toroidal field (meters)
+  vacuum_r: 1.6955
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  - b_field_tor_vacuum_r.data
+  - b_field_tor_vacuum_r.time
+  - b_field_tor_vacuum_r.data_error_upper
