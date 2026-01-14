@@ -12,11 +12,11 @@ requirement_validation:
 # Maps imas_composer notation to OMAS notation for fetching reference data
 omas_path_map:
   # Plasma current (index 0)
-  magnetics.ip.0.data: magnetics.ip.0.data
-  magnetics.ip.0.time: magnetics.ip.0.time
-  magnetics.ip.0.data_error_upper: magnetics.ip.0.data_error_upper
+  magnetics.ip.data: magnetics.ip.:.data
+  magnetics.ip.time: magnetics.ip.:.time
+  magnetics.ip.data_error_upper: magnetics.ip.:.data_error_upper
 
   # Diamagnetic flux (index 0)
-  magnetics.diamagnetic_flux.0.data: magnetics.diamagnetic_flux.0.data
-  magnetics.diamagnetic_flux.0.time: magnetics.diamagnetic_flux.0.time
-  magnetics.diamagnetic_flux.0.data_error_upper: magnetics.diamagnetic_flux.0.data_error_upper
+  magnetics.diamagnetic_flux.data: magnetics.diamagnetic_flux.:.data
+  magnetics.diamagnetic_flux.time: magnetics.diamagnetic_flux.:.time
+  magnetics.diamagnetic_flux.data_error_upper: magnetics.diamagnetic_flux.:.data_error_upper
