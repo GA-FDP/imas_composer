@@ -113,7 +113,7 @@ class TfMapper(IDSMapper):
         """
         Compute uncertainty for toroidal field.
 
-        From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0
+        From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0 * vacuum_r
         where header is from pthead2("BT", shot)
         """
         # Get the data to determine time length
@@ -124,8 +124,9 @@ class TfMapper(IDSMapper):
         header_key = Requirement(f'pthead2("BT",{shot}), __rarray', shot, None).as_key()
         header = raw_data[header_key]
 
-        # OMAS formula: abs(header[3] * header[4]) * ones(nt) * 10.0
-        return np.abs(header[3] * header[4]) * np.ones(nt) * 10.0
+        # OMAS formula: abs(header[3] * header[4]) * ones(nt) * 10.0 * vacuum_r
+        vacuum_r = self.static_values['vacuum_r']
+        return np.abs(header[3] * header[4]) * np.ones(nt) * 10.0 * vacuum_r
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         return self.specs
