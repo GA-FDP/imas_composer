@@ -73,51 +73,52 @@ class MagneticsMapper(IDSMapper):
         )
 
         # User-facing fields - COMPUTED stage
-        self.specs["magnetics.ip.0.data"] = IDSEntrySpec(
+        # Note: ip and diamagnetic_flux are arrays (dimension 0 is measurement index)
+        self.specs["magnetics.ip.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["magnetics._ip_data"],
             compose=self._compose_ip_data,
-            ids_path="magnetics.ip.0.data",
+            ids_path="magnetics.ip.data",
             docs_file=self.CONFIG_PATH
         )
 
-        self.specs["magnetics.ip.0.time"] = IDSEntrySpec(
+        self.specs["magnetics.ip.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["magnetics._ip_time"],
             compose=self._compose_ip_time,
-            ids_path="magnetics.ip.0.time",
+            ids_path="magnetics.ip.time",
             docs_file=self.CONFIG_PATH
         )
 
-        self.specs["magnetics.ip.0.data_error_upper"] = IDSEntrySpec(
+        self.specs["magnetics.ip.data_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["magnetics._ip_data", "magnetics._ip_header"],
             compose=self._compose_ip_data_error_upper,
-            ids_path="magnetics.ip.0.data_error_upper",
+            ids_path="magnetics.ip.data_error_upper",
             docs_file=self.CONFIG_PATH
         )
 
-        self.specs["magnetics.diamagnetic_flux.0.data"] = IDSEntrySpec(
+        self.specs["magnetics.diamagnetic_flux.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["magnetics._diamag_data"],
             compose=self._compose_diamagnetic_flux_data,
-            ids_path="magnetics.diamagnetic_flux.0.data",
+            ids_path="magnetics.diamagnetic_flux.data",
             docs_file=self.CONFIG_PATH
         )
 
-        self.specs["magnetics.diamagnetic_flux.0.time"] = IDSEntrySpec(
+        self.specs["magnetics.diamagnetic_flux.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["magnetics._diamag_time"],
             compose=self._compose_diamagnetic_flux_time,
-            ids_path="magnetics.diamagnetic_flux.0.time",
+            ids_path="magnetics.diamagnetic_flux.time",
             docs_file=self.CONFIG_PATH
         )
 
-        self.specs["magnetics.diamagnetic_flux.0.data_error_upper"] = IDSEntrySpec(
+        self.specs["magnetics.diamagnetic_flux.data_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["magnetics._diamag_data", "magnetics._diamag_header"],
             compose=self._compose_diamagnetic_flux_data_error_upper,
-            ids_path="magnetics.diamagnetic_flux.0.data_error_upper",
+            ids_path="magnetics.diamagnetic_flux.data_error_upper",
             docs_file=self.CONFIG_PATH
         )
 
@@ -148,18 +149,27 @@ class MagneticsMapper(IDSMapper):
 
     # Compose functions
     def _compose_ip_data(self, shot: int, raw_data: dict) -> np.ndarray:
-        """Get plasma current data."""
+        """
+        Get plasma current data.
+
+        Returns array of shape (n_measurements, n_time).
+        For DIII-D: (1, n_time) - single Ip measurement.
+        """
         data_key = Requirement(f'ptdata2("IP",{shot})', shot, None).as_key()
-        return raw_data[data_key]
+        # Add measurement dimension: (n_time,) -> (1, n_time)
+        return raw_data[data_key][np.newaxis, :]
 
     def _compose_ip_time(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Get plasma current time base with unit conversion.
 
         From OMAS: dim_of(...,0)/1000. (convert ms to s)
+        Returns array of shape (n_measurements, n_time).
+        For DIII-D: (1, n_time) - single Ip measurement.
         """
         time_key = Requirement(f'dim_of(ptdata2("IP",{shot}),0)', shot, None).as_key()
-        return raw_data[time_key] / 1000.0
+        # Add measurement dimension: (n_time,) -> (1, n_time)
+        return (raw_data[time_key] / 1000.0)[np.newaxis, :]
 
     def _compose_ip_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -167,6 +177,8 @@ class MagneticsMapper(IDSMapper):
 
         From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0
         where header is from pthead2("IP", shot)
+        Returns array of shape (n_measurements, n_time).
+        For DIII-D: (1, n_time) - single Ip measurement.
         """
         # Get the data to determine time length
         data_key = Requirement(f'ptdata2("IP",{shot})', shot, None).as_key()
@@ -177,32 +189,41 @@ class MagneticsMapper(IDSMapper):
         header = raw_data[header_key]
 
         # OMAS formula: abs(header[3] * header[4]) * ones(nt) * 10.0
-        return np.abs(header[3] * header[4]) * np.ones(nt) * 10.0
+        # Add measurement dimension: (n_time,) -> (1, n_time)
+        return (np.abs(header[3] * header[4]) * np.ones(nt) * 10.0)[np.newaxis, :]
 
     def _compose_diamagnetic_flux_data(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Get diamagnetic flux data with unit conversion.
 
         From OMAS: data * 1e-3 (convert to Weber)
+        Returns array of shape (n_measurements, n_time).
+        For DIII-D: (1, n_time) - single diamagnetic flux measurement.
         """
         data_key = Requirement(f'ptdata2("DIAMAG3",{shot})', shot, None).as_key()
-        return raw_data[data_key] * 1e-3
+        # Add measurement dimension: (n_time,) -> (1, n_time)
+        return (raw_data[data_key] * 1e-3)[np.newaxis, :]
 
     def _compose_diamagnetic_flux_time(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Get diamagnetic flux time base with unit conversion.
 
         From OMAS: dim_of(...,0)/1000. (convert ms to s)
+        Returns array of shape (n_measurements, n_time).
+        For DIII-D: (1, n_time) - single diamagnetic flux measurement.
         """
         time_key = Requirement(f'dim_of(ptdata2("DIAMAG3",{shot}),0)', shot, None).as_key()
-        return raw_data[time_key] / 1000.0
+        # Add measurement dimension: (n_time,) -> (1, n_time)
+        return (raw_data[time_key] / 1000.0)[np.newaxis, :]
 
     def _compose_diamagnetic_flux_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Compute uncertainty for diamagnetic flux.
 
-        From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0
+        From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0 / 1000.0
         where header is from pthead2("DIAMAG3", shot)
+        Returns array of shape (n_measurements, n_time).
+        For DIII-D: (1, n_time) - single diamagnetic flux measurement.
         """
         # Get the data to determine time length
         data_key = Requirement(f'ptdata2("DIAMAG3",{shot})', shot, None).as_key()
@@ -212,8 +233,9 @@ class MagneticsMapper(IDSMapper):
         header_key = Requirement(f'pthead2("DIAMAG3",{shot}), __rarray', shot, None).as_key()
         header = raw_data[header_key]
 
-        # OMAS formula: abs(header[3] * header[4]) * ones(nt) * 10.0 /1000.0
-        return np.abs(header[3] * header[4]) * np.ones(nt) / 100.0
+        # OMAS formula: abs(header[3] * header[4]) * ones(nt) / 100.0
+        # Add measurement dimension: (n_time,) -> (1, n_time)
+        return (np.abs(header[3] * header[4]) * np.ones(nt) / 100.0)[np.newaxis, :]
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         return self.specs
