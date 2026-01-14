@@ -1,0 +1,22 @@
+# Test configuration for Magnetics IDS
+
+# Field-level exceptions for validation
+field_exceptions: {}
+
+# Requirement validation settings
+requirement_validation:
+  # MDSplus paths that use calibration/setup data (shot 0), not the requested shot
+  allow_different_shot: []
+
+# OMAS path mapping
+# Maps imas_composer notation to OMAS notation for fetching reference data
+omas_path_map:
+  # Plasma current (index 0)
+  magnetics.ip.data: magnetics.ip.:.data
+  magnetics.ip.time: magnetics.ip.:.time
+  magnetics.ip.data_error_upper: magnetics.ip.:.data_error_upper
+
+  # Diamagnetic flux (index 0)
+  magnetics.diamagnetic_flux.data: magnetics.diamagnetic_flux.:.data
+  magnetics.diamagnetic_flux.time: magnetics.diamagnetic_flux.:.time
+  magnetics.diamagnetic_flux.data_error_upper: magnetics.diamagnetic_flux.:.data_error_upper
