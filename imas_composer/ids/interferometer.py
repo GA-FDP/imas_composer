@@ -753,7 +753,6 @@ class InterferometerMapper(IDSMapper):
         # Get validity for each CO2 channel
         time_valid_key = Requirement(f"dim_of(\\{bci_tree}.STATR0)", shot, 'BCI').as_key()
         time_valid_ms = raw_data[time_valid_key]
-
         for name in self.CO2_CHANNEL_NAMES:
             identifier = name.upper()
             density_key = Requirement(f"\\{bci_tree}.DEN{identifier}", shot, 'BCI').as_key()
@@ -776,7 +775,7 @@ class InterferometerMapper(IDSMapper):
 
             # Calculate error as median of absolute values before t=0
             ne_err = np.zeros(density.shape)
-            ne_err[:] = np.median(np.abs(density[time_s < 0])) * 1e6
+            ne_err[:] = np.std(np.abs(density[np.logical_and(time_s < 0, time_s > -0.5)])) * 1e6
 
             # Set error to inf where validity is negative (invalid)
             ne_err[validity_interp < 0] = np.inf
@@ -825,7 +824,6 @@ class InterferometerMapper(IDSMapper):
         time_valid_ms = raw_data[time_valid_key]
 
         all_validity = []
-
         # CO2 validity
         for name in self.CO2_CHANNEL_NAMES:
             identifier = name.upper()
