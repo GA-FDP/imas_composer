@@ -1,0 +1,132 @@
+"""
+Toroidal Field (TF) IDS Mapping for DIII-D
+
+Maps toroidal magnetic field data to IMAS tf IDS.
+See OMAS: omas/machine_mappings/d3d.py::ip_bt_dflux_data
+"""
+
+from typing import Dict, List
+import numpy as np
+
+from ..core import RequirementStage, Requirement, IDSEntrySpec
+from .base import IDSMapper
+
+
+class TfMapper(IDSMapper):
+    """Maps DIII-D toroidal field data to IMAS tf IDS."""
+
+    CONFIG_PATH = "tf.yaml"
+
+    def __init__(self, **kwargs):
+        """Initialize TF mapper."""
+        # Initialize base class (loads config, static_values, supported_fields)
+        super().__init__()
+
+        # Build IDS specs
+        self._build_specs()
+
+    def _build_specs(self):
+        """Build all IDS entry specifications"""
+
+        # Toroidal field - auxiliary nodes
+        self.specs["tf._bt_data"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=self._derive_bt_data_requirements,
+            ids_path="tf._bt_data",
+            docs_file=self.CONFIG_PATH
+        )
+
+        self.specs["tf._bt_time"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=self._derive_bt_time_requirements,
+            ids_path="tf._bt_time",
+            docs_file=self.CONFIG_PATH
+        )
+
+        self.specs["tf._bt_header"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=self._derive_bt_header_requirements,
+            ids_path="tf._bt_header",
+            docs_file=self.CONFIG_PATH
+        )
+
+        # User-facing fields - COMPUTED stage
+        self.specs["tf.b_field_tor_vacuum_r.data"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["tf._bt_data"],
+            compose=self._compose_bt_data,
+            ids_path="tf.b_field_tor_vacuum_r.data",
+            docs_file=self.CONFIG_PATH
+        )
+
+        self.specs["tf.b_field_tor_vacuum_r.time"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["tf._bt_time"],
+            compose=self._compose_bt_time,
+            ids_path="tf.b_field_tor_vacuum_r.time",
+            docs_file=self.CONFIG_PATH
+        )
+
+        self.specs["tf.b_field_tor_vacuum_r.data_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["tf._bt_data", "tf._bt_header"],
+            compose=self._compose_bt_data_error_upper,
+            ids_path="tf.b_field_tor_vacuum_r.data_error_upper",
+            docs_file=self.CONFIG_PATH
+        )
+
+    # Requirement derivation functions
+    def _derive_bt_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
+        """Derive requirements for BT data (needs shot number in TDI expression)."""
+        return [Requirement(f'ptdata2("BT",{shot})', shot, None)]
+
+    def _derive_bt_time_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
+        """Derive requirements for BT time dimension (needs shot number in TDI expression)."""
+        return [Requirement(f'dim_of(ptdata2("BT",{shot}),0)', shot, None)]
+
+    def _derive_bt_header_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
+        """Derive requirements for BT header (needs shot number in TDI expression)."""
+        return [Requirement(f'pthead2("BT",{shot}), __rarray', shot, None)]
+
+    # Compose functions
+    def _compose_bt_data(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Get toroidal field data with DIII-D specific scaling.
+
+        From OMAS: data * vacuum_r
+        This converts from the measured value to the field at the vacuum vessel radius.
+        """
+        data_key = Requirement(f'ptdata2("BT",{shot})', shot, None).as_key()
+        vacuum_r = self.static_values['vacuum_r']
+        return raw_data[data_key] * vacuum_r
+
+    def _compose_bt_time(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Get toroidal field time base with unit conversion.
+
+        From OMAS: dim_of(...,0)/1000. (convert ms to s)
+        """
+        time_key = Requirement(f'dim_of(ptdata2("BT",{shot}),0)', shot, None).as_key()
+        return raw_data[time_key] / 1000.0
+
+    def _compose_bt_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compute uncertainty for toroidal field.
+
+        From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0 * vacuum_r
+        where header is from pthead2("BT", shot)
+        """
+        # Get the data to determine time length
+        data_key = Requirement(f'ptdata2("BT",{shot})', shot, None).as_key()
+        nt = len(raw_data[data_key])
+
+        # Get header information
+        header_key = Requirement(f'pthead2("BT",{shot}), __rarray', shot, None).as_key()
+        header = raw_data[header_key]
+
+        # OMAS formula: abs(header[3] * header[4]) * ones(nt) * 10.0 * vacuum_r
+        vacuum_r = self.static_values['vacuum_r']
+        return np.abs(header[3] * header[4]) * np.ones(nt) * 10.0 * vacuum_r
+
+    def get_specs(self) -> Dict[str, IDSEntrySpec]:
+        return self.specs

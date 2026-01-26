@@ -41,7 +41,9 @@ def get_all_test_fields():
         'core_profiles',
         'gas_injection',
         'nbi',
-        'wall'
+        'wall',
+        'magnetics',
+        'tf'
     ]
 
     all_fields = {}
