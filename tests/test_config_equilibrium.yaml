@@ -66,6 +66,18 @@ field_tolerances:
      # OMAS does the cm^2 -> m^2 conversion on the MDSplus side where everything is 32 bit
       rtol: 1.0e-8
       atol: 1.0e-8
+  equilibrium.time_slice.profiles_2d.b_field_tor:
+    # Uses interpolation and gradient calculations
+    rtol: 1.0e-5
+    atol: 1.0e-7
+  equilibrium.time_slice.profiles_2d.b_field_r:
+    # Uses numpy.gradient for derivative calculations
+    rtol: 1.0e-5
+    atol: 1.0e-7
+  equilibrium.time_slice.profiles_2d.b_field_z:
+    # Uses numpy.gradient for derivative calculations
+    rtol: 1.0e-5
+    atol: 1.0e-7
 
 # Requirement validation settings
 requirement_validation:

@@ -1677,6 +1677,41 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        self.specs["equilibrium.time_slice.profiles_2d.b_field_tor"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "equilibrium._r_grid", "equilibrium._z_grid", "equilibrium._bcentr",
+                "equilibrium._psirz", "equilibrium._cpasma_cocos",
+                "equilibrium._psin", "equilibrium._ssimag", "equilibrium._ssibry",
+                "equilibrium._fpol"
+            ],
+            compose=self._compose_profiles_2d_b_field_tor,
+            ids_path="equilibrium.time_slice.profiles_2d.b_field_tor",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium.time_slice.profiles_2d.b_field_r"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "equilibrium._r_grid", "equilibrium._z_grid", "equilibrium._bcentr",
+                "equilibrium._psirz", "equilibrium._cpasma_cocos"
+            ],
+            compose=self._compose_profiles_2d_b_field_r,
+            ids_path="equilibrium.time_slice.profiles_2d.b_field_r",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium.time_slice.profiles_2d.b_field_z"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "equilibrium._r_grid", "equilibrium._z_grid", "equilibrium._bcentr",
+                "equilibrium._psirz", "equilibrium._cpasma_cocos"
+            ],
+            compose=self._compose_profiles_2d_b_field_z,
+            ids_path="equilibrium.time_slice.profiles_2d.b_field_z",
+            docs_file=self.DOCS_PATH
+        )
+
         # === Auxiliary nodes for vacuum_toroidal_field ===
 
         # RZERO from GEQDSK
@@ -2902,6 +2937,159 @@ class EquilibriumMapper(IDSMapper):
 
         # Apply COCOS transformation
         return self._apply_cocos_transform(psirz, shot, raw_data, "equilibrium.time_slice.profiles_2d.psi")
+
+    def _compose_profiles_2d_b_field_tor(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose toroidal magnetic field on profiles_2d grid.
+
+        Based on OMAS derive_equilibrium_profiles_2d_quantity for b_field_tor.
+        Uses f(psi) interpolated onto the 2D grid and divided by R.
+
+        Algorithm:
+        1. Get psi on 2D grid and profiles_1d.psi, profiles_1d.f
+        2. For regions within psi range, interpolate f(psi)
+        3. For regions outside, use f[-1] (boundary value)
+        4. Compute b_field_tor = f(psi) / R
+
+        Note: Uses numpy.gradient for broadcasting over time axis.
+        """
+        # Get grid coordinates
+        r_grid_key = Requirement(f'{self.geqdsk_node}.R', self.resolve_shot(shot), self.efit_tree).as_key()
+        z_grid_key = Requirement(f'{self.geqdsk_node}.Z', self.resolve_shot(shot), self.efit_tree).as_key()
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self.resolve_shot(shot), self.efit_tree).as_key()
+
+        r_grid = raw_data[r_grid_key]
+        z_grid = raw_data[z_grid_key]
+        bcentr = raw_data[bcentr_key]
+        n_time = len(bcentr)
+
+        # Create R meshgrid: shape (n_time, 1, n_r, n_z)
+        # Need to broadcast over time, then add grid dimension
+        r_mesh = np.tile(r_grid[None, None, :, None], (n_time, 1, 1, len(z_grid)))
+
+        # Get psi on 2D grid (already has COCOS applied)
+        psi_2d = self._compose_profiles_2d_psi(shot, raw_data)  # shape: (n_time, 1, n_r, n_z)
+
+        # Get profiles_1d.psi and profiles_1d.f (both have COCOS applied where needed)
+        psi_1d = self._compose_profiles_1d_psi(shot, raw_data)  # shape: (n_time, n_psi)
+        f_1d = self._compose_profiles_1d_f(shot, raw_data)      # shape: (n_time, n_psi)
+
+        # Initialize result
+        b_field_tor = np.zeros_like(psi_2d)
+
+        # Process each time slice
+        for i_time in range(n_time):
+            psi_2d_t = psi_2d[i_time, 0, :, :]  # shape: (n_r, n_z)
+            psi_1d_t = psi_1d[i_time, :]
+            f_1d_t = f_1d[i_time, :]
+            r_mesh_t = r_mesh[i_time, 0, :, :]
+
+            # Create mask for points within psi range
+            psi_min = np.min(psi_1d_t)
+            psi_max = np.max(psi_1d_t)
+            mask = np.logical_and(psi_2d_t > psi_min, psi_2d_t < psi_max)
+
+            # Initialize with boundary value for outside regions
+            b_field_tor[i_time, 0, :, :] = f_1d_t[-1] / r_mesh_t
+
+            # Interpolate f(psi) for inside regions
+            if np.any(mask):
+                from scipy.interpolate import interp1d
+                f_interp = interp1d(psi_1d_t, f_1d_t, kind='linear',
+                                   bounds_error=False, fill_value=f_1d_t[-1])
+                b_field_tor[i_time, 0, :, :][mask] = f_interp(psi_2d_t[mask]) / r_mesh_t[mask]
+
+        return b_field_tor
+
+    def _compose_profiles_2d_b_field_r(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose radial magnetic field on profiles_2d grid.
+
+        Based on OMAS derive_equilibrium_profiles_2d_quantity for b_field_r.
+        Uses gradient of psi with respect to Z divided by R.
+
+        Formula: B_r = (1/R) * dPsi/dZ * sigma_RpZ * sigma_Bp / (2*pi)^exp_Bp
+
+        Note: Uses numpy.gradient for broadcasting over time axis instead of
+        RectBivariateSpline to avoid iteration over time slices.
+        """
+        # Get grid coordinates
+        r_grid_key = Requirement(f'{self.geqdsk_node}.R', self.resolve_shot(shot), self.efit_tree).as_key()
+        z_grid_key = Requirement(f'{self.geqdsk_node}.Z', self.resolve_shot(shot), self.efit_tree).as_key()
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self.resolve_shot(shot), self.efit_tree).as_key()
+
+        r_grid = raw_data[r_grid_key]
+        z_grid = raw_data[z_grid_key]
+        bcentr = raw_data[bcentr_key]
+        n_time = len(bcentr)
+
+        # Get grid spacing
+        dr = r_grid[1] - r_grid[0]
+        dz = z_grid[1] - z_grid[0]
+
+        # Create R meshgrid: shape (n_time, 1, n_r, n_z)
+        r_mesh = np.tile(r_grid[None, None, :, None], (n_time, 1, 1, len(z_grid)))
+
+        # Get psi on 2D grid (already has COCOS 11 applied)
+        psi_2d = self._compose_profiles_2d_psi(shot, raw_data)  # shape: (n_time, 1, n_r, n_z)
+
+        # Compute gradient: axis 2 is R, axis 3 is Z
+        # numpy.gradient returns [d/daxis0, d/daxis1, d/daxis2, d/daxis3]
+        # We want d/dZ (axis 3) and d/dR (axis 2)
+        gradients = np.gradient(psi_2d, dr, dz, axis=(2, 3))
+        dPSIdZ = gradients[1]  # derivative with respect to Z
+
+        # Apply COCOS 11 formula: B_r = dPsi/dZ / (2*pi * R)
+        # Since psi is already in COCOS 11, and COCOS 11 has:
+        # sigma_RpZ = +1, sigma_Bp = +1, exp_Bp = +1
+        # The formula simplifies to: dPsi/dZ / (2*pi * R)
+        b_field_r = dPSIdZ / (2.0 * np.pi * r_mesh)
+
+        return b_field_r
+
+    def _compose_profiles_2d_b_field_z(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose vertical magnetic field on profiles_2d grid.
+
+        Based on OMAS derive_equilibrium_profiles_2d_quantity for b_field_z.
+        Uses negative gradient of psi with respect to R divided by R.
+
+        Formula: B_z = -(1/R) * dPsi/dR * sigma_RpZ * sigma_Bp / (2*pi)^exp_Bp
+
+        Note: Uses numpy.gradient for broadcasting over time axis instead of
+        RectBivariateSpline to avoid iteration over time slices.
+        """
+        # Get grid coordinates
+        r_grid_key = Requirement(f'{self.geqdsk_node}.R', self.resolve_shot(shot), self.efit_tree).as_key()
+        z_grid_key = Requirement(f'{self.geqdsk_node}.Z', self.resolve_shot(shot), self.efit_tree).as_key()
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self.resolve_shot(shot), self.efit_tree).as_key()
+
+        r_grid = raw_data[r_grid_key]
+        z_grid = raw_data[z_grid_key]
+        bcentr = raw_data[bcentr_key]
+        n_time = len(bcentr)
+
+        # Get grid spacing
+        dr = r_grid[1] - r_grid[0]
+        dz = z_grid[1] - z_grid[0]
+
+        # Create R meshgrid: shape (n_time, 1, n_r, n_z)
+        r_mesh = np.tile(r_grid[None, None, :, None], (n_time, 1, 1, len(z_grid)))
+
+        # Get psi on 2D grid (already has COCOS 11 applied)
+        psi_2d = self._compose_profiles_2d_psi(shot, raw_data)  # shape: (n_time, 1, n_r, n_z)
+
+        # Compute gradient: axis 2 is R, axis 3 is Z
+        gradients = np.gradient(psi_2d, dr, dz, axis=(2, 3))
+        dPSIdR = gradients[0]  # derivative with respect to R
+
+        # Apply COCOS 11 formula: B_z = -dPsi/dR / (2*pi * R)
+        # Since psi is already in COCOS 11, and COCOS 11 has:
+        # sigma_RpZ = +1, sigma_Bp = +1, exp_Bp = +1
+        # The formula simplifies to: -dPsi/dR / (2*pi * R)
+        b_field_z = -dPSIdR / (2.0 * np.pi * r_mesh)
+
+        return b_field_z
 
     def _compose_vacuum_b0(self, shot: int, raw_data: dict) -> np.ndarray:
         """

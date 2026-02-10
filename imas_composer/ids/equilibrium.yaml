@@ -118,6 +118,9 @@ fields:
   - time_slice.profiles_2d.grid_type.index
   - time_slice.profiles_2d.type.index
   - time_slice.profiles_2d.psi
+  - time_slice.profiles_2d.b_field_tor
+  - time_slice.profiles_2d.b_field_r
+  - time_slice.profiles_2d.b_field_z
   - vacuum_toroidal_field.b0
   - vacuum_toroidal_field.r0
   - time_slice.convergence.iterations_n
