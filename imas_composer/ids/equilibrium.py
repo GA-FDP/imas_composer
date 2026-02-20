@@ -2987,7 +2987,7 @@ class EquilibriumMapper(IDSMapper):
             # Create mask for points within psi range
             psi_min = np.min(psi_1d_t)
             psi_max = np.max(psi_1d_t)
-            mask = np.logical_and(psi_2d_t > psi_min, psi_2d_t < psi_max)
+            mask = np.logical_and(psi_2d_t >= psi_min, psi_2d_t <= psi_max)
 
             # Initialize with boundary value for outside regions
             b_field_tor[i_time, 0, :, :] = f_1d_t[-1] / r_mesh_t
