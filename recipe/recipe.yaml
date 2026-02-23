@@ -1,0 +1,41 @@
+context:
+  version: ${{ env.get("PKG_VERSION") }}
+
+package:
+  name: imas_composer
+  version: ${{ version }}
+
+source:
+  path: ..
+
+build:
+  script:
+    - ${{ PYTHON }} -m pip install . --no-deps --no-build-isolation -vv
+
+requirements:
+  host:
+    - python
+    - setuptools
+    - pip
+    - versioneer
+  run:
+    - python
+    - numpy >=1.20,<2
+    - pyyaml >=5.4
+    - awkward >=2.0
+    - scipy
+    - mdsplus
+
+tests:
+  - python:
+      imports:
+        - imas_composer
+        - imas_composer.ids
+
+about:
+  license: Apache-2.0
+  summary: "Compose IMAS-format data from DIII-D MDSplus sources"
+
+extra:
+  recipe-maintainers:
+    - sammuli

@@ -9,5 +9,7 @@ Public API:
 
 from .composer import ImasComposer, simple_load
 from .core import Requirement
+from . import _version
+__version__ = _version.get_versions()['version']
 
 __all__ = ['ImasComposer', 'Requirement', 'simple_load']

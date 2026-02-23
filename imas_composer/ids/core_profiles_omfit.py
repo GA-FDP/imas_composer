@@ -1006,12 +1006,12 @@ class CoreProfilesOmfitMapper(IDSMapper):
         return np.array(result)
 
     def _derive_vloop_data_requirements(self, shot: int, _raw_data: Dict[str, Any]) -> list:
-        """Derive requirements for v_loop data (needs shot number in TDI expression)."""
-        return [Requirement(f'ptdata2("VLOOP",{shot})', shot, None)]
+        """Derive requirements for VLOOP (data and time bundled under __ptdata__ key)."""
+        return [Requirement("VLOOP", shot, "__ptdata__")]
 
     def _derive_vloop_time_requirements(self, shot: int, _raw_data: Dict[str, Any]) -> list:
-        """Derive requirements for v_loop time dimension (needs shot number in TDI expression)."""
-        return [Requirement(f'dim_of(ptdata2("VLOOP",{shot}),0)', shot, None)]
+        """Derive requirements for VLOOP time (same key as data — deduplication handles it)."""
+        return [Requirement("VLOOP", shot, "__ptdata__")]
 
     def _compose_v_loop(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
@@ -1028,11 +1028,10 @@ class CoreProfilesOmfitMapper(IDSMapper):
         from scipy.interpolate import interp1d
 
         # Get v_loop data and time
-        vloop_data_key = Requirement(f'ptdata2("VLOOP",{shot})', shot, None).as_key()
-        vloop_time_key = Requirement(f'dim_of(ptdata2("VLOOP",{shot}),0)', shot, None).as_key()
+        key = Requirement("VLOOP", shot, "__ptdata__").as_key()
 
-        vloop_data = raw_data[vloop_data_key]
-        vloop_time = raw_data[vloop_time_key] * 1e-3  # Convert ms to s
+        vloop_data = raw_data[key]['data']
+        vloop_time = raw_data[key]['times'] * 1e-3  # Convert ms to s
 
         # Get profile time - use the already-composed time to avoid bypassing dependencies
         profile_time = self.specs["core_profiles.time"].compose(shot, raw_data)

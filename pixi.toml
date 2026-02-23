@@ -1,0 +1,30 @@
+[workspace]
+name = "imas_composer"
+channels = ["conda-forge", "ga-fdp"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.11"
+numpy = "1.*"
+pyyaml = "*"
+awkward = "*"
+scipy = "*"
+mdsplus = "*"
+matplotlib = "*"
+uncertainties = "*"
+pint = "*"
+netcdf4 = "*"
+boto3 = "*"
+botocore = "*"
+pymongo = "*"
+dnspython = "*"
+xmltodict = "*"
+xarray = "*"
+pyro5 = "*"
+h5py = "*"
+pytest = "*"
+pytest-benchmark = "*"
+
+[pypi-dependencies]
+imas_composer = { path = ".", editable = true }
+omas = "*"

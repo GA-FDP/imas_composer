@@ -124,28 +124,28 @@ class MagneticsMapper(IDSMapper):
 
     # Requirement derivation functions
     def _derive_ip_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for IP data (needs shot number in TDI expression)."""
-        return [Requirement(f'ptdata2("IP",{shot})', shot, None)]
+        """Derive requirements for IP (data, time, and header bundled under __ptdata__ key)."""
+        return [Requirement("IP", shot, "__ptdata__")]
 
     def _derive_ip_time_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for IP time dimension (needs shot number in TDI expression)."""
-        return [Requirement(f'dim_of(ptdata2("IP",{shot}),0)', shot, None)]
+        """Derive requirements for IP time (same key as data — deduplication handles it)."""
+        return [Requirement("IP", shot, "__ptdata__")]
 
     def _derive_ip_header_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for IP header (needs shot number in TDI expression)."""
-        return [Requirement(f'pthead2("IP",{shot}), __rarray', shot, None)]
+        """Derive requirements for IP header (same key as data — deduplication handles it)."""
+        return [Requirement("IP", shot, "__ptdata__")]
 
     def _derive_diamag_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for DIAMAG3 data (needs shot number in TDI expression)."""
-        return [Requirement(f'ptdata2("DIAMAG3",{shot})', shot, None)]
+        """Derive requirements for DIAMAG3 (data, time, and header bundled under __ptdata__ key)."""
+        return [Requirement("DIAMAG3", shot, "__ptdata__")]
 
     def _derive_diamag_time_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for DIAMAG3 time dimension (needs shot number in TDI expression)."""
-        return [Requirement(f'dim_of(ptdata2("DIAMAG3",{shot}),0)', shot, None)]
+        """Derive requirements for DIAMAG3 time (same key as data — deduplication handles it)."""
+        return [Requirement("DIAMAG3", shot, "__ptdata__")]
 
     def _derive_diamag_header_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for DIAMAG3 header (needs shot number in TDI expression)."""
-        return [Requirement(f'pthead2("DIAMAG3",{shot}), __rarray', shot, None)]
+        """Derive requirements for DIAMAG3 header (same key as data — deduplication handles it)."""
+        return [Requirement("DIAMAG3", shot, "__ptdata__")]
 
     # Compose functions
     def _compose_ip_data(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -155,9 +155,9 @@ class MagneticsMapper(IDSMapper):
         Returns array of shape (n_measurements, n_time).
         For DIII-D: (1, n_time) - single Ip measurement.
         """
-        data_key = Requirement(f'ptdata2("IP",{shot})', shot, None).as_key()
+        key = Requirement("IP", shot, "__ptdata__").as_key()
         # Add measurement dimension: (n_time,) -> (1, n_time)
-        return raw_data[data_key][np.newaxis, :]
+        return raw_data[key]['data'][np.newaxis, :]
 
     def _compose_ip_time(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -167,26 +167,22 @@ class MagneticsMapper(IDSMapper):
         Returns array of shape (n_measurements, n_time).
         For DIII-D: (1, n_time) - single Ip measurement.
         """
-        time_key = Requirement(f'dim_of(ptdata2("IP",{shot}),0)', shot, None).as_key()
+        key = Requirement("IP", shot, "__ptdata__").as_key()
         # Add measurement dimension: (n_time,) -> (1, n_time)
-        return (raw_data[time_key] / 1000.0)[np.newaxis, :]
+        return (raw_data[key]['times'] / 1000.0)[np.newaxis, :]
 
     def _compose_ip_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Compute uncertainty for plasma current.
 
         From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0
-        where header is from pthead2("IP", shot)
+        where header rarray comes from PtDataHeader.
         Returns array of shape (n_measurements, n_time).
         For DIII-D: (1, n_time) - single Ip measurement.
         """
-        # Get the data to determine time length
-        data_key = Requirement(f'ptdata2("IP",{shot})', shot, None).as_key()
-        nt = len(raw_data[data_key])
-
-        # Get header information
-        header_key = Requirement(f'pthead2("IP",{shot}), __rarray', shot, None).as_key()
-        header = raw_data[header_key]
+        key = Requirement("IP", shot, "__ptdata__").as_key()
+        nt = len(raw_data[key]['data'])
+        header = raw_data[key]['rarray']
 
         # OMAS formula: abs(header[3] * header[4]) * ones(nt) * 10.0
         # Add measurement dimension: (n_time,) -> (1, n_time)
@@ -200,9 +196,9 @@ class MagneticsMapper(IDSMapper):
         Returns array of shape (n_measurements, n_time).
         For DIII-D: (1, n_time) - single diamagnetic flux measurement.
         """
-        data_key = Requirement(f'ptdata2("DIAMAG3",{shot})', shot, None).as_key()
+        key = Requirement("DIAMAG3", shot, "__ptdata__").as_key()
         # Add measurement dimension: (n_time,) -> (1, n_time)
-        return (raw_data[data_key] * 1e-3)[np.newaxis, :]
+        return (raw_data[key]['data'] * 1e-3)[np.newaxis, :]
 
     def _compose_diamagnetic_flux_time(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -212,26 +208,22 @@ class MagneticsMapper(IDSMapper):
         Returns array of shape (n_measurements, n_time).
         For DIII-D: (1, n_time) - single diamagnetic flux measurement.
         """
-        time_key = Requirement(f'dim_of(ptdata2("DIAMAG3",{shot}),0)', shot, None).as_key()
+        key = Requirement("DIAMAG3", shot, "__ptdata__").as_key()
         # Add measurement dimension: (n_time,) -> (1, n_time)
-        return (raw_data[time_key] / 1000.0)[np.newaxis, :]
+        return (raw_data[key]['times'] / 1000.0)[np.newaxis, :]
 
     def _compose_diamagnetic_flux_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Compute uncertainty for diamagnetic flux.
 
         From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0 / 1000.0
-        where header is from pthead2("DIAMAG3", shot)
+        where header rarray comes from PtDataHeader.
         Returns array of shape (n_measurements, n_time).
         For DIII-D: (1, n_time) - single diamagnetic flux measurement.
         """
-        # Get the data to determine time length
-        data_key = Requirement(f'ptdata2("DIAMAG3",{shot})', shot, None).as_key()
-        nt = len(raw_data[data_key])
-
-        # Get header information
-        header_key = Requirement(f'pthead2("DIAMAG3",{shot}), __rarray', shot, None).as_key()
-        header = raw_data[header_key]
+        key = Requirement("DIAMAG3", shot, "__ptdata__").as_key()
+        nt = len(raw_data[key]['data'])
+        header = raw_data[key]['rarray']
 
         # OMAS formula: abs(header[3] * header[4]) * ones(nt) / 100.0
         # Add measurement dimension: (n_time,) -> (1, n_time)
