@@ -781,6 +781,12 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
     # Check for field-specific shot exclusions
     check_field_shot_exclusion(ids_name, ids_path, shot)
 
+    # Check for field-level exceptions (skip OMAS comparison for this field/all shots)
+    test_config_check = load_test_config(ids_name)
+    field_exc = test_config_check.get('field_exceptions', {})
+    if ids_path in field_exc:
+        pytest.skip(f"field_exceptions: {field_exc[ids_path]}")
+
     # Compose using imas_composer
     composer_value = resolve_and_compose(composer, ids_path, shot)
 
