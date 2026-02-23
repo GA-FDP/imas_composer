@@ -12,6 +12,7 @@ View stats: pytest tests/test_performance_benchmark.py --benchmark-autosave
 """
 import pytest
 from imas_composer import ImasComposer, simple_load
+from imas_composer.fetchers import fetch_requirements
 from tests.conftest import TEST_SHOTS
 
 
@@ -84,7 +85,7 @@ def benchmark_sequential_resolve_compose(composer, fields, shot_cycler):
                 break
 
             # Fetch requirements using the private method
-            fetched = composer._fetch_requirements(requirements)
+            fetched = fetch_requirements(requirements)
             raw_data.update(fetched)
 
         # Compose single field (as list of 1)
