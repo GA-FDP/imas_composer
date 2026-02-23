@@ -418,7 +418,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/ac/25/58893afd4ef45f79e3d4db82742fa4ff874b936d67a83c92939053920ccd/cython-3.2.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/39/41/fa1f52754036081ff6b53c972a37ab16cf9f972d6170de1a8442382ab108/fortranformat-2.0.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/93/46/9844a46e25859f585aa719a9b5cc648dcf3875c1c772dfa2ca2908466f7f/omas-0.94.2.tar.gz
+      - pypi: git+https://github.com/gafusion/omas.git?branch=master#1aeebbf39052063e1b116fbf19ab2ffe9c2c3d9a
       - pypi: https://files.pythonhosted.org/packages/06/d9/4d5a2bccbd62d033f46f6d040404a1f0383d2ac80cfa2c7bbdc32320c02d/omfit_classes-3.2026.8.2.tar.gz
       - pypi: ./
 packages:
@@ -2123,10 +2123,9 @@ packages:
   - pkg:pypi/numpy?source=hash-mapping
   size: 8065890
   timestamp: 1707225944355
-- pypi: https://files.pythonhosted.org/packages/93/46/9844a46e25859f585aa719a9b5cc648dcf3875c1c772dfa2ca2908466f7f/omas-0.94.2.tar.gz
+- pypi: git+https://github.com/gafusion/omas.git?branch=master#1aeebbf39052063e1b116fbf19ab2ffe9c2c3d9a
   name: omas
   version: 0.94.2
-  sha256: 8ab42621044ac6d2c195cc4ead0ec772a88b1e6c663ffba59721319e172d2789
   requires_dist:
   - numpy>=1.16.1
   - uncertainties

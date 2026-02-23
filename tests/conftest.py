@@ -19,6 +19,29 @@ from imas_composer.core import Requirement
 from imas_composer.fetchers import fetch_requirements
 
 
+# ---------------------------------------------------------------------------
+# Monkeypatch: fix omfit_classes 3.2026.x KeyError: 'DEVICE' in to_omas()
+#
+# omfit_classes.omfit_efund.OMFITmhdin.to_omas() unconditionally reads
+# self['MACHINEIN']['DEVICE'], but OMAS-bundled mhdin.dat files only contain
+# magpri / nmselp / nsilop — no DEVICE key.  Add a fallback to 'd3d'.
+# ---------------------------------------------------------------------------
+try:
+    from omfit_classes.omfit_efund import OMFITmhdin as _OMFITmhdin
+
+    _orig_to_omas = _OMFITmhdin.to_omas
+
+    def _patched_to_omas(self, ods=None, update=['pf_active', 'flux_loop', 'b_field_pol_probe', 'vessel']):
+        machinein = self.get('MACHINEIN', None)
+        if machinein is not None and 'DEVICE' not in machinein and 'device' not in machinein:
+            machinein['DEVICE'] = 'd3d'
+        return _orig_to_omas(self, ods=ods, update=update)
+
+    _OMFITmhdin.to_omas = _patched_to_omas
+except ImportError:
+    pass  # omfit_classes not available
+
+
 # Reference shot used across most tests
 REFERENCE_SHOT = 200000
 
