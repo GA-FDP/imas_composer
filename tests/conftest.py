@@ -626,7 +626,15 @@ def omas_data():
 
         # For equilibrium with specific path, fetch only that field
         # For others, use wildcard
-        machine_to_omas(ods, 'd3d', shot, ids_path, options=options)
+        try:
+            machine_to_omas(ods, 'd3d', shot, ids_path, options=options)
+        except Exception as e:
+            if 'TdiEXTRA_ARG' in str(e) or 'Too many arguments for function' in str(e):
+                pytest.skip(
+                    f"OMAS reference uses server-side ADDFUN (py2tdi) not supported "
+                    f"on atlas.gat.com (TdiEXTRA_ARG): {ids_path}"
+                )
+            raise
 
         return cache[cache_key]
 
