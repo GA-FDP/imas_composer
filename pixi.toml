@@ -3,13 +3,13 @@ name = "imas_composer"
 channels = ["conda-forge", "ga-fdp"]
 platforms = ["linux-64"]
 
+# Core runtime dependencies (default environment)
 [dependencies]
 python = ">=3.11"
 numpy = "1.*"
 pyyaml = "*"
 awkward = "*"
 scipy = "*"
-mdsplus = "*"
 matplotlib = "*"
 uncertainties = "*"
 pint = "*"
@@ -22,9 +22,26 @@ xmltodict = "*"
 xarray = "*"
 pyro5 = "*"
 h5py = "*"
-pytest = "*"
-pytest-benchmark = "*"
 
 [pypi-dependencies]
 imas_composer = { path = ".", editable = true }
+
+# Test environment: adds mdsplus, ptdata, pytest, omas, and omfit-classes.
+# pip is included as a conda dep so 'pixi run -e test pip' routes to the pixi Python.
+[feature.test.dependencies]
+pip = "*"
+pytest = "*"
+pytest-benchmark = "*"
+pexpect = "*"
+tqdm = "*"
+mdsplus = "*"
+ptdata = "*"
+
+[feature.test.pypi-dependencies]
 omas = "*"
+omfit-classes = "*"
+fortranformat = "*"
+
+[environments]
+default = { features = [], solve-group = "default" }
+test = { features = ["test"], solve-group = "default" }
