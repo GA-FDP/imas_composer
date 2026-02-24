@@ -14,7 +14,7 @@ Test Shot Configuration:
 - exclude_shots: In test_config_<ids>.yaml, skip specific shots (e.g., no data available)
 - override_shots: In test_config_<ids>.yaml, completely replace TEST_SHOTS with custom list
   Example: For interferometer with RIP data requirement (shots >= 168823):
-    override_shots: [202161, 203321]
+    override_shots: [200000, 203321]
 """
 
 import pytest
