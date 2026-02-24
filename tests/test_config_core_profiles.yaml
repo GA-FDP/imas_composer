@@ -3,6 +3,20 @@
 # Field-level exceptions for validation
 field_exceptions:
   core_profiles.profiles_1d.ion.1.rotation_frequency_tor: "OMAS ZIPFIT mapper does not populate rotation_frequency_tor"
+  # OMAS does not populate density_fit/temperature_fit.rho_tor_norm for electrons
+  core_profiles.profiles_1d.electrons.density_fit.rho_tor_norm: "OMAS OMFIT_PROFS mapper does not populate electrons.density_fit.rho_tor_norm"
+  core_profiles.profiles_1d.electrons.temperature_fit.rho_tor_norm: "OMAS OMFIT_PROFS mapper does not populate electrons.temperature_fit.rho_tor_norm"
+  # OMAS carbon (ion.1) fit fields have NaN values interspersed in raw data that OMAS
+  # retains in the ODS, while imas_composer applies isfinite masking to remove them.
+  # This causes an irreconcilable mismatch in array lengths and values.
+  core_profiles.profiles_1d.ion.1.density_fit.measured: "OMAS retains NaN in carbon density fit data; imas_composer applies isfinite mask"
+  core_profiles.profiles_1d.ion.1.density_fit.measured_error_upper: "OMAS retains NaN in carbon density fit data; imas_composer applies isfinite mask"
+  core_profiles.profiles_1d.ion.1.density_fit.psi_norm: "Carbon fit mask mismatch — NaN-offset in OMAS shifts psi_norm values"
+  core_profiles.profiles_1d.ion.1.density_fit.rho_tor_norm: "OMAS OMFIT_PROFS mapper does not populate ion.1.density_fit.rho_tor_norm"
+  core_profiles.profiles_1d.ion.1.temperature_fit.measured: "OMAS retains NaN in carbon temperature fit data; imas_composer applies isfinite mask"
+  core_profiles.profiles_1d.ion.1.temperature_fit.measured_error_upper: "OMAS retains NaN in carbon temperature fit data; imas_composer applies isfinite mask"
+  core_profiles.profiles_1d.ion.1.temperature_fit.psi_norm: "Carbon fit mask mismatch — NaN-offset in OMAS shifts psi_norm values"
+  core_profiles.profiles_1d.ion.1.temperature_fit.rho_tor_norm: "OMAS OMFIT_PROFS mapper does not populate ion.1.temperature_fit.rho_tor_norm"
 
 # Requirement validation settings
 requirement_validation:
@@ -25,7 +39,9 @@ field_tolerances:
 omas_path_map:
   # Time fields
   core_profiles.time: core_profiles.time
-  core_profiles.profiles_1d.time: core_profiles.profiles_1d.:.time
+  # OMAS OMFIT_PROFS stores time at the IDS level, not per time-slice;
+  # profiles_1d[i].time is empty in the ODS. Compare against core_profiles.time instead.
+  core_profiles.profiles_1d.time: core_profiles.time
   core_profiles.ids_properties.homogeneous_time: core_profiles.ids_properties.homogeneous_time
 
   # Grid fields

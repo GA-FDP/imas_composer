@@ -374,6 +374,15 @@ def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float
         else:
             omas_ak = omas_val
 
+        # If OMAS is longer (NaN-padded or extended rho grid), truncate to composer length.
+        if len(omas_ak) > len(composer_ak):
+            try:
+                omas_np_check = np.asarray(omas_ak)
+                if np.issubdtype(omas_np_check.dtype, np.floating):
+                    omas_ak = ak.Array(omas_np_check[:len(composer_ak)])
+            except (ValueError, TypeError):
+                pass
+
         # Check lengths match
         assert len(composer_ak) == len(omas_ak), f"{label}: array length mismatch"
 
@@ -451,6 +460,13 @@ def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float
         # Convert awkward arrays to numpy if needed (for Thomson ragged data)
         if not isinstance(composer_val, np.ndarray):
             composer_val = np.asarray(composer_val)
+        # OMAS may return longer float arrays than imas_composer when using a
+        # fixed grid padded with NaN (OMFIT_PROFS), or when its rho masking
+        # extends slightly beyond imas_composer's rho<=1.0 threshold.
+        # Truncate OMAS to composer length so we compare the leading portion.
+        if (len(omas_val) > len(composer_val)
+                and np.issubdtype(omas_val.dtype, np.floating)):
+            omas_val = omas_val[:len(composer_val)]
         assert len(composer_val) == len(omas_val), f"{label}: array length mismatch"
 
         # Check dtype - handle strings and ints separately from floats

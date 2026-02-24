@@ -816,7 +816,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
             mask = rho_2d[i_time, :] <= 1.0
             result.append(rho_2d[i_time, mask])
 
-        return result
+        return np.array(result)
 
     def _compose_rho_pol_norm(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
