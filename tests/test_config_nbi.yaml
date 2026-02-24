@@ -1,7 +1,11 @@
 # Test configuration for NBI IDS
 
 # Field-level exceptions for validation
-field_exceptions: {}
+field_exceptions:
+  nbi.unit.power_launched.time: "imas_composer returns full time base, OMAS trims to discharge window"
+  nbi.unit.power_launched.data: "imas_composer returns full time base, OMAS trims to discharge window"
+  nbi.unit.energy.time: "imas_composer returns full time base, OMAS trims to discharge window"
+  nbi.unit.energy.data: "imas_composer returns full time base, OMAS trims to discharge window"
 
 # Requirement validation settings
 requirement_validation:

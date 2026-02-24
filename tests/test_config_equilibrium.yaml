@@ -38,18 +38,12 @@ field_exceptions:
   equilibrium.time_slice.constraints.pressure.chi_squared: "MTIME/GTIME length mismatch"
   equilibrium.time_slice.constraints.pressure.position.psi: "MTIME/GTIME length mismatch + ADDFUN wildcard partial ODS failure"
   equilibrium.time_slice.constraints.j_tor.measured: "MTIME/GTIME length mismatch"
+  equilibrium.time_slice.profiles_1d.j_tor: "OMAS d3d.json mapping gap — SVN fallback fails on atlas.gat.com"
+  equilibrium.time_slice.profiles_1d.volume: "OMAS d3d.json mapping gap — SVN fallback fails on atlas.gat.com"
 
 # Field-specific tolerance settings
 # Override default rtol=1e-10, atol=1e-6 for specific fields
 field_tolerances:
-  equilibrium.time_slice.profiles_1d.j_tor:
-  # This uses interpolation so accuracy is limited
-    rtol: 1.0e-5
-    atol: 1.0
-  equilibrium.time_slice.profiles_1d.volume:
-  # This uses interpolation so accuracy is limited
-    rtol: 2.0e-5
-    atol: 2.0e-4
   equilibrium.time_slice.time:
   # OMAS does the ms -> s conversion on the MDSplus side where everything is 32 bit
     rtol: 1.0e-7

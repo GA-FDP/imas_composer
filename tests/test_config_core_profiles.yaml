@@ -1,7 +1,8 @@
 # Test configuration for Core Profiles IDS
 
 # Field-level exceptions for validation
-field_exceptions: {}
+field_exceptions:
+  core_profiles.profiles_1d.ion.1.rotation_frequency_tor: "OMAS ZIPFIT mapper does not populate rotation_frequency_tor"
 
 # Requirement validation settings
 requirement_validation:

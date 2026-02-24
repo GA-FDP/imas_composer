@@ -1,7 +1,8 @@
 # Test configuration for Wall IDS
 
 # Field-level exceptions for validation
-field_exceptions: {}
+field_exceptions:
+  wall.ids_properties.homogeneous_time: "OMAS machine_to_omas does not populate ids_properties metadata fields"
 
 # Requirement validation settings
 requirement_validation:
