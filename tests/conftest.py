@@ -759,8 +759,14 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
 
     # Base case: 0D (scalar) or 1D array - do comparison
     if ndim <= 1 or ":" not in omas_path:
-        # Compare
-        compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
+        # Compare - skip if OMAS has no data for this path (IDS not mapped in d3d.json)
+        try:
+            omas_value = ods[omas_path]
+        except ValueError as e:
+            if 'has no data' in str(e):
+                pytest.skip(f"OMAS returned no data for {omas_path}: {e}")
+            raise
+        compare_values(composer_value, omas_value, omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
 
     else:
         # Recursive case: ndim > 1, iterate over outer dimension
