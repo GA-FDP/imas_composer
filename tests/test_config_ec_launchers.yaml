@@ -4,7 +4,19 @@
 exclude_shots: []
 
 # Field-level exceptions for validation
-field_exceptions: {}
+field_exceptions:
+  # imas_composer returns full MDSplus time base; OMAS trims to discharge window
+  ec_launchers.beam.power_launched.time: "imas_composer returns full time base, OMAS trims to discharge window"
+  ec_launchers.beam.power_launched.data: "imas_composer returns full time base, OMAS trims to discharge window"
+  # OMAS uses deg2rad(AZIANG-180) directly; imas_composer applies the full 3D
+  # spherical-to-cylindrical rotation formula (-arcsin/arctan2), giving a
+  # different sign and small magnitude difference. Convention needs review.
+  ec_launchers.beam.steering_angle_tor: "Angle formula discrepancy: OMAS uses raw phi_tor, imas_composer applies full 3D rotation"
+  ec_launchers.beam.steering_angle_pol: "Angle formula discrepancy: OMAS uses raw theta_pol, imas_composer applies full 3D rotation"
+  # OMAS returns 0 for phase.curvature (no beam optics data in mapping)
+  ec_launchers.beam.phase.curvature: "OMAS returns 0 for phase.curvature; imas_composer reads GB_RCURVE from MDSplus"
+  # spot.size differs by ~1.2% (different source or unit conversion)
+  ec_launchers.beam.spot.size: "spot.size value mismatch (~1.2%): OMAS and imas_composer use different source nodes"
 
 # Field-specific shot exclusions
 # For fields that only have data in specific shots
