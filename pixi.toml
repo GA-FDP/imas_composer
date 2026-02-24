@@ -32,6 +32,7 @@ imas_composer = { path = ".", editable = true }
 pip = "*"
 pytest = "*"
 pytest-benchmark = "*"
+pytest-xdist = "*"
 pexpect = "*"
 tqdm = "*"
 mdsplus = "*"
