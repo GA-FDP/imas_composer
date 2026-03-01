@@ -77,16 +77,16 @@ class TfMapper(IDSMapper):
 
     # Requirement derivation functions
     def _derive_bt_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for BT data (needs shot number in TDI expression)."""
-        return [Requirement(f'ptdata2("BT",{shot})', shot, None)]
+        """Derive requirements for BT (data, time, and header bundled under __ptdata__ key)."""
+        return [Requirement("BT", shot, "__ptdata__")]
 
     def _derive_bt_time_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for BT time dimension (needs shot number in TDI expression)."""
-        return [Requirement(f'dim_of(ptdata2("BT",{shot}),0)', shot, None)]
+        """Derive requirements for BT time (same key as data — deduplication handles it)."""
+        return [Requirement("BT", shot, "__ptdata__")]
 
     def _derive_bt_header_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for BT header (needs shot number in TDI expression)."""
-        return [Requirement(f'pthead2("BT",{shot}), __rarray', shot, None)]
+        """Derive requirements for BT header (same key as data — deduplication handles it)."""
+        return [Requirement("BT", shot, "__ptdata__")]
 
     # Compose functions
     def _compose_bt_data(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -96,9 +96,9 @@ class TfMapper(IDSMapper):
         From OMAS: data * vacuum_r
         This converts from the measured value to the field at the vacuum vessel radius.
         """
-        data_key = Requirement(f'ptdata2("BT",{shot})', shot, None).as_key()
+        key = Requirement("BT", shot, "__ptdata__").as_key()
         vacuum_r = self.static_values['vacuum_r']
-        return raw_data[data_key] * vacuum_r
+        return raw_data[key]['data'] * vacuum_r
 
     def _compose_bt_time(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -106,15 +106,15 @@ class TfMapper(IDSMapper):
 
         From OMAS: dim_of(...,0)/1000. (convert ms to s)
         """
-        time_key = Requirement(f'dim_of(ptdata2("BT",{shot}),0)', shot, None).as_key()
-        return raw_data[time_key] / 1000.0
+        key = Requirement("BT", shot, "__ptdata__").as_key()
+        return raw_data[key]['times'] / 1000.0
 
     def _compose_bt_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Compute uncertainty for toroidal field.
 
         From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0 * vacuum_r
-        where header is from pthead2("BT", shot)
+        where header rarray comes from PtDataHeader.
         """
         key = Requirement("BT", shot, "__ptdata__").as_key()
         nt = len(raw_data[key]['data'])
