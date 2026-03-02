@@ -101,7 +101,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/fonts-conda-ecosystem-1-0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/fonts-conda-forge-1-hc364b38_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/fonttools-4.61.1-py311h3778330_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/fortranformat-2.0.3-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/freetds-1.5.11-hd0ef232_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/freetype-2.14.1-ha770c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/fsspec-2026.2.0-pyhd8ed1ab_0.conda
@@ -745,17 +744,6 @@ packages:
   - pkg:pypi/fonttools?source=hash-mapping
   size: 3004920
   timestamp: 1765633180642
-- conda: https://conda.anaconda.org/conda-forge/noarch/fortranformat-2.0.3-pyhd8ed1ab_0.conda
-  sha256: f1c0f2292ad43cbe742715315c764580e99fc8f8b2f4459d0cbcb4e594a8dc4b
-  md5: cea9ff6fb9329393e5d96e7960f552c9
-  depends:
-  - python >=3.9
-  license: MIT
-  license_family: MIT
-  purls:
-  - pkg:pypi/fortranformat?source=hash-mapping
-  size: 25950
-  timestamp: 1744238203794
 - conda: https://conda.anaconda.org/conda-forge/linux-64/freetds-1.5.11-hd0ef232_0.conda
   sha256: 8263a2e424a6b38756d16acfb024be151d9d8ae826485e20a2c80f44b779eee1
   md5: bf247512b5e919650c3853f1844a485d
