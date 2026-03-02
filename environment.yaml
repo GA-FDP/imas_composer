@@ -1,23 +1,55 @@
 name: imas_composer
 
-
 channels:
   - conda-forge
   - ga-fdp
+  - nodefaults
 
 dependencies:
-  - python==3.12
-  - awkward
-  - pyyaml
-  - pytest
+  # Core runtime deps
+  - python >=3.11
   - numpy 1.*
-  - mdsplus
-  - scipy
-  - pytest-benchmark
-  - pytest-xdist
-  - pip
-  - ptdata
+  - pyyaml *
+  - awkward *
+  - scipy *
+
+  # Test tools
+  - pip *
+  - pytest *
+  - pytest-benchmark *
+  - pytest-xdist *
+  - pexpect *
+  - tqdm *
+
+  # Data access backends (direct test deps)
+  - mdsplus 7.139.59.*
+  - ptdata *
+
+  # Transitive deps of omas — installed via conda to avoid PyPI versions
+  - matplotlib *
+  - pandas *
+  - xarray *
+  - h5py *
+  - netcdf4 *
+  - pint *
+  - uncertainties *
+  - cython *
+  - dnspython *
+  - python-dateutil *   # via matplotlib
+  - flexcache *         # via pint
+  - flexparser *        # via pint
+  - pillow *            # via matplotlib
+  - fonttools *         # via matplotlib
+  - kiwisolver *        # via matplotlib
+  - contourpy *         # via matplotlib
+  - cycler *            # via matplotlib
+  - platformdirs *      # via pint
+  - pyparsing *         # via matplotlib
+  - six *               # via python-dateutil
+  - cftime *            # via netcdf4
+
   - pip:
+    # omas has no conda package; pin to tested commit
+    - omas @ git+https://github.com/gafusion/omas.git@b2c91e534b56a49bd4f8caf449c7f2fe11addd31
     # Install imas_composer in editable mode from current directory
     - -e .
-    - git+https://github.com/gafusion/omas.git
