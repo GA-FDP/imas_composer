@@ -49,7 +49,7 @@ six = "*"
 cftime = "*"
 
 [feature.test.pypi-dependencies]
-omas = { git = "https://github.com/gafusion/omas.git" }
+omas = { git = "https://github.com/gafusion/omas.git", rev = "b2c91e534b56a49bd4f8caf449c7f2fe11addd31" }
 
 [environments]
 default = { features = [], solve-group = "default" }
