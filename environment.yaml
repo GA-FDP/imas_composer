@@ -12,23 +12,12 @@ dependencies:
   - pytest
   - numpy 1.*
   - mdsplus
-  - matplotlib
-  - cython
-  - uncertainties
-  - pint
-  - netcdf4
-  - boto3
-  - botocore
-  - pymongo
-  - dnspython
-  - xmltodict
-  - xarray
-  - pyro5
   - scipy
-  - h5py
-  - conda-build
   - pytest-benchmark
+  - pytest-xdist
   - pip
+  - ptdata
   - pip:
     # Install imas_composer in editable mode from current directory
     - -e .
+    - git+https://github.com/gafusion/omas.git

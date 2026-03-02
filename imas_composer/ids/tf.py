@@ -119,8 +119,8 @@ class TfMapper(IDSMapper):
         key = Requirement("BT", shot, "__ptdata__").as_key()
         nt = len(raw_data[key]['data'])
         header = raw_data[key]['rarray']
-        # OMAS formula: abs(header[3] * header[4]) * ones(nt) * 10.0
-        return np.abs(header[3] * header[4]) * np.ones(nt) * 10.0
+        vacuum_r = self.static_values['vacuum_r']
+        return np.abs(header[3] * header[4]) * np.ones(nt) * 10.0 * vacuum_r
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         return self.specs

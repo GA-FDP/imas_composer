@@ -11,6 +11,7 @@ import yaml
 import awkward as ak
 from pathlib import Path
 
+import MDSplus
 from omas import ODS, mdsvalue
 from omas.omas_machine import machine_to_omas
 
@@ -603,7 +604,10 @@ def omas_data():
 
         # For equilibrium with specific path, fetch only that field
         # For others, use wildcard
-        machine_to_omas(ods, 'd3d', shot, ids_path, options=options)
+        try:
+            machine_to_omas(ods, 'd3d', shot, ids_path, options=options)
+        except MDSplus.mdsExceptions.TdiEXTRA_ARG as e:
+            pytest.skip(f"OMAS py2tdi TDI rejected by server: {e}")
 
         return cache[cache_key]
 
