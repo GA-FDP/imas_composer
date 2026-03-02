@@ -51,7 +51,6 @@ cftime = "*"
 
 [feature.test.pypi-dependencies]
 omas = { git = "https://github.com/gafusion/omas.git" }
-omfit-classes = "*"
 
 [environments]
 default = { features = [], solve-group = "default" }

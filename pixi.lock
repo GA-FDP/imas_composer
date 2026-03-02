@@ -261,7 +261,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-ng-2.3.3-hceb46e0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: git+https://github.com/gafusion/omas.git#b2c91e534b56a49bd4f8caf449c7f2fe11addd31
-      - pypi: https://files.pythonhosted.org/packages/06/d9/4d5a2bccbd62d033f46f6d040404a1f0383d2ac80cfa2c7bbdc32320c02d/omfit_classes-3.2026.8.2.tar.gz
       - pypi: ./
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
@@ -1908,10 +1907,6 @@ packages:
   - sphinx-bootstrap-theme ; extra == 'build-documentation'
   - sphinx-gallery ; extra == 'build-documentation'
   - pillow ; extra == 'build-documentation'
-- pypi: https://files.pythonhosted.org/packages/06/d9/4d5a2bccbd62d033f46f6d040404a1f0383d2ac80cfa2c7bbdc32320c02d/omfit_classes-3.2026.8.2.tar.gz
-  name: omfit-classes
-  version: 3.2026.8.2
-  sha256: 6a193164354ecaad3ce9699183d996808057bed57ccfffb4dea312f7dcbc0224
 - conda: https://conda.anaconda.org/conda-forge/linux-64/openjpeg-2.5.4-h55fea9a_0.conda
   sha256: 3900f9f2dbbf4129cf3ad6acf4e4b6f7101390b53843591c53b00f034343bc4d
   md5: 11b3379b191f63139e29c0d19dee24cd
