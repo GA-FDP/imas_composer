@@ -1,0 +1,29 @@
+# Charge Exchange IDS Configuration for DIII-D
+# Maps DIII-D CER (Charge Exchange Recombination) diagnostic to IMAS charge_exchange IDS
+#
+# OMAS source: charge_exchange_data() in d3d.py
+# MDSplus tree: IONS
+# Analysis type: CERQUICK (default)
+
+static_values: {}
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  - channel.identifier
+  - channel.name
+  - channel.position.r.data
+  - channel.position.r.time
+  - channel.position.z.data
+  - channel.position.z.time
+  - channel.position.phi.data
+  - channel.position.phi.time
+  - channel.zeff.data
+  - channel.zeff.time
+  - channel.ion.n_i_over_n_e.data
+  - channel.ion.n_i_over_n_e.time
+  - channel.ion.t_i.data
+  - channel.ion.t_i.data_error_upper
+  - channel.ion.t_i.time
+  - channel.ion.velocity_tor.data
+  - channel.ion.velocity_tor.data_error_upper
+  - channel.ion.velocity_tor.time
