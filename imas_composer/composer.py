@@ -407,6 +407,6 @@ class ImasComposer:
         return [
             path for path, spec in mapper.specs.items()
             if spec.stage == RequirementStage.COMPUTED
-            and path.startswith(ids_path)
+            and (path == ids_path or path.startswith(ids_path + '.'))
         ]
 

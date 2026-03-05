@@ -63,3 +63,13 @@ def test_works_for_multiple_ids(composer):
         fields = composer.get_supported_fields(ids_name)
         assert len(fields) > 0
         assert all(f.startswith(ids_name + '.') for f in fields)
+
+
+def test_leaf_not_treated_as_prefix(composer):
+    """A leaf path that is a string-prefix of another leaf returns only itself.
+
+    e.g. 'magnetics.ip.data' must not match 'magnetics.ip.data_error_upper'.
+    """
+    leaf = 'magnetics.ip.data'
+    fields = composer.get_supported_fields(leaf)
+    assert fields == [leaf], f"Expected only [{leaf!r}], got {fields}"
