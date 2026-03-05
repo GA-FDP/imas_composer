@@ -381,30 +381,32 @@ class ImasComposer:
 
         return results
 
-    def get_supported_fields(self, ids_name: str) -> List[str]:
+    def get_supported_fields(self, ids_path: str) -> List[str]:
         """
-        Get list of supported fields for an IDS.
+        Get list of supported fields under an IDS path prefix.
 
         Args:
-            ids_name: IDS identifier (e.g., 'ece', 'thomson_scattering')
+            ids_path: IDS name or dotted path prefix (e.g., 'ece', 'ece.channel')
 
         Returns:
-            List of full IDS paths that can be composed
+            List of full IDS paths that can be composed and start with ids_path
 
         Example:
             >>> composer = ImasComposer()
-            >>> fields = composer.get_supported_fields('ece')
-            >>> print(fields[:3])
+            >>> composer.get_supported_fields('ece')
             ['ece.ids_properties.homogeneous_time', 'ece.channel.name', ...]
+            >>> composer.get_supported_fields('ece.channel')
+            ['ece.channel.name', 'ece.channel.t_e.data', ...]
         """
+        ids_name = ids_path.split('.')[0]
         if ids_name not in self._mappers:
             raise ValueError(f"No mapper for '{ids_name}'")
 
         mapper = self._mappers[ids_name]
 
-        # Return only COMPUTED fields (user-facing)
         return [
             path for path, spec in mapper.specs.items()
             if spec.stage == RequirementStage.COMPUTED
+            and path.startswith(ids_path)
         ]
 
