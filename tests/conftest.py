@@ -251,15 +251,10 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
 
     Raises:
         RuntimeError: If requirements cannot be resolved within max iterations
-        Exception: If any requirement fetch fails (re-raises the fetch exception)
     """
     # Convert single path to list for batch API
     single_path = isinstance(ids_path, str)
     ids_paths = [ids_path] if single_path else ids_path
-    # Load test configuration to get optional requirements list
-    ids_name = ids_path.split('.')[0]
-    test_config = load_test_config(ids_name)
-    optional_patterns = test_config.get('requirement_validation', {}).get('optional_requirements', [])
 
     raw_data = {}
 
@@ -270,22 +265,12 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
         if all(status.values()):
             break
 
-        # Fetch requirements
+        # Fetch requirements and store all results, including exceptions.
+        # Exception values indicate missing/unavailable MDSplus data (e.g., a CER
+        # channel that doesn't exist for this shot). Compose functions are
+        # responsible for handling exceptions in raw_data gracefully.
         fetched = composer._fetch_requirements(requirements)
-
-        # Check if any fetched values are exceptions (from failed MDSplus access)
-        for key, value in fetched.items():
-            if isinstance(value, Exception):
-                raise RuntimeError(f"Failed to fetch requirement {key}: {value}") from value
-                # Check if this requirement matches any optional pattern
-            mds_path = key[0]  # key is (mds_path, shot, treename)
-            is_optional = any(
-                _matches_optional_pattern(mds_path, pattern)
-                for pattern in optional_patterns
-            )
-
-            if not is_optional:
-                raw_data.update(fetched)
+        raw_data.update(fetched)
 
     if not all(status.values()):
         unresolved = [path for path, resolved in status.items() if not resolved]
@@ -297,27 +282,6 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
     # Return single value if input was single path
     return results[ids_path] if single_path else results
 
-
-def _matches_optional_pattern(mds_path, pattern):
-    """
-    Check if an MDSplus path matches an optional requirement pattern.
-
-    Supports {system_no} placeholder for dynamic system numbers.
-
-    Args:
-        mds_path: Actual MDSplus path (e.g., '.ECH.SYSTEM_1.ANTENNA.GB_RCURVE')
-        pattern: Pattern with placeholders (e.g., '.ECH.SYSTEM_{system_no}.ANTENNA.GB_RCURVE')
-
-    Returns:
-        bool: True if the path matches the pattern
-    """
-    import re
-
-    # Convert pattern to regex, replacing {system_no} with digit matcher
-    regex_pattern = pattern.replace('{system_no}', r'\d+')
-    regex_pattern = '^' + re.escape(regex_pattern).replace(r'\\d\+', r'\d+') + '$'
-
-    return bool(re.match(regex_pattern, mds_path))
 
 def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float=1e-12, atol_array=1e-6):
     """
@@ -671,7 +635,9 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
                     f"to allow_different_shot in test_config_{ids_name}.yaml"
                 )
 
-        # Fetch data from MDSplus via OMAS mdsvalue
+        # Fetch data from MDSplus via OMAS mdsvalue.
+        # Store exceptions as values so compose functions can handle missing data
+        # gracefully (e.g., skipping CER channels that don't exist for this shot).
         for req in requirements:
             try:
                 mds = mdsvalue('d3d', req.treename, req.shot, req.mds_path)
@@ -679,7 +645,7 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
                 # IMPORTANT: Use tuple key (mds_path, shot, treename) to match Requirement.as_key()
                 raw_data[(req.mds_path, req.shot, req.treename)] = value
             except Exception as e:
-                pytest.fail(f"Failed to fetch {req.mds_path} from {req.treename}: {e}")
+                raw_data[(req.mds_path, req.shot, req.treename)] = e
 
     # Should achieve full resolution within max_steps
     assert fully_resolved, f"{ids_path} could not be fully resolved in {max_steps} steps"
