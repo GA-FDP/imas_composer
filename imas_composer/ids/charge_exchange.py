@@ -161,30 +161,30 @@ class ChargeExchangeMapper(IDSMapper):
         )
 
         # Toroidal rotation: ROTC for TANGENTIAL, ROT for VERTICAL
-        self.specs["charge_exchange._velocity_tor_data"] = IDSEntrySpec(
+        self.specs["charge_exchange._velocity_data"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=self._build_reqs(
                 lambda s, c: self._cer_path(s, c, self._rot_node(s))
             ),
-            ids_path="charge_exchange._velocity_tor_data",
+            ids_path="charge_exchange._velocity_data",
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["charge_exchange._velocity_tor_error"] = IDSEntrySpec(
+        self.specs["charge_exchange._velocity_error"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=self._build_reqs(
                 lambda s, c: self._cer_path(s, c, 'ROT_ERR')
             ),
-            ids_path="charge_exchange._velocity_tor_error",
+            ids_path="charge_exchange._velocity_error",
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["charge_exchange._velocity_tor_time"] = IDSEntrySpec(
+        self.specs["charge_exchange._velocity_time"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=self._build_reqs(
                 lambda s, c: self._cer_time_path(s, c, self._rot_node(s))
             ),
-            ids_path="charge_exchange._velocity_tor_time",
+            ids_path="charge_exchange._velocity_time",
             docs_file=self.DOCS_PATH
         )
 
@@ -348,27 +348,27 @@ class ChargeExchangeMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["charge_exchange.channel.ion.velocity_tor.data"] = IDSEntrySpec(
+        self.specs["charge_exchange.channel.ion.velocity.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._velocity_tor_data"],
-            compose=self._compose_velocity_tor_data,
-            ids_path="charge_exchange.channel.ion.velocity_tor.data",
+            depends_on=["charge_exchange._position_time", "charge_exchange._velocity_data"],
+            compose=self._compose_velocity_data,
+            ids_path="charge_exchange.channel.ion.velocity.data",
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["charge_exchange.channel.ion.velocity_tor.data_error_upper"] = IDSEntrySpec(
+        self.specs["charge_exchange.channel.ion.velocity.data_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._velocity_tor_error"],
-            compose=self._compose_velocity_tor_error,
-            ids_path="charge_exchange.channel.ion.velocity_tor.data_error_upper",
+            depends_on=["charge_exchange._position_time", "charge_exchange._velocity_error"],
+            compose=self._compose_velocity_error,
+            ids_path="charge_exchange.channel.ion.velocity.data_error_upper",
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["charge_exchange.channel.ion.velocity_tor.time"] = IDSEntrySpec(
+        self.specs["charge_exchange.channel.ion.velocity.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._velocity_tor_time"],
-            compose=self._compose_velocity_tor_time,
-            ids_path="charge_exchange.channel.ion.velocity_tor.time",
+            depends_on=["charge_exchange._position_time", "charge_exchange._velocity_time"],
+            compose=self._compose_velocity_time,
+            ids_path="charge_exchange.channel.ion.velocity.time",
             docs_file=self.DOCS_PATH
         )
 
@@ -515,11 +515,13 @@ class ChargeExchangeMapper(IDSMapper):
             result.append(np.atleast_1d(val) if val is not None else np.array([np.nan]))
         return ak.Array(result)
 
-    def _compose_velocity_tor_data(self, shot: int, raw_data: dict) -> ak.Array:
-        """Compose toroidal velocity time series per channel (in m/s).
+    def _compose_velocity_data(self, shot: int, raw_data: dict) -> ak.Array:
+        """Compose velocity time series per channel (in m/s).
 
-        TANGENTIAL uses ROTC node; VERTICAL uses ROT node.
-        Matches OMAS: ch['ion.0.velocity_tor.data'] = ROT * 1000  (km/s → m/s)
+        TANGENTIAL uses ROTC node; VERTICAL uses ROT node (because ROTC is missing).
+
+        This is not part of the IMAS schema, which only has velocity_tor and velocity_pol.
+        The direction will depend on the beam orientation and should be extracted accordingly.
         """
         active = self._get_active_channels(shot, raw_data)
         result = []
@@ -532,10 +534,11 @@ class ChargeExchangeMapper(IDSMapper):
                 result.append(np.array([np.nan]))
         return ak.Array(result)
 
-    def _compose_velocity_tor_error(self, shot: int, raw_data: dict) -> ak.Array:
-        """Compose toroidal velocity upper uncertainty per channel (in m/s).
+    def _compose_velocity_error(self, shot: int, raw_data: dict) -> ak.Array:
+        """Compose velocity upper uncertainty per channel (in m/s).
 
-        Matches OMAS: ch['ion.0.velocity_tor.data'] = unumpy.uarray(ROT*1e3, ROT_ERR*1e3)
+        This is not part of the IMAS schema, which only has velocity_tor and velocity_pol.
+        The direction will depend on the beam orientation and should be extracted accordingly.
         """
         active = self._get_active_channels(shot, raw_data)
         result = []
@@ -547,10 +550,11 @@ class ChargeExchangeMapper(IDSMapper):
                 result.append(np.array([np.nan]))
         return ak.Array(result)
 
-    def _compose_velocity_tor_time(self, shot: int, raw_data: dict) -> ak.Array:
-        """Compose toroidal velocity time arrays per channel (in seconds).
+    def _compose_velocity_time(self, shot: int, raw_data: dict) -> ak.Array:
+        """Compose velocity time arrays per channel (in seconds).
 
-        Matches OMAS: ch['ion.0.velocity_tor.time'] = dim_of(ROTC|ROT, 0)/1000
+        This is not part of the IMAS schema, which only has velocity_tor and velocity_pol.
+        The direction will depend on the beam orientation and should be extracted accordingly.
         """
         active = self._get_active_channels(shot, raw_data)
         result = []
