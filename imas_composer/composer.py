@@ -72,7 +72,8 @@ class ImasComposer:
                  efit_run_id: str = "",
                  profiles_tree: str = "ZIPFIT01",
                  profiles_run_id: str = "",
-                 fast_ece:bool = False):
+                 fast_ece: bool = False,
+                 include_rip: bool = False):
         """
         Initialize ImasComposer.
 
@@ -83,21 +84,24 @@ class ImasComposer:
             profiles_tree: Profiles tree to use for core_profiles data (e.g., 'ZIPFIT01', 'OMFIT_PROFS').
             profiles_run_id: Run ID to append to pulse for OMFIT_PROFS tree.
             fast_ece: Whether to load fast_ece data, defaults to false.
+            include_rip: Whether to include RIP (Radial Interferometer Polarimeter) data for interferometer IDS.
         """
         self.efit_tree = efit_tree
         self.efit_run_id = efit_run_id
         self.profiles_tree = profiles_tree
         self.profiles_run_id = profiles_run_id
         self.fast_ece = fast_ece
+        self.include_rip = include_rip
         self.ids_factory = IDSFactory()
         self._mappers = {}
         for ids_name in self.ids_factory.list_ids():
             # Register available mappers using factory functions
-            self._register_mapper(ids_name, self.ids_factory(ids_name, efit_tree=efit_tree, 
-                                                             efit_run_id=efit_run_id, 
+            self._register_mapper(ids_name, self.ids_factory(ids_name, efit_tree=efit_tree,
+                                                             efit_run_id=efit_run_id,
                                                              profiles_tree=self.profiles_tree,
                                                              profiles_run_id=self.profiles_run_id,
-                                                             fast_ece=self.fast_ece))
+                                                             fast_ece=self.fast_ece,
+                                                             include_rip=self.include_rip))
             
     def _register_mapper(self, ids_name: str, mapper):
         """Register an IDS mapper."""
@@ -475,7 +479,8 @@ def simple_load(
     profiles_tree: str = "ZIPFIT01",
     profiles_run_id: str = "",
     fast_ece: bool = False,
-    max_iterations: int = 10
+    include_rip=False,
+    max_iterations: int = 10,
 ) -> Dict[str, Any]:
     """
     Simple utility function to resolve and compose IDS data in one call.
@@ -492,6 +497,7 @@ def simple_load(
         efit_run_id: Run id to append to pulse for 'EFIT' tree (default: '', ignored if composer provided)
         profiles_tree: Profiles tree to use for core_profiles data (default: 'ZIPFIT01', ignored if composer provided)
         profiles_run_id: Run ID to append to pulse for OMFIT_PROFS tree (default: '', ignored if composer provided)
+        include_rip: Include DIII-D RIP data in the interferometry IDS
         fast_ece: Whether to load fast_ece data (default: False, ignored if composer provided)
         max_iterations: Maximum number of resolve-fetch iterations (default: 10)
 
@@ -533,7 +539,8 @@ def simple_load(
             efit_run_id=efit_run_id,
             profiles_tree=profiles_tree,
             profiles_run_id=profiles_run_id,
-            fast_ece=fast_ece
+            fast_ece=fast_ece,
+            include_rip=include_rip
         )
 
     raw_data = {}

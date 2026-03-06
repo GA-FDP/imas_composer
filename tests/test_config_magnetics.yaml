@@ -1,7 +1,8 @@
 # Test configuration for Magnetics IDS
 
-# Field-level exceptions for validation
-field_exceptions: {}
+# Fields to skip OMAS comparison for (composer still tested)
+# Format: field_path: "reason for skipping"
+skip_fields: {}
 
 # Requirement validation settings
 requirement_validation:

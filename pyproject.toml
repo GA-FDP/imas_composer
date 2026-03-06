@@ -71,7 +71,7 @@ Documentation = "https://github.com/DIII-D/imas_composer/blob/main/README.md"
 packages = ["imas_composer", "imas_composer.ids"]
 
 [tool.setuptools.package-data]
-imas_composer = ["ids/*.yaml"]
+imas_composer = ["ids/*.yaml", "cocos.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,68 @@
+# Test configuration for Interferometer IDS
+
+# Override default TEST_SHOTS for interferometer
+# RIP data only available for shots >= 168823
+# T channel only available for shots > 202680
+override_shots: [200000, 203886]
+
+# Fields to skip OMAS comparison for (composer still tested)
+# Format: field_path: "reason for skipping"
+skip_fields: {}
+
+field_tolerances:
+  interferometer.channel.n_e_line.data:
+    rtol: 1.0e-8
+    atol: 1.0e+9
+
+
+# Requirement validation settings
+requirement_validation:
+  # MDSplus paths that use setup/calibration data (shot 0), not the requested shot
+  allow_different_shot: []
+
+# Test parametrization configurations
+# Define different test variants with specific composer and OMAS parameters
+test_variants:
+  CO2_only:
+    # Test CO2 interferometer only (4 channels)
+    composer_params:
+      include_rip: false
+    omas_params:
+      include_CO2: true
+      include_RIP: false
+    exclude_fields: []
+
+  CO2_RIP:
+    # Test CO2 + RIP (7-8 channels depending on shot)
+    composer_params:
+      include_rip: true
+    omas_params:
+      include_CO2: true
+      include_RIP: true
+    exclude_fields: []
+
+# OMAS function to call
+# Use interferometer_polarimeter_data which supports include_CO2 and include_RIP parameters
+omas_function: interferometer_polarimeter_data
+
+# OMAS path mapping
+# Maps imas_composer notation to OMAS notation for fetching reference data
+# For channel fields, OMAS uses .: to index all channels at once
+omas_path_map:
+  # Channel fields (add .: to fetch all channels)
+  interferometer.channel.identifier: interferometer.channel.:.identifier
+  interferometer.channel.name: interferometer.channel.:.name
+  interferometer.channel.line_of_sight.first_point.r: interferometer.channel.:.line_of_sight.first_point.r
+  interferometer.channel.line_of_sight.first_point.z: interferometer.channel.:.line_of_sight.first_point.z
+  interferometer.channel.line_of_sight.first_point.phi: interferometer.channel.:.line_of_sight.first_point.phi
+  interferometer.channel.line_of_sight.second_point.r: interferometer.channel.:.line_of_sight.second_point.r
+  interferometer.channel.line_of_sight.second_point.z: interferometer.channel.:.line_of_sight.second_point.z
+  interferometer.channel.line_of_sight.second_point.phi: interferometer.channel.:.line_of_sight.second_point.phi
+  interferometer.channel.line_of_sight.third_point.r: interferometer.channel.:.line_of_sight.third_point.r
+  interferometer.channel.line_of_sight.third_point.z: interferometer.channel.:.line_of_sight.third_point.z
+  interferometer.channel.line_of_sight.third_point.phi: interferometer.channel.:.line_of_sight.third_point.phi
+  interferometer.channel.wavelength.0.value: interferometer.channel.:.wavelength.:.value
+  interferometer.channel.n_e_line.time: interferometer.channel.:.n_e_line.time
+  interferometer.channel.n_e_line.data: interferometer.channel.:.n_e_line.data
+  interferometer.channel.n_e_line.data_error_upper: interferometer.channel.:.n_e_line.data_error_upper
+  interferometer.channel.n_e_line.validity_timed: interferometer.channel.:.n_e_line.validity_timed
