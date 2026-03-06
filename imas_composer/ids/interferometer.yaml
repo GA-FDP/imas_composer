@@ -1,7 +1,14 @@
 # Interferometer IDS Configuration for DIII-D CO2 Interferometer and RIP
 
 # Static values (hardcoded, not from MDSplus)
-static_values: {}
+static_values:
+  # CO2 channel configuration
+  co2_channel_names: ['r0', 'v1', 'v2', 'v3']
+  n_co2_channels: 4
+
+  # RIP channel configuration
+  rip_channel_names_base: ['Z', 'P', 'N']
+  rip_channel_name_t: 'T'
 
 # Supported fields (complete list of implemented IDS paths)
 # Note: Number of channels varies based on include_rip parameter:

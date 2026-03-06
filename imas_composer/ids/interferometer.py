@@ -28,14 +28,6 @@ class InterferometerMapper(IDSMapper):
     DOCS_PATH = "interferometer.yaml"
     CONFIG_PATH = "interferometer.yaml"
 
-    # CO2 channel names
-    CO2_CHANNEL_NAMES = ['r0', 'v1', 'v2', 'v3']
-    N_CO2_CHANNELS = 4
-
-    # RIP channel names (varies by shot)
-    RIP_CHANNEL_NAMES_BASE = ['Z', 'P', 'N']
-    RIP_CHANNEL_NAME_T = 'T'
-
     def __init__(self, include_rip: bool = False, **kwargs):
         """
         Initialize Interferometer mapper.
@@ -48,6 +40,12 @@ class InterferometerMapper(IDSMapper):
 
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__(**kwargs)
+
+        # Load channel configuration from static_values
+        self.CO2_CHANNEL_NAMES = self.static_values['co2_channel_names']
+        self.N_CO2_CHANNELS = self.static_values['n_co2_channels']
+        self.RIP_CHANNEL_NAMES_BASE = self.static_values['rip_channel_names_base']
+        self.RIP_CHANNEL_NAME_T = self.static_values['rip_channel_name_t']
 
         # Build IDS specs
         self._build_specs()
