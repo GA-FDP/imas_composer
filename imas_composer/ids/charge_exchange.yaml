@@ -7,6 +7,15 @@
 
 static_values: {}
 
+# CER subsystem configuration
+# max_channels: upper probe limit per subsystem (channels above this are not queried)
+# DIII-D MDSplus nodes have 56 tangential and 32 vertical channels
+subsystems:
+  TANGENTIAL:
+    max_channels: 56
+  VERTICAL:
+    max_channels: 32
+
 # Supported fields (complete list of implemented IDS paths)
 fields:
   - channel.identifier
@@ -28,3 +37,5 @@ fields:
   - channel.ion.velocity.data
   - channel.ion.velocity.data_error_upper
   - channel.ion.velocity.time
+# total_installed_channels is not in OMAS; derived using getnci on the CALIBRATION tree
+  - code.parameters.total_installed_channels

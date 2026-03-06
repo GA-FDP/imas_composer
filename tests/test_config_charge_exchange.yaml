@@ -1,0 +1,23 @@
+# Test configuration for Charge Exchange IDS
+
+# No shots excluded - CER data exists for all standard test shots
+exclude_shots: []
+
+# Field-level exceptions
+field_exceptions: {}
+
+# Requirement validation settings
+requirement_validation:
+  # All CER requirements use the actual shot (no calibration data from shot 0)
+  allow_different_shot: []
+
+  # CER channel paths for channels that don't exist in the MDS tree will raise
+  # exceptions. These paths follow the pattern:
+  #   \IONS::TOP.CER.CERQUICK.{SUBSYSTEM}.CHANNEL{NN}.{NODE}
+  # Channels 1..MAX_CHANNELS are probed; non-existent channels return exceptions
+  # which are handled gracefully by the compose functions.
+  #
+  # NOTE: If the requirements test fails for channels above the actual hardware
+  # count (e.g., channels 33-40 for TANGENTIAL), reduce MAX_CHANNELS in
+  # ChargeExchangeMapper or increase the optional_requirements list below.
+  optional_requirements: []

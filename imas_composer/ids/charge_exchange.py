@@ -25,12 +25,6 @@ from .base import IDSMapper
 class ChargeExchangeMapper(IDSMapper):
     """Maps DIII-D CER data to IMAS charge_exchange IDS."""
 
-    SUBSYSTEMS = ['TANGENTIAL', 'VERTICAL']
-    # Per-subsystem channel probe limit.
-    # DIII-D CER has ~32 tangential and ~20 vertical channels.
-    # Channels above this limit are not probed.
-    MAX_CHANNELS = 40
-
     DOCS_PATH = "charge_exchange.yaml"
     CONFIG_PATH = "charge_exchange.yaml"
 
@@ -43,6 +37,13 @@ class ChargeExchangeMapper(IDSMapper):
         """
         self.analysis_type = analysis_type
         super().__init__()
+        # Load subsystem config from YAML
+        subsystems_config = self._load_config().get('subsystems', {
+            'TANGENTIAL': {'max_channels': 56},
+            'VERTICAL': {'max_channels': 32},
+        })
+        self.SUBSYSTEMS = list(subsystems_config.keys())
+        self.MAX_CHANNELS_BY_SUB = {sub: cfg['max_channels'] for sub, cfg in subsystems_config.items()}
         self._build_specs()
 
     # -------------------------------------------------------------------------
@@ -88,7 +89,7 @@ class ChargeExchangeMapper(IDSMapper):
         return [
             Requirement(path_fn(sub, ch), 0, 'IONS')
             for sub in self.SUBSYSTEMS
-            for ch in range(1, self.MAX_CHANNELS + 1)
+            for ch in range(1, self.MAX_CHANNELS_BY_SUB[sub] + 1)
         ]
 
     def _build_specs(self):
@@ -372,6 +373,42 @@ class ChargeExchangeMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # Total installed channels: count nodes with data in the CALIBRATION tree (analysis-type independent)
+        self.specs["charge_exchange._tangential_installed"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(
+                    'getnci("CER.CALIBRATION.TANGENTIAL.CHANNEL*:BEAMGEOMETRY","LENGTH")',
+                    0, 'IONS'
+                )
+            ],
+            ids_path="charge_exchange._tangential_installed",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange._vertical_installed"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(
+                    'getnci("CER.CALIBRATION.VERTICAL.CHANNEL*:BEAMGEOMETRY","LENGTH")',
+                    0, 'IONS'
+                )
+            ],
+            ids_path="charge_exchange._vertical_installed",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange.code.parameters.total_installed_channels"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "charge_exchange._tangential_installed",
+                "charge_exchange._vertical_installed",
+            ],
+            compose=self._compose_total_installed_channels,
+            ids_path="charge_exchange.code.parameters.total_installed_channels",
+            docs_file=self.DOCS_PATH
+        )
+
     # -------------------------------------------------------------------------
     # Helpers
     # -------------------------------------------------------------------------
@@ -384,7 +421,7 @@ class ChargeExchangeMapper(IDSMapper):
         """
         active = []
         for sub in self.SUBSYSTEMS:
-            for ch in range(1, self.MAX_CHANNELS + 1):
+            for ch in range(1, self.MAX_CHANNELS_BY_SUB[sub] + 1):
                 key = Requirement(self._cer_path(sub, ch, 'TIME'), shot, 'IONS').as_key()
                 val = raw_data.get(key)
                 if val is None or isinstance(val, Exception):
@@ -614,6 +651,23 @@ class ChargeExchangeMapper(IDSMapper):
             val = self._lookup(raw_data, shot, self._impdens_time_path(sub, ch, 'ZEFF'))
             result.append(np.atleast_1d(val) if val is not None else np.array([np.nan]))
         return ak.Array(result)
+
+    def _compose_total_installed_channels(self, shot: int, raw_data: dict) -> int:
+        """Count total installed CER channels from CALIBRATION tree.
+
+        Uses getnci to count BEAMGEOMETRY nodes that have data across TANGENTIAL and VERTICAL
+        subsystems. The CALIBRATION tree is analysis-type independent.
+
+        getnci returns one LENGTH value per matching channel node, so
+        len() of the result equals the number of installed channels.
+        """
+        tang_path = 'getnci("CER.CALIBRATION.TANGENTIAL.CHANNEL*:BEAMGEOMETRY","LENGTH")'
+        vert_path = 'getnci("CER.CALIBRATION.VERTICAL.CHANNEL*:BEAMGEOMETRY","LENGTH")'
+        tang_data = self._lookup(raw_data, shot, tang_path)
+        vert_data = self._lookup(raw_data, shot, vert_path)
+        tang_count = int(sum(tang_data > 0)) if tang_data is not None else 0
+        vert_count = int(sum(vert_data > 0)) if vert_data is not None else 0
+        return tang_count + vert_count
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         return self.specs
