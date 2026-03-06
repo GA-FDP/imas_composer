@@ -195,6 +195,25 @@ def check_field_shot_exclusion(ids_name, ids_path, shot):
             pytest.skip(f"Shot {shot} excluded for {ids_path} (no data available)")
 
 
+def check_skip_field(ids_name, ids_path):
+    """
+    Check if OMAS comparison should be skipped for a specific field.
+
+    Args:
+        ids_name: IDS identifier (e.g., 'ece')
+        ids_path: Full IDS path (e.g., 'ece.channel.t_e.data')
+
+    Raises:
+        pytest.skip: If the field is in the skip_fields dict
+    """
+    config = load_test_config(ids_name)
+    skip_fields = config.get('skip_fields', {})
+
+    if ids_path in skip_fields:
+        reason = skip_fields[ids_path]
+        pytest.skip(f"OMAS comparison skipped for {ids_path}: {reason}")
+
+
 def get_ndim(arr):
     """
     Extract shape information from awkward or numpy arrays.
@@ -852,6 +871,9 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
 
     # Compose using imas_composer
     composer_value = resolve_and_compose(composer, ids_path, shot)
+
+    # Check if OMAS comparison should be skipped
+    check_skip_field(ids_name, ids_path)
 
     # Load test config to get OMAS path mapping
     test_config = load_test_config(ids_name)
