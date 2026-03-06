@@ -6,7 +6,7 @@ It is intentionally separate from composer.py so that ImasComposer itself has no
 dependency on any specific data backend (MDSplus, ptdata, etc.).
 
 Public API:
-    fetch_requirements: Fetch a list of Requirement objects from MDSplus or ptdata
+    fetch_requirements: Fetch a list of Requirement objects from MDSplus via OMAS
     simple_load: Convenience wrapper that runs the full resolve-fetch-compose loop
 """
 
@@ -21,22 +21,20 @@ except ImportError:
     OMAS_AVAILABLE = False
     mdsvalue = None
 
-try:
-    from ptdata import PtDataFetcher
-    PTDATA_AVAILABLE = True
-except ImportError:
-    PTDATA_AVAILABLE = False
-    PtDataFetcher = None
-
 
 def fetch_requirements(requirements: List[Requirement]) -> Dict[Tuple[str, int, str], Any]:
     """
-    Fetch a list of requirements from MDSplus (via OMAS) or ptdata.
+    Fetch a list of requirements from MDSplus via OMAS mdsvalue.
 
-    Requirements with treename == "__ptdata__" are fetched via PtDataFetcher and
-    stored as dicts with keys 'data', 'times' (ms), and 'rarray'.  All other
-    requirements are fetched from MDSplus via OMAS mdsvalue, grouped by
-    (treename, shot) for efficiency.
+    Requirements are grouped by (treename, shot) for efficient batching.
+    treename=None is used for TDI expressions that do not require a named tree
+    (e.g. ptdata2("BT", shot)).
+
+    Requirements with treename == "__ptdata__" are treated as ptdata signals:
+    the mds_path is used as the signal name and three TDI expressions are built
+    (ptdata2 for data, dim_of for time, pthead2/__rarray for the header).  The
+    result is stored as a dict with keys 'data', 'times' (ms), and 'rarray',
+    matching the format expected by mapper compose functions.
 
     Args:
         requirements: List of Requirement objects to fetch.
@@ -46,46 +44,49 @@ def fetch_requirements(requirements: List[Requirement]) -> Dict[Tuple[str, int, 
         or to the Exception if fetching failed.
 
     Raises:
-        RuntimeError: If ptdata is not installed and __ptdata__ requirements exist,
-                      or if OMAS is not installed and MDSplus requirements exist.
+        RuntimeError: If OMAS is not installed.
     """
     if not requirements:
         return {}
+
+    if not OMAS_AVAILABLE:
+        raise RuntimeError(
+            "OMAS is required for fetching requirements but is not installed."
+        )
 
     ptdata_reqs = [r for r in requirements if r.treename == "__ptdata__"]
     mds_reqs = [r for r in requirements if r.treename != "__ptdata__"]
 
     raw_data = {}
 
-    # --- ptdata requirements ---
+    # --- __ptdata__ requirements: translate to ptdata2/pthead2 TDI via OMAS ---
     if ptdata_reqs:
-        if not PTDATA_AVAILABLE:
-            raise RuntimeError(
-                "ptdata package is required for __ptdata__ requirements but is not installed."
-            )
         seen_keys = set()
         for req in ptdata_reqs:
             k = req.as_key()
             if k in seen_keys:
                 continue
             seen_keys.add(k)
+            sig = req.mds_path
+            shot = req.shot
+            tdi = {
+                'data':   f'ptdata2("{sig}",{shot})',
+                'times':  f'dim_of(ptdata2("{sig}",{shot}),0)',
+                'rarray': f'pthead2("{sig}",{shot}), __rarray',
+            }
             try:
-                fetcher = PtDataFetcher(req.mds_path, req.shot)
-                result = fetcher.fetch(fetch_times=True)
+                result = mdsvalue('d3d', treename=None, pulse=shot, TDI=tdi)
+                tree_data = result.raw()
                 raw_data[k] = {
-                    'data': result['data'],
-                    'times': result['times'],
-                    'rarray': fetcher.header.rarray.copy(),
+                    'data':   tree_data['data'],
+                    'times':  tree_data['times'],
+                    'rarray': tree_data['rarray'],
                 }
             except Exception as e:
                 raw_data[k] = e
 
     # --- MDSplus requirements ---
     if mds_reqs:
-        if not OMAS_AVAILABLE:
-            raise RuntimeError(
-                "OMAS is required for MDSplus requirements but is not installed."
-            )
         by_tree_shot = {}
         for req in mds_reqs:
             key = (req.treename, req.shot)
