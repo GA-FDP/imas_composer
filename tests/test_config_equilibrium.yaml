@@ -50,10 +50,34 @@ field_tolerances:
   # IMAS_composer uses the actual psi entries from MDSpus while OMAS recreates the grid
     rtol: 1.0e-10
     atol: 1.0e-6
+  equilibrium.time_slice.constraints.mse_polarisation_angle.measured:
+  # Uses arctan
+    rtol: 1.0e-7
+    atol: 1.0e-7
+  equilibrium.time_slice.constraints.mse_polarisation_angle.measured_error_upper:
+  # Uses arctan
+    rtol: 1.0e-7
+    atol: 1.0e-7
   equilibrium.time_slice.global_quantities.area:
   # OMAS does the cm^2 -> m^2 conversion on the MDSplus side where everything is 32 bit
     rtol: 1.0e-6
     atol: 1.0e-6
+  equilibrium.time_slice.boundary_separatrix.minor_radius:
+     # OMAS does the cm^2 -> m^2 conversion on the MDSplus side where everything is 32 bit
+      rtol: 1.0e-8
+      atol: 1.0e-8
+  equilibrium.time_slice.profiles_2d.b_field_tor:
+    # Uses interpolation and gradient calculations
+    rtol: 1.0e-5
+    atol: 1.0e-7
+  equilibrium.time_slice.profiles_2d.b_field_r:
+    # Uses numpy.gradient for derivative calculations
+    rtol: 1.0e-5
+    atol: 1.0e-7
+  equilibrium.time_slice.profiles_2d.b_field_z:
+    # Uses numpy.gradient for derivative calculations
+    rtol: 1.0e-5
+    atol: 1.0e-7
 
 # Requirement validation settings
 requirement_validation:

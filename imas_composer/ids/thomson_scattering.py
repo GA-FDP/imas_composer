@@ -483,7 +483,8 @@ class ThomsonScatteringMapper(IDSMapper):
 
             # Get error for this system (shape: n_channels_this_system, n_time)
             system_error = raw_data[error_key]
-
+            # Convert zero error into infinite error
+            system_error[system_error ==0] = np.inf
             # Append each channel (skip if empty)
             if system_error.ndim == 1:
                 # Single channel system

@@ -8,6 +8,14 @@ requirement_validation:
   # No MDSplus data needed - all fields are static hardware geometry
   allow_different_shot: []
 
+field_tolerances:
+  gas_injection.pipe.exit_position.phi:
+    rtol: 5.0e-7
+    atol: 5.0e-7
+  gas_injection.pipe.second_point.phi:
+    rtol: 5.0e-7
+    atol: 5.0e-7
+
 # OMAS path mapping
 # Maps imas_composer notation to OMAS notation for fetching reference data
 # For pipe and valve fields, OMAS uses .: to index all pipes/valves at once
