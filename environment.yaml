@@ -25,31 +25,9 @@ dependencies:
   - mdsplus 7.139.59.*
   - ptdata *
 
-  # Transitive deps of omas — installed via conda to avoid PyPI versions
-  - matplotlib *
-  - pandas *
-  - xarray *
-  - h5py *
-  - netcdf4 *
-  - pint *
-  - uncertainties *
-  - cython *
-  - dnspython *
-  - python-dateutil *   # via matplotlib
-  - flexcache *         # via pint
-  - flexparser *        # via pint
-  - pillow *            # via matplotlib
-  - fonttools *         # via matplotlib
-  - kiwisolver *        # via matplotlib
-  - contourpy *         # via matplotlib
-  - cycler *            # via matplotlib
-  - platformdirs *      # via pint
-  - pyparsing *         # via matplotlib
-  - six *               # via python-dateutil
-  - cftime *            # via netcdf4
+  # OMAS - available on conda-forge since 0.95.2
+  - omas >=0.95.2
 
   - pip:
-    # omas has no conda package; pin to tested commit
-    - omas @ git+https://github.com/gafusion/omas.git@b2c91e534b56a49bd4f8caf449c7f2fe11addd31
     # Install imas_composer in editable mode from current directory
     - -e .

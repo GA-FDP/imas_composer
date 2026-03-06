@@ -5,12 +5,6 @@ Verifies that the method correctly returns leaf paths for both top-level
 IDS names and arbitrary dotted path prefixes.
 """
 import pytest
-from imas_composer import ImasComposer
-
-
-@pytest.fixture(scope='module')
-def composer():
-    return ImasComposer()
 
 
 def test_top_level_ids_returns_all_fields(composer):
