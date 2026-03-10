@@ -73,6 +73,10 @@ class ChargeExchangeMapper(IDSMapper):
         """MDSplus node name for toroidal rotation (differs by subsystem)."""
         return 'ROTC' if sub == 'TANGENTIAL' else 'ROT'
 
+    def _active_path(self, sub: str) -> str:
+        """MDSplus path returning TIME node LENGTH for each channel in a subsystem."""
+        return f'getnci("CER.{self.analysis_type}.{sub}.CHANNEL*:TIME","LENGTH")'
+
     # -------------------------------------------------------------------------
     # Requirement building
     # -------------------------------------------------------------------------
@@ -227,11 +231,34 @@ class ChargeExchangeMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # get_active DIRECT specs: TIME node LENGTH array, one entry per channel node.
+        # LENGTH > 0 means the channel has data for this analysis type.
+        # These drive _get_active_channels and must appear in depends_on of every channel spec.
+        self.specs["charge_exchange._tangential_active"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(self._get_active_path('TANGENTIAL'), 0, 'IONS')],
+            ids_path="charge_exchange._tangential_active",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange._vertical_active"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(self._get_active_path('VERTICAL'), 0, 'IONS')],
+            ids_path="charge_exchange._vertical_active",
+            docs_file=self.DOCS_PATH
+        )
+
         # ---- Public COMPUTED specs ----
+        # All channel specs depend on the TIME data so _get_active_channels always
+        # has LENGTH arrays available when compose is called.
+        _get_active_deps = [
+            "charge_exchange._tangential_active",
+            "charge_exchange._vertical_active",
+        ]
 
         self.specs["charge_exchange.channel.identifier"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time"],
+            depends_on=_get_active_deps,
             compose=self._compose_identifier,
             ids_path="charge_exchange.channel.identifier",
             docs_file=self.DOCS_PATH
@@ -239,7 +266,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.name"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time"],
+            depends_on=_get_active_deps,
             compose=self._compose_name,
             ids_path="charge_exchange.channel.name",
             docs_file=self.DOCS_PATH
@@ -247,7 +274,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.r.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._position_r"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._position_r"],
             compose=self._compose_position_r_data,
             ids_path="charge_exchange.channel.position.r.data",
             docs_file=self.DOCS_PATH
@@ -255,7 +282,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.r.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time"],
             compose=self._compose_position_time,
             ids_path="charge_exchange.channel.position.r.time",
             docs_file=self.DOCS_PATH
@@ -263,7 +290,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.z.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._position_z"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._position_z"],
             compose=self._compose_position_z_data,
             ids_path="charge_exchange.channel.position.z.data",
             docs_file=self.DOCS_PATH
@@ -271,7 +298,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.z.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time"],
             compose=self._compose_position_time,
             ids_path="charge_exchange.channel.position.z.time",
             docs_file=self.DOCS_PATH
@@ -279,7 +306,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.phi.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._position_phi"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._position_phi"],
             compose=self._compose_position_phi_data,
             ids_path="charge_exchange.channel.position.phi.data",
             docs_file=self.DOCS_PATH
@@ -287,7 +314,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.phi.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time"],
             compose=self._compose_position_time,
             ids_path="charge_exchange.channel.position.phi.time",
             docs_file=self.DOCS_PATH
@@ -295,7 +322,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.zeff.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._zeff_data"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._zeff_data"],
             compose=self._compose_zeff_data,
             ids_path="charge_exchange.channel.zeff.data",
             docs_file=self.DOCS_PATH
@@ -303,7 +330,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.zeff.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._zeff_time"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._zeff_time"],
             compose=self._compose_zeff_time,
             ids_path="charge_exchange.channel.zeff.time",
             docs_file=self.DOCS_PATH
@@ -311,7 +338,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.n_i_over_n_e.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._n_i_over_n_e_data"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._n_i_over_n_e_data"],
             compose=self._compose_n_i_over_n_e_data,
             ids_path="charge_exchange.channel.ion.n_i_over_n_e.data",
             docs_file=self.DOCS_PATH
@@ -319,7 +346,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.n_i_over_n_e.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._n_i_over_n_e_time"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._n_i_over_n_e_time"],
             compose=self._compose_n_i_over_n_e_time,
             ids_path="charge_exchange.channel.ion.n_i_over_n_e.time",
             docs_file=self.DOCS_PATH
@@ -327,7 +354,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.t_i.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._t_i_data"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._t_i_data"],
             compose=self._compose_t_i_data,
             ids_path="charge_exchange.channel.ion.t_i.data",
             docs_file=self.DOCS_PATH
@@ -335,7 +362,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.t_i.data_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._t_i_error"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._t_i_error"],
             compose=self._compose_t_i_error,
             ids_path="charge_exchange.channel.ion.t_i.data_error_upper",
             docs_file=self.DOCS_PATH
@@ -343,7 +370,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.t_i.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._t_i_time"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._t_i_time"],
             compose=self._compose_t_i_time,
             ids_path="charge_exchange.channel.ion.t_i.time",
             docs_file=self.DOCS_PATH
@@ -351,7 +378,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.velocity.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._velocity_data"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._velocity_data"],
             compose=self._compose_velocity_data,
             ids_path="charge_exchange.channel.ion.velocity.data",
             docs_file=self.DOCS_PATH
@@ -359,7 +386,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.velocity.data_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._velocity_error"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._velocity_error"],
             compose=self._compose_velocity_error,
             ids_path="charge_exchange.channel.ion.velocity.data_error_upper",
             docs_file=self.DOCS_PATH
@@ -367,7 +394,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.velocity.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._position_time", "charge_exchange._velocity_time"],
+            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._velocity_time"],
             compose=self._compose_velocity_time,
             ids_path="charge_exchange.channel.ion.velocity.time",
             docs_file=self.DOCS_PATH
@@ -414,22 +441,19 @@ class ChargeExchangeMapper(IDSMapper):
     # -------------------------------------------------------------------------
 
     def _get_active_channels(self, shot: int, raw_data: dict) -> List[Tuple[str, int]]:
-        """Return (sub, ch) pairs for channels with valid TIME data.
+        """Return (sub, ch) pairs for channels that have TIME data for this analysis type.
 
-        A channel is active if its TIME fetch succeeded and returned a non-empty array.
-        Matches OMAS: `if isinstance(postime, Exception): continue`.
+        Uses getnci LENGTH arrays: index i corresponds to channel i+1, and
+        LENGTH > 0 means the channel node has data.
         """
         active = []
         for sub in self.SUBSYSTEMS:
-            for ch in range(1, self.MAX_CHANNELS_BY_SUB[sub] + 1):
-                key = Requirement(self._cer_path(sub, ch, 'TIME'), shot, 'IONS').as_key()
-                val = raw_data.get(key)
-                if val is None or isinstance(val, Exception):
-                    continue
-                time_arr = np.atleast_1d(val)
-                if len(time_arr) == 0:
-                    continue
-                active.append((sub, ch))
+            lengths = self._lookup(raw_data, shot, self._get_active_path(sub))
+            if lengths is None:
+                continue
+            for i, length in enumerate(np.atleast_1d(lengths)):
+                if length > 0:
+                    active.append((sub, i + 1))
         return active
 
     def _lookup(self, raw_data: dict, shot: int, mds_path: str) -> Optional[np.ndarray]:

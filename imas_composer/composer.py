@@ -500,6 +500,7 @@ def simple_load(
 
     Raises:
         RuntimeError: If OMAS is not available, or if requirements cannot be resolved
+        Exception: If any requirement fetch fails
 
     Example:
         >>> # Simple single field
@@ -546,8 +547,16 @@ def simple_load(
             break
 
         # Fetch requirements using the private method
-        # Exceptions are stored as values; compose functions handle missing data
         fetched = composer._fetch_requirements(requirements)
+
+        # Check for fetch errors
+        for key, value in fetched.items():
+            if isinstance(value, Exception):
+                raise RuntimeError(
+                    f"Failed to fetch requirement {key}: {value}"
+                ) from value
+
+        # Update raw_data
         raw_data.update(fetched)
     else:
         # Loop completed without breaking (not all resolved)
