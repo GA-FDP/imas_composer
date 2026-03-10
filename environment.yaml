@@ -2,13 +2,11 @@ name: imas_composer
 
 channels:
   - conda-forge
-  - ga-fdp
-  - nodefaults
 
 dependencies:
   # Core runtime deps
   - python >=3.11
-  - numpy 1.*
+  - numpy >=1.24
   - pyyaml *
   - awkward *
   - scipy *
@@ -20,14 +18,7 @@ dependencies:
   - pytest-xdist *
   - pexpect *
   - tqdm *
-
-  # Data access backends (direct test deps)
-  - mdsplus 7.139.59.*
-  - ptdata *
+  - mdsplus =7.157.0
 
   # OMAS - available on conda-forge since 0.95.2
   - omas >=0.95.2
-
-  - pip:
-    # Install imas_composer in editable mode from current directory
-    - -e .
