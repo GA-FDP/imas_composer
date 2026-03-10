@@ -3,6 +3,18 @@ Shared pytest fixtures and utilities for imas_composer tests.
 
 This file is automatically discovered by pytest and makes fixtures available
 to all test files in this directory.
+
+Key Features:
+- test_shot fixture: Parametrized across TEST_SHOTS (or override_shots from config)
+- composer fixture: Parametrized for core_profiles (ZIPFIT/OMFIT) and interferometer (CO2/RIP)
+- OMAS validation: Compare imas_composer output against OMAS reference implementation
+
+Test Shot Configuration:
+- Default: Tests run on TEST_SHOTS = [202161, 203321, 204602, 204601]
+- exclude_shots: In test_config_<ids>.yaml, skip specific shots (e.g., no data available)
+- override_shots: In test_config_<ids>.yaml, completely replace TEST_SHOTS with custom list
+  Example: For interferometer with RIP data requirement (shots >= 168823):
+    override_shots: [200000, 203321]
 """
 
 import pytest
@@ -93,49 +105,6 @@ def load_test_config(ids_name):
     # Cache the config
     _test_config_cache[ids_name] = config
     return config
-
-
-@pytest.fixture(params=TEST_SHOTS)
-def test_shot(request):
-    """
-    Fixture that provides the test shot number for the current test.
-
-    Parametrized across TEST_SHOTS to run tests on multiple shots.
-    IDS-specific configs can exclude certain shots via 'exclude_shots' list.
-
-    Determines the IDS name from the test file name (e.g., test_ece_*.py -> 'ece')
-    and checks if the shot should be skipped for this IDS.
-
-    Returns:
-        int: Shot number to use for testing
-    """
-    shot = request.param
-
-    # Extract IDS name from test file name
-    # e.g., 'test_ece_requirements.py' -> 'ece'
-    # e.g., 'test_ec_launchers_composition.py' -> 'ec_launchers'
-    test_file = request.node.fspath.basename
-
-    # Remove 'test_' prefix and '_requirements.py' or '_composition.py' suffix
-    if test_file.startswith('test_'):
-        test_file = test_file[5:]  # Remove 'test_'
-
-    # Remove common suffixes
-    for suffix in ['_requirements.py', '_composition.py', '.py']:
-        if test_file.endswith(suffix):
-            test_file = test_file[:-len(suffix)]
-            break
-
-    ids_name = test_file
-
-    # Load config and check for excluded shots
-    config = load_test_config(ids_name)
-    exclude_shots = config.get('exclude_shots', [])
-
-    if shot in exclude_shots:
-        pytest.skip(f"Shot {shot} excluded for {ids_name} (no data available)")
-
-    return shot
 
 
 def load_ids_fields(ids_name, tree_filter=None):
@@ -476,12 +445,47 @@ def composer_params(request):
 
 def pytest_generate_tests(metafunc):
     """
-    Dynamically parametrize the composer fixture and ids_path based on the test module.
+    Dynamically parametrize fixtures based on the test module.
 
-    For core_profiles tests, parametrize across both ZIPFIT and OMFIT_PROFS trees,
-    and filter the fields list to match each tree's capabilities.
-    For other IDS tests, use only the default values from YAML configs.
+    Handles:
+    - test_shot: Use override_shots from config if defined, otherwise TEST_SHOTS with exclude_shots
+    - composer + ids_path: Special parametrization for core_profiles and interferometer
     """
+    # Handle test_shot parametrization
+    if 'test_shot' in metafunc.fixturenames:
+        # Extract IDS name from test module name (remove package name)
+        test_module = metafunc.module.__name__.split(".")[-1]
+        # e.g., 'test_interferometer_composition' -> 'interferometer'
+        if test_module.startswith('test_'):
+            test_module = test_module[5:]  # Remove 'test_'
+
+        # Remove common suffixes
+        for suffix in ['_requirements', '_composition']:
+            if test_module.endswith(suffix):
+                test_module = test_module[:-len(suffix)]
+                break
+
+        ids_name = test_module
+
+        # Load config to check for override_shots
+        try:
+            config = load_test_config(ids_name)
+            override_shots = config.get('override_shots', None)
+            exclude_shots = config.get('exclude_shots', [])
+
+            if override_shots is not None:
+                # Use override shots - ignore TEST_SHOTS completely
+                shots_to_test = override_shots
+            else:
+                # Use default TEST_SHOTS, filtered by exclude_shots
+                shots_to_test = [shot for shot in TEST_SHOTS if shot not in exclude_shots]
+
+            metafunc.parametrize('test_shot', shots_to_test)
+        except FileNotFoundError:
+            # No config file, use default TEST_SHOTS
+            metafunc.parametrize('test_shot', TEST_SHOTS)
+
+    # Handle composer parametrization
     if 'composer' in metafunc.fixturenames:
         # Check if this is a core_profiles test
         if 'core_profiles' in metafunc.module.__name__:
@@ -519,6 +523,92 @@ def pytest_generate_tests(metafunc):
                     {'profiles_tree': 'ZIPFIT01'},
                     {'profiles_tree': 'OMFIT_PROFS'}
                 ], ids=['ZIPFIT', 'OMFIT_PROFS'], indirect=True)
+
+        # Check if this is an interferometer test
+        elif 'interferometer' in metafunc.module.__name__:
+            if 'ids_path' in metafunc.fixturenames:
+                # Load test config to get variants
+                test_config = load_test_config('interferometer')
+                test_variants = test_config.get('test_variants', {})
+
+                # Create parameter combinations: (composer_params, ids_path)
+                param_list = []
+                ids_list = []
+
+                for variant_name, variant_config in test_variants.items():
+                    composer_params = variant_config.get('composer_params', {})
+                    exclude_fields = variant_config.get('exclude_fields', [])
+
+                    # Get all fields and filter out excluded ones
+                    all_fields = load_ids_fields('interferometer')
+                    filtered_fields = [f for f in all_fields if f not in exclude_fields]
+
+                    for field in filtered_fields:
+                        param_list.append((
+                            composer_params,
+                            field
+                        ))
+                        ids_list.append(f"{variant_name}-{field}")
+
+                # Parametrize both fixtures together
+                metafunc.parametrize('composer_params,ids_path', param_list, ids=ids_list, indirect=['composer_params'])
+            else:
+                # No ids_path, just parametrize composer across variants
+                test_config = load_test_config('interferometer')
+                test_variants = test_config.get('test_variants', {})
+
+                param_list = []
+                ids_list = []
+
+                for variant_name, variant_config in test_variants.items():
+                    composer_params = variant_config.get('composer_params', {})
+                    param_list.append(composer_params)
+                    ids_list.append(variant_name)
+
+                metafunc.parametrize('composer_params', param_list, ids=ids_list, indirect=True)
+
+        # Check if this is an ECE test
+        elif 'ece' in metafunc.module.__name__:
+            if 'ids_path' in metafunc.fixturenames:
+                # Load test config to get variants
+                test_config = load_test_config('ece')
+                test_variants = test_config.get('test_variants', {})
+
+                # Create parameter combinations: (composer_params, ids_path)
+                param_list = []
+                ids_list = []
+
+                for variant_name, variant_config in test_variants.items():
+                    composer_params = variant_config.get('composer_params', {})
+                    exclude_fields = variant_config.get('exclude_fields', [])
+
+                    # Get all fields and filter out excluded ones
+                    all_fields = load_ids_fields('ece')
+                    filtered_fields = [f for f in all_fields if f not in exclude_fields]
+
+                    for field in filtered_fields:
+                        param_list.append((
+                            composer_params,
+                            field
+                        ))
+                        ids_list.append(f"{variant_name}-{field}")
+
+                # Parametrize both fixtures together
+                metafunc.parametrize('composer_params,ids_path', param_list, ids=ids_list, indirect=['composer_params'])
+            else:
+                # No ids_path, just parametrize composer across variants
+                test_config = load_test_config('ece')
+                test_variants = test_config.get('test_variants', {})
+
+                param_list = []
+                ids_list = []
+
+                for variant_name, variant_config in test_variants.items():
+                    composer_params = variant_config.get('composer_params', {})
+                    param_list.append(composer_params)
+                    ids_list.append(variant_name)
+
+                metafunc.parametrize('composer_params', param_list, ids=ids_list, indirect=True)
 
 
 @pytest.fixture(scope='module')
@@ -570,7 +660,8 @@ def omas_data():
     cache = {}
 
     def _fetch_omas_data(ids_name, ids_path=None, shot=REFERENCE_SHOT, reset_cache=False,
-                         efit_tree=None, profiles_tree=None, profiles_run_id=None):
+                         efit_tree=None, profiles_tree=None, profiles_run_id=None,
+                         include_rip=None, include_CO2=None, include_RIP=None, fast_ece=False):
         # Load defaults from YAML if not provided
         if efit_tree is None:
             efit_tree = _load_yaml_default('equilibrium.yaml', 'default_efit_tree', 'EFIT01')
@@ -578,12 +669,20 @@ def omas_data():
             profiles_tree = _load_yaml_default('core_profiles.yaml', 'default_profiles_tree', 'ZIPFIT01')
         if profiles_run_id is None:
             profiles_run_id = _load_yaml_default('core_profiles.yaml', 'default_profiles_run_id', '001')
+
+        # Load interferometer defaults if not provided
+        if ids_name == 'interferometer':
+            if include_CO2 is None:
+                include_CO2 = True  # Default to True
+            if include_RIP is None:
+                include_RIP = False  # Default to False
+
         # Default to wildcard fetch for non-equilibrium IDS
         if ids_path is None:
             ids_path = f'{ids_name}.*'
 
-        # Use shot + profiles_tree as cache key to handle different tree types
-        cache_key = (shot, profiles_tree, profiles_run_id)
+        # Use shot + profiles_tree + interferometer params + ECE params as cache key
+        cache_key = (shot, profiles_tree, profiles_run_id, include_CO2, include_RIP, fast_ece)
 
         # If reset_cache=True, clear cache and create new ODS
         if reset_cache or cache_key not in cache:
@@ -600,6 +699,13 @@ def omas_data():
             options['PROFILES_tree'] = profiles_tree
             if 'OMFIT_PROFS' in profiles_tree:
                 options['PROFILES_run_id'] = profiles_run_id
+        elif ids_name == 'interferometer':
+            # For interferometer, pass include_CO2 and include_RIP to OMAS
+            options['include_CO2'] = include_CO2
+            options['include_RIP'] = include_RIP
+        elif ids_name == 'ece':
+            # For ECE, pass fast_ece to OMAS
+            options['fast_ece'] = fast_ece
 
         # For equilibrium with specific path, fetch only that field
         # For others, use wildcard
@@ -704,14 +810,9 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
         atol_float: Absolute tolerance for scalar floats
         atol_array: Absolute tolerance for float arrays
     """
-    if hasattr(composer_value, "ndim"):
-        ndim = composer_value.ndim
-    else:
-        # Scalar
-        ndim = 0
 
     # Base case: 0D (scalar) or 1D array - do comparison
-    if ndim <= 1 or ":" not in omas_path:
+    if ":" not in omas_path:
         # Compare
         compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
 
@@ -775,10 +876,42 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
     profiles_tree = getattr(composer, 'profiles_tree', 'ZIPFIT01')
     profiles_run_id = getattr(composer, 'profiles_run_id', '001')
 
+    # Get interferometer parameters from composer (if interferometer)
+    include_rip = getattr(composer, 'include_rip', False)
+
+    # Get ECE parameters from composer (if ECE)
+    fast_ece = getattr(composer, 'fast_ece', False)
+
+    # Get OMAS parameters from test config variants (if available)
+    # This allows test config to override composer parameters for OMAS calls
+    test_variants = test_config.get('test_variants', {})
+    omas_params = {}
+
+    # Find which variant matches the current composer configuration
+    if ids_name == 'interferometer' and test_variants:
+        for variant_name, variant_config in test_variants.items():
+            variant_composer_params = variant_config.get('composer_params', {})
+            # Check if this variant matches current composer config
+            if variant_composer_params.get('include_rip') == include_rip:
+                omas_params = variant_config.get('omas_params', {})
+                break
+    elif ids_name == 'ece' and test_variants:
+        for variant_name, variant_config in test_variants.items():
+            variant_composer_params = variant_config.get('composer_params', {})
+            # Check if this variant matches current composer config
+            if variant_composer_params.get('fast_ece') == fast_ece:
+                omas_params = variant_config.get('omas_params', {})
+                break
+
+    # Extract OMAS-specific parameters
+    include_CO2 = omas_params.get('include_CO2')
+    include_RIP = omas_params.get('include_RIP')
+    fast_ece_omas = omas_params.get('fast_ece')
+
     # Fetch OMAS ODS object
     # For equilibrium and ec_launchers, fetch only specific fields to avoid loading unwanted data
     # For other IDS, still fetch entire IDS with wildcard for backward compatibility
-    if ids_name in ['equilibrium', 'ec_launchers']:
+    if ids_name in ['equilibrium', 'ec_launchers', ]:
         # Handle list of paths (for fetch order control) or single path
         if isinstance(omas_fetch_spec, list):
             # Fetch each path in order (important for OMAS broadcasting)
@@ -794,6 +927,14 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
             reset = (ids_name == 'equilibrium')
             ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=reset,
                           profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
+    elif ids_name == 'interferometer':
+        # For interferometer, pass include_CO2 and include_RIP parameters
+        ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
+                       include_CO2=include_CO2, include_RIP=include_RIP)
+    elif ids_name == 'ece':
+        # For ECE, pass fast_ece parameter
+        ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
+                       fast_ece=fast_ece_omas)
     else:
         ods = omas_data(ids_name, shot=shot,
                        profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
