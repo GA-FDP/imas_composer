@@ -28,6 +28,7 @@ from omas.omas_machine import machine_to_omas
 
 from imas_composer import ImasComposer
 from imas_composer.core import Requirement
+from imas_composer.fetchers import fetch_requirements
 
 
 # Reference shot used across most tests
@@ -259,7 +260,7 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
             break
 
         # Fetch requirements
-        fetched = composer._fetch_requirements(requirements)
+        fetched = fetch_requirements(requirements)
 
         # Check if any fetched values are exceptions (from failed MDSplus access)
         for key, value in fetched.items():
