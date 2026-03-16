@@ -11,6 +11,9 @@ from scipy.interpolate import interp1d
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
+from scipy.signal import medfilt
+from typing import Tuple
+import awkward as ak
 
 
 class InterferometerMapper(IDSMapper):
@@ -278,11 +281,11 @@ class InterferometerMapper(IDSMapper):
         error_deps.extend([f"interferometer._co2_channel_{i}_validity" for i in range(self.N_CO2_CHANNELS)])
         error_deps.extend(["interferometer._co2_time", "interferometer._co2_time_valid"])
 
-        self.specs["interferometer.channel.n_e_line.data_error_upper"] = IDSEntrySpec(
+        self.specs["interferometer.channel.n_e_line.error"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=error_deps,
-            compose=self._compose_n_e_line_data_error_upper,
-            ids_path="interferometer.channel.n_e_line.data_error_upper",
+            compose=self._compose_n_e_line_error,
+            ids_path="interferometer.channel.n_e_line.error",
             docs_file=self.DOCS_PATH
         )
 
@@ -415,7 +418,7 @@ class InterferometerMapper(IDSMapper):
             # Calculate phase error (std across measurements + mean std before t=0)
             phase_error = phases.std(axis=0) + phases[:, 1:ioff].std(axis=1).mean()
 
-        return phase, phase_error
+        return time_s, phase, phase_error
 
     # Helper methods for geometry
     def _get_co2_geometry(self, channel_idx: int) -> dict:
@@ -572,8 +575,6 @@ class InterferometerMapper(IDSMapper):
 
         Returns awkward array with variable length per channel.
         """
-        import awkward as ak
-
         # CO2 channels: third_point exists (same as first_point)
         r_values = [self._get_co2_geometry(i)['first_point']['r'] for i in range(self.N_CO2_CHANNELS)]
 
@@ -594,8 +595,6 @@ class InterferometerMapper(IDSMapper):
 
         Returns awkward array with variable length per channel.
         """
-        import awkward as ak
-
         # CO2 channels: third_point exists (same as first_point)
         z_values = [self._get_co2_geometry(i)['first_point']['z'] for i in range(self.N_CO2_CHANNELS)]
 
@@ -616,8 +615,6 @@ class InterferometerMapper(IDSMapper):
 
         Returns awkward array with variable length per channel.
         """
-        import awkward as ak
-
         # CO2 channels: third_point exists (same as first_point)
         phi_values = [self._get_co2_geometry(i)['first_point']['phi'] for i in range(self.N_CO2_CHANNELS)]
 
@@ -639,8 +636,6 @@ class InterferometerMapper(IDSMapper):
 
         Returns awkward array with shape (n_channels, 1).
         """
-        import awkward as ak
-
         # Each channel has one wavelength, but wavelength is an AOS
         # So we wrap each value in a list
         wavelengths = [[10.6e-6]] * self.N_CO2_CHANNELS  # CO2 laser
@@ -690,7 +685,6 @@ class InterferometerMapper(IDSMapper):
                 all_times.extend([rip_time_s] * len(rip_channels))
 
         # Return as awkward array since time bases may differ
-        import awkward as ak
         return ak.Array(all_times)
 
     def _compose_n_e_line_data(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -716,17 +710,17 @@ class InterferometerMapper(IDSMapper):
             if rip_channels:
                 for ch in rip_channels:
                     # Process phase data using helper method
-                    phase, phase_error = self._process_rip_phase_data(shot, raw_data, ch)
+                    time_s, phase, phase_error = self._process_rip_phase_data(shot, raw_data, ch)
 
                     # Apply conversion factor (phase to density)
                     conv = self._get_rip_conversion_factor(ch)
                     all_data.append(phase * conv)
 
         # Return as awkward array if time bases differ
-        import awkward as ak
+        
         return ak.Array(all_data)
 
-    def _compose_n_e_line_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_n_e_line_error(self, shot: int, raw_data: dict) -> ak.Array:
         """
         Return upper error estimate for line-integrated density data.
 
@@ -737,8 +731,7 @@ class InterferometerMapper(IDSMapper):
         Returns:
             Awkward array with shape matching n_e_line.data
         """
-        import awkward as ak
-        all_errors = []
+        errors = []
 
         # CO2 channels: Error based on pre-shot noise level
         bci_tree = self._get_bci_tree(shot)
@@ -772,13 +765,16 @@ class InterferometerMapper(IDSMapper):
             )(time_s)
 
             # Calculate error as median of absolute values before t=0
-            ne_err = np.zeros(density.shape)
-            ne_err[:] = np.std(np.abs(density[np.logical_and(time_s < 0, time_s > -0.5)])) * 1e6
+            ne_stat_err = np.zeros(density.shape)
+            ne_stat_err[:] = np.std(density[time_s < 0]) * 1e6
 
             # Set error to inf where validity is negative (invalid)
-            ne_err[validity_interp < 0] = np.inf
+            ne_stat_err[validity_interp < 0] = np.inf
+            ne_stat_err[density < 0] = np.inf
+            ne_sys_err = np.zeros_like(density)
+            ne_sys_err[:] = np.max(medfilt(np.abs(density[time_s < 0]), 5))* 1e6
 
-            all_errors.append(ne_err)
+            errors.append([ne_stat_err, ne_sys_err])
 
         # RIP data (if enabled and available)
         if self.include_rip:
@@ -786,25 +782,26 @@ class InterferometerMapper(IDSMapper):
             if rip_channels:
                 for ch in rip_channels:
                     # Process phase data using helper method
-                    phase, phase_error = self._process_rip_phase_data(shot, raw_data, ch)
+                    time_s, phase, phase_error = self._process_rip_phase_data(shot, raw_data, ch)
 
                     if phase_error is not None:
                         # Convert phase error to density error
                         conv = self._get_rip_conversion_factor(ch)
-                        ne_line_err = phase_error * conv
+                        ne_stat_err = phase_error * conv
 
                         # Also need to get n_e_line data to set invalid points to inf
                         ne_line = phase * conv
 
                         # Set error to inf where data is negative (invalid)
-                        ne_line_err[ne_line < 0] = np.inf
-
-                        all_errors.append(ne_line_err)
+                        ne_stat_err[ne_line < 0] = np.inf
+                        ne_sys_err = np.zeros_like(ne_line)
+                        ne_sys_err[:] = np.max(medfilt(np.abs(ne_line[time_s < 0]), 5))
+                        errors.append([ne_stat_err, ne_sys_err])
                     else:
                         # Old shots (< 177052): no error estimate
-                        all_errors.append(np.array([]))
+                        errors.append([[],[]])
 
-        return ak.Array(all_errors)
+        return ak.Array(errors)
 
     def _compose_n_e_line_validity_timed(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -847,7 +844,7 @@ class InterferometerMapper(IDSMapper):
             if rip_channels:
                 for ch in rip_channels:
                     # Process phase data using helper method
-                    phase, phase_error = self._process_rip_phase_data(shot, raw_data, ch)
+                    time_s, phase, phase_error = self._process_rip_phase_data(shot, raw_data, ch)
 
                     # Convert to density
                     conv = self._get_rip_conversion_factor(ch)
@@ -866,7 +863,6 @@ class InterferometerMapper(IDSMapper):
                     all_validity.append(valid)
 
         # Return as awkward array if time bases differ
-        import awkward as ak
         return ak.Array(all_validity)
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:

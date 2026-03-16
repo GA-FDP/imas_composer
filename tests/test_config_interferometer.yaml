@@ -64,5 +64,5 @@ omas_path_map:
   interferometer.channel.wavelength.0.value: interferometer.channel.:.wavelength.:.value
   interferometer.channel.n_e_line.time: interferometer.channel.:.n_e_line.time
   interferometer.channel.n_e_line.data: interferometer.channel.:.n_e_line.data
-  interferometer.channel.n_e_line.data_error_upper: interferometer.channel.:.n_e_line.data_error_upper
+  interferometer.channel.n_e_line.error: interferometer.channel.:.n_e_line.error
   interferometer.channel.n_e_line.validity_timed: interferometer.channel.:.n_e_line.validity_timed
