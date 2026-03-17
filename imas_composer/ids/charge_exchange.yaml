@@ -31,6 +31,8 @@ fields:
   - channel.ion.t_i.time
 # velocity is not a real IMAS field (it has velocity_tor and velocity_pol but the destinction depends on the beam orientation, e.g. channel)
   - channel.ion.velocity.data
+# data_raw is not a real IMAS field either but is worth including since many channels don't have corrections
+  - channel.ion.velocity.data_raw
   - channel.ion.velocity.data_error_upper
   - channel.ion.velocity.time
 # total_installed_channels is not in OMAS; derived using getnci on the CALIBRATION tree
