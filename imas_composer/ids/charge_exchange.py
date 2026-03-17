@@ -58,22 +58,31 @@ class ChargeExchangeMapper(IDSMapper):
         """MDSplus dim_of expression for CER channel node time (returns seconds)."""
         return f'dim_of({self._cer_path(sub, ch, node)}, 0)/1000'
 
-    def _impdens_path(self, sub: str, ch: int, quantity: str) -> str:
-        """Full MDSplus path for an IMPDENS channel node.
+    def _zimp_path(self) -> str:
+        """MDSplus path for bulk ZIMP (Zeff) data — flattened array covering all channels."""
+        return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.ZIMP'
 
-        Note: ch is not zero-padded in IMPDENS paths (e.g., FZT5, not FZT05).
-        """
-        return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.{quantity}{sub[0]}{ch}'
+    def _zimp_time_path(self) -> str:
+        """MDSplus dim_of for ZIMP time axis (seconds)."""
+        return f'dim_of({self._zimp_path()}, 0)/1000'
 
-    def _impdens_time_path(self, sub: str, ch: int, quantity: str) -> str:
-        """MDSplus dim_of expression for IMPDENS channel time (returns seconds)."""
-        return f'dim_of({self._impdens_path(sub, ch, quantity)}, 0)/1000'
+    def _concen_path(self) -> str:
+        """MDSplus path for bulk CONCEN (ion fraction) data — flattened array covering all channels."""
+        return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.CONCEN'
+
+    def _concen_time_path(self) -> str:
+        """MDSplus dim_of for CONCEN time axis (seconds)."""
+        return f'dim_of({self._concen_path()}, 0)/1000'
+
+    def _impdens_indices_path(self) -> str:
+        """MDSplus path for INDECIES — maps bulk array columns to CER channel numbers."""
+        return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.INDECIES'
 
     def _rot_node(self, sub: str) -> str:
         """MDSplus node name for toroidal rotation (differs by subsystem)."""
         return 'ROTC' if sub == 'TANGENTIAL' else 'ROT'
 
-    def _active_path(self, sub: str) -> str:
+    def _get_active_path(self, sub: str) -> str:
         """MDSplus path returning TIME node LENGTH for each channel in a subsystem."""
         return f'getnci("CER.{self.analysis_type}.{sub}.CHANNEL*:TIME","LENGTH")'
 
@@ -193,41 +202,48 @@ class ChargeExchangeMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # Ion fraction (FZ) from IMPDENS tree
-        self.specs["charge_exchange._n_i_over_n_e_data"] = IDSEntrySpec(
+        # Bulk IMPDENS data: ZIMP (Zeff) and CONCEN (ion fraction) are flattened arrays
+        # covering all channels. INDECIES maps array columns to CER channel numbers.
+        # ARRAY_ORDER from CALIBRATION describes the subsystem/channel ordering.
+        self.specs["charge_exchange._zimp"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=self._build_reqs(
-                lambda s, c: self._impdens_path(s, c, 'FZ')
-            ),
-            ids_path="charge_exchange._n_i_over_n_e_data",
+            static_requirements=[Requirement(self._zimp_path(), 0, 'IONS')],
+            ids_path="charge_exchange._zimp",
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["charge_exchange._n_i_over_n_e_time"] = IDSEntrySpec(
+        self.specs["charge_exchange._zimp_time"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=self._build_reqs(
-                lambda s, c: self._impdens_time_path(s, c, 'FZ')
-            ),
-            ids_path="charge_exchange._n_i_over_n_e_time",
+            static_requirements=[Requirement(self._zimp_time_path(), 0, 'IONS')],
+            ids_path="charge_exchange._zimp_time",
             docs_file=self.DOCS_PATH
         )
 
-        # Effective charge from IMPDENS tree
-        self.specs["charge_exchange._zeff_data"] = IDSEntrySpec(
+        self.specs["charge_exchange._concen"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=self._build_reqs(
-                lambda s, c: self._impdens_path(s, c, 'ZEFF')
-            ),
-            ids_path="charge_exchange._zeff_data",
+            static_requirements=[Requirement(self._concen_path(), 0, 'IONS')],
+            ids_path="charge_exchange._concen",
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["charge_exchange._zeff_time"] = IDSEntrySpec(
+        self.specs["charge_exchange._concen_time"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
-            static_requirements=self._build_reqs(
-                lambda s, c: self._impdens_time_path(s, c, 'ZEFF')
-            ),
-            ids_path="charge_exchange._zeff_time",
+            static_requirements=[Requirement(self._concen_time_path(), 0, 'IONS')],
+            ids_path="charge_exchange._concen_time",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange._impdens_indices"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(self._impdens_indices_path(), 0, 'IONS')],
+            ids_path="charge_exchange._impdens_indices",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange._array_order"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement('\\IONS::TOP.CER.CALIBRATION.ARRAY_ORDER', 0, 'IONS')],
+            ids_path="charge_exchange._array_order",
             docs_file=self.DOCS_PATH
         )
 
@@ -274,7 +290,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.r.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._position_r"],
+            depends_on=_get_active_deps + ["charge_exchange._position_r"],
             compose=self._compose_position_r_data,
             ids_path="charge_exchange.channel.position.r.data",
             docs_file=self.DOCS_PATH
@@ -320,9 +336,14 @@ class ChargeExchangeMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        _impdens_deps = [
+            "charge_exchange._impdens_indices",
+            "charge_exchange._array_order",
+        ]
+
         self.specs["charge_exchange.channel.zeff.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._zeff_data"],
+            depends_on=_get_active_deps + ["charge_exchange._zimp"] + _impdens_deps,
             compose=self._compose_zeff_data,
             ids_path="charge_exchange.channel.zeff.data",
             docs_file=self.DOCS_PATH
@@ -330,7 +351,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.zeff.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._zeff_time"],
+            depends_on=_get_active_deps + ["charge_exchange._zimp_time"] + _impdens_deps,
             compose=self._compose_zeff_time,
             ids_path="charge_exchange.channel.zeff.time",
             docs_file=self.DOCS_PATH
@@ -338,7 +359,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.n_i_over_n_e.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._n_i_over_n_e_data"],
+            depends_on=_get_active_deps + ["charge_exchange._concen"] + _impdens_deps,
             compose=self._compose_n_i_over_n_e_data,
             ids_path="charge_exchange.channel.ion.n_i_over_n_e.data",
             docs_file=self.DOCS_PATH
@@ -346,7 +367,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.n_i_over_n_e.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_get_active_deps + ["charge_exchange._position_time", "charge_exchange._n_i_over_n_e_time"],
+            depends_on=_get_active_deps + ["charge_exchange._concen_time"] + _impdens_deps,
             compose=self._compose_n_i_over_n_e_time,
             ids_path="charge_exchange.channel.ion.n_i_over_n_e.time",
             docs_file=self.DOCS_PATH
@@ -455,6 +476,11 @@ class ChargeExchangeMapper(IDSMapper):
                 if length > 0:
                     active.append((sub, i + 1))
         return active
+
+    def _get_array_order(self, shot: int, raw_data: dict) -> List[str]:
+        """Return the names of CER systems/channels in the order stored."""
+        array_order = self._lookup(raw_data, shot, '\\IONS::TOP.CER.CALIBRATION.ARRAY_ORDER')
+        return [a.decode().strip() for a in array_order]
 
     def _lookup(self, raw_data: dict, shot: int, mds_path: str) -> Optional[np.ndarray]:
         """Look up a value in raw_data by MDS path.
@@ -628,52 +654,73 @@ class ChargeExchangeMapper(IDSMapper):
     def _compose_n_i_over_n_e_data(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose ion fraction time series per channel (dimensionless, 0-1).
 
-        Matches OMAS: ch['ion.0.n_i_over_n_e.data'] = FZ * 0.01  (percent → fraction)
+        Data source: CONCEN bulk flattened array (all channels), indexed via INDECIES and ARRAY_ORDER.
+        Matches OMAS: ch['ion.0.n_i_over_n_e.data'] = CONCEN * 0.01  (percent → fraction)
         """
         active = self._get_active_channels(shot, raw_data)
+        concen = self._lookup(raw_data, shot, self._concen_path())
+        indices = self._lookup(raw_data, shot, self._impdens_indices_path())
+        array_order = self._get_array_order(shot, raw_data)
         result = []
         for sub, ch in active:
-            val = self._lookup(raw_data, shot, self._impdens_path(sub, ch, 'FZ'))
-            if val is not None:
-                result.append(np.atleast_1d(val) * 0.01)  # percent → fraction
-            else:
-                result.append(np.array([np.nan]))
+            ich = array_order.index(f'{sub[0:4]}{ch}')
+            ind = slice(indices[ich],indices[ich+1])
+            val = np.atleast_1d(concen[ind])
+            result.append(val if len(val) > 0 else np.array([np.nan]))
         return ak.Array(result)
 
     def _compose_n_i_over_n_e_time(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose ion fraction time arrays per channel (in seconds).
 
-        Matches OMAS: ch['ion.0.n_i_over_n_e.time'] = dim_of(FZ, 0)/1000
+        Data source: dim_of(CONCEN) time axis, indexed via INDECIES and ARRAY_ORDER.
+        Matches OMAS: ch['ion.0.n_i_over_n_e.time'] = dim_of(CONCEN, 0)/1000
         """
         active = self._get_active_channels(shot, raw_data)
+        concen_time = self._lookup(raw_data, shot, self._concen_time_path())
+        indices = self._lookup(raw_data, shot, self._impdens_indices_path())
+        array_order = self._get_array_order(shot, raw_data)
         result = []
         for sub, ch in active:
-            val = self._lookup(raw_data, shot, self._impdens_time_path(sub, ch, 'FZ'))
-            result.append(np.atleast_1d(val) if val is not None else np.array([np.nan]))
+            ich = array_order.index(f'{sub[0:4]}{ch}')
+            ind = slice(indices[ich],indices[ich+1])
+            val = np.atleast_1d(concen_time[ind])
+            result.append(val if len(val) > 0 else np.array([np.nan]))
         return ak.Array(result)
 
     def _compose_zeff_data(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose effective charge time series per channel (dimensionless).
 
-        Matches OMAS: ch['zeff.data'] = ZEFF
+        Data source: ZIMP bulk flattened array (all channels), indexed via INDECIES and ARRAY_ORDER.
+        Matches OMAS: ch['zeff.data'] = ZIMP
         """
         active = self._get_active_channels(shot, raw_data)
+        zimp = self._lookup(raw_data, shot, self._zimp_path())
+        indices = self._lookup(raw_data, shot, self._impdens_indices_path())
+        array_order = self._get_array_order(shot, raw_data)
         result = []
         for sub, ch in active:
-            val = self._lookup(raw_data, shot, self._impdens_path(sub, ch, 'ZEFF'))
-            result.append(np.atleast_1d(val) if val is not None else np.array([np.nan]))
+            ich = array_order.index(f'{sub[0:4]}{ch}')
+            ind = slice(indices[ich],indices[ich+1])
+            val = np.atleast_1d(zimp[ind])
+            result.append(val if len(val) > 0 else np.array([np.nan]))
         return ak.Array(result)
 
     def _compose_zeff_time(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose effective charge time arrays per channel (in seconds).
 
-        Matches OMAS: ch['zeff.time'] = dim_of(ZEFF, 0)/1000
+        Data source: dim_of(ZIMP) time axis, indexed via INDECIES and ARRAY_ORDER.
+        Matches OMAS: ch['zeff.time'] = dim_of(ZIMP, 0)/1000
         """
         active = self._get_active_channels(shot, raw_data)
+        zimp_time = self._lookup(raw_data, shot, self._zimp_time_path())
+        indices = self._lookup(raw_data, shot, self._impdens_indices_path())
+        array_order = self._get_array_order(shot, raw_data)
         result = []
         for sub, ch in active:
-            val = self._lookup(raw_data, shot, self._impdens_time_path(sub, ch, 'ZEFF'))
-            result.append(np.atleast_1d(val) if val is not None else np.array([np.nan]))
+            ich = array_order.index(f'{sub[0:4]}{ch}')
+            ind = slice(indices[ich],indices[ich+1])
+            val = np.atleast_1d(zimp_time[ind])
+            result.append(val if len(val) > 0 else np.array([np.nan]))
         return ak.Array(result)
 
     def _compose_total_installed_channels(self, shot: int, raw_data: dict) -> int:
