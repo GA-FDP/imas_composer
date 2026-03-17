@@ -7,14 +7,10 @@
 
 static_values: {}
 
-# CER subsystem configuration
-# max_channels: upper probe limit per subsystem (channels above this are not queried)
-# DIII-D MDSplus nodes have 56 tangential and 32 vertical channels
+# CER subsystems to include
 subsystems:
-  TANGENTIAL:
-    max_channels: 56
-  VERTICAL:
-    max_channels: 32
+  - TANGENTIAL
+  - VERTICAL
 
 # Supported fields (complete list of implemented IDS paths)
 fields:
