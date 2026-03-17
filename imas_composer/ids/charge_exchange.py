@@ -89,7 +89,7 @@ class ChargeExchangeMapper(IDSMapper):
     # Requirement building
     # -------------------------------------------------------------------------
 
-    def _make_derive_fn(self, path_fn):
+    def _make_derive_fn(self, path_fn, channel_getter=None):
         """Create a derive_requirements function for a per-channel path function.
 
         Called by the resolver after the getnci active-channel data is available.
@@ -97,40 +97,16 @@ class ChargeExchangeMapper(IDSMapper):
 
         Args:
             path_fn: callable(sub, ch) -> mds_path string
+            channel_getter: callable(shot, raw_data) -> List[Tuple[str, int]],
+                defaults to _get_active_channels
         """
+        if channel_getter is None:
+            channel_getter = self._get_active_channels
         def derive(shot: int, raw_data: dict) -> List[Requirement]:
             return [Requirement(path_fn(sub, ch), shot, 'IONS')
-                    for sub, ch in self._get_active_channels(shot, raw_data)]
+                    for sub, ch in channel_getter(shot, raw_data)]
         return derive
 
-    def _make_derive_velocity_fn(self, path_fn):
-        """Create a derive_requirements function for a velocity per-channel path function.
-
-        Called by the resolver after the getnci active-velocity data is available.
-        Returns Requirements only for channels where LENGTH > 0.
-
-        Args:
-            path_fn: callable(sub, ch) -> mds_path string
-        """
-        def derive(shot: int, raw_data: dict) -> List[Requirement]:
-            return [Requirement(path_fn(sub, ch), shot, 'IONS')
-                    for sub, ch in self._get_active_velocity(shot, raw_data)]
-        return derive
-
-    def _make_derive_velocity_raw_fn(self, path_fn):
-        """Create a derive_requirements function for a raw velocity per-channel path function.
-
-        Called by the resolver after the getnci active-velocity-raw data is available.
-        Returns Requirements only for channels where LENGTH > 0.
-
-        Args:
-            path_fn: callable(sub, ch) -> mds_path string
-        """
-        def derive(shot: int, raw_data: dict) -> List[Requirement]:
-            return [Requirement(path_fn(sub, ch), shot, 'IONS')
-                    for sub, ch in self._get_active_velocity_raw(shot, raw_data)]
-        return derive
-    
     def _build_specs(self):
         """Build all IDS entry specifications."""
 
@@ -209,7 +185,7 @@ class ChargeExchangeMapper(IDSMapper):
         self.specs["charge_exchange._velocity_data"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             depends_on=_active_velocity_deps,
-            derive_requirements=self._make_derive_velocity_fn(lambda s, c: self._cer_path(s, c, 'ROTC')),
+            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'ROTC'), self._get_active_velocity),
             ids_path="charge_exchange._velocity_data",
             docs_file=self.DOCS_PATH
         )
@@ -217,7 +193,7 @@ class ChargeExchangeMapper(IDSMapper):
         self.specs["charge_exchange._velocity_data_raw"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             depends_on=_active_velocity_raw_deps,
-            derive_requirements=self._make_derive_velocity_raw_fn(lambda s, c: self._cer_path(s, c, 'ROT')),
+            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'ROT'), self._get_active_velocity_raw),
             ids_path="charge_exchange._velocity_data_raw",
             docs_file=self.DOCS_PATH
         )
@@ -225,7 +201,7 @@ class ChargeExchangeMapper(IDSMapper):
         self.specs["charge_exchange._velocity_error"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             depends_on=_active_velocity_raw_deps,
-            derive_requirements=self._make_derive_velocity_raw_fn(lambda s, c: self._cer_path(s, c, 'ROT_ERR')),
+            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'ROT_ERR'), self._get_active_velocity_raw),
             ids_path="charge_exchange._velocity_error",
             docs_file=self.DOCS_PATH
         )
@@ -233,7 +209,7 @@ class ChargeExchangeMapper(IDSMapper):
         self.specs["charge_exchange._velocity_time"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             depends_on=_active_velocity_raw_deps,
-            derive_requirements=self._make_derive_velocity_raw_fn(lambda s, c: self._cer_time_path(s, c, 'ROT')),
+            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_time_path(s, c, 'ROT'), self._get_active_velocity_raw),
             ids_path="charge_exchange._velocity_time",
             docs_file=self.DOCS_PATH
         )
@@ -350,7 +326,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.r.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._position_r"],
+            depends_on=["charge_exchange._position_r"],
             compose=self._compose_position_r_data,
             ids_path="charge_exchange.channel.position.r.data",
             docs_file=self.DOCS_PATH
@@ -358,7 +334,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.r.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._position_time"],
+            depends_on=["charge_exchange._position_time"],
             compose=self._compose_position_time,
             ids_path="charge_exchange.channel.position.r.time",
             docs_file=self.DOCS_PATH
@@ -366,7 +342,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.z.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._position_z"],
+            depends_on=["charge_exchange._position_z"],
             compose=self._compose_position_z_data,
             ids_path="charge_exchange.channel.position.z.data",
             docs_file=self.DOCS_PATH
@@ -374,7 +350,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.z.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._position_time"],
+            depends_on=["charge_exchange._position_time"],
             compose=self._compose_position_time,
             ids_path="charge_exchange.channel.position.z.time",
             docs_file=self.DOCS_PATH
@@ -382,7 +358,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.phi.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._position_phi"],
+            depends_on=["charge_exchange._position_phi"],
             compose=self._compose_position_phi_data,
             ids_path="charge_exchange.channel.position.phi.data",
             docs_file=self.DOCS_PATH
@@ -390,7 +366,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.position.phi.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._position_time"],
+            depends_on=["charge_exchange._position_time"],
             compose=self._compose_position_time,
             ids_path="charge_exchange.channel.position.phi.time",
             docs_file=self.DOCS_PATH
@@ -435,7 +411,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.t_i.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._t_i_data"],
+            depends_on=["charge_exchange._t_i_data"],
             compose=self._compose_t_i_data,
             ids_path="charge_exchange.channel.ion.t_i.data",
             docs_file=self.DOCS_PATH
@@ -443,7 +419,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.t_i.data_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._t_i_error"],
+            depends_on=["charge_exchange._t_i_error"],
             compose=self._compose_t_i_error,
             ids_path="charge_exchange.channel.ion.t_i.data_error_upper",
             docs_file=self.DOCS_PATH
@@ -451,7 +427,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.t_i.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._t_i_time"],
+            depends_on=["charge_exchange._t_i_time"],
             compose=self._compose_t_i_time,
             ids_path="charge_exchange.channel.ion.t_i.time",
             docs_file=self.DOCS_PATH
@@ -459,7 +435,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.velocity.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + _active_velocity_deps + ["charge_exchange._velocity_data"],
+            depends_on=_active_deps + ["charge_exchange._velocity_data"],
             compose=self._compose_velocity_data,
             ids_path="charge_exchange.channel.ion.velocity.data",
             docs_file=self.DOCS_PATH
@@ -467,7 +443,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.velocity.data_raw"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + _active_velocity_raw_deps + ["charge_exchange._velocity_data_raw"],
+            depends_on=_active_deps + ["charge_exchange._velocity_data_raw"],
             compose=self._compose_velocity_data_raw,
             ids_path="charge_exchange.channel.ion.velocity.data_raw",
             docs_file=self.DOCS_PATH
@@ -475,7 +451,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.velocity.data_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + _active_velocity_raw_deps + ["charge_exchange._velocity_error"],
+            depends_on=_active_deps + ["charge_exchange._velocity_error"],
             compose=self._compose_velocity_error,
             ids_path="charge_exchange.channel.ion.velocity.data_error_upper",
             docs_file=self.DOCS_PATH
@@ -483,7 +459,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.velocity.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + _active_velocity_raw_deps + ["charge_exchange._velocity_time"],
+            depends_on=_active_deps + ["charge_exchange._velocity_time"],
             compose=self._compose_velocity_time,
             ids_path="charge_exchange.channel.ion.velocity.time",
             docs_file=self.DOCS_PATH
@@ -529,53 +505,35 @@ class ChargeExchangeMapper(IDSMapper):
     # Helpers
     # -------------------------------------------------------------------------
 
-    def _get_active_channels(self, shot: int, raw_data: dict) -> List[Tuple[str, int]]:
-        """Return (sub, ch) pairs for channels that have TIME data for this analysis type.
+    def _get_active_by_node(self, shot: int, raw_data: dict, path_fn) -> List[Tuple[str, int]]:
+        """Return (sub, ch) pairs for channels where getnci LENGTH > 0.
 
-        Uses getnci LENGTH arrays: index i corresponds to channel i+1, and
-        LENGTH > 0 means the channel node has data.
+        Uses getnci LENGTH arrays: index i corresponds to channel i+1.
+
+        Args:
+            path_fn: callable(sub) -> getnci mds_path string
         """
         active = []
         for sub in self.SUBSYSTEMS:
-            lengths = self._lookup(raw_data, shot, self._get_active_path(sub))
+            lengths = self._lookup(raw_data, shot, path_fn(sub))
             if lengths is None:
                 continue
             for i, length in enumerate(np.atleast_1d(lengths)):
                 if length > 0:
                     active.append((sub, i + 1))
         return active
+
+    def _get_active_channels(self, shot: int, raw_data: dict) -> List[Tuple[str, int]]:
+        """Return (sub, ch) pairs for channels that have TIME data."""
+        return self._get_active_by_node(shot, raw_data, self._get_active_path)
 
     def _get_active_velocity(self, shot: int, raw_data: dict) -> List[Tuple[str, int]]:
-        """Return (sub, ch) pairs for channels that have ROTC data for this analysis type.
-
-        Uses getnci LENGTH arrays: index i corresponds to channel i+1, and
-        LENGTH > 0 means the channel node has data.
-        """
-        active = []
-        for sub in self.SUBSYSTEMS:
-            lengths = self._lookup(raw_data, shot, self._get_active_velocity_path(sub))
-            if lengths is None:
-                continue
-            for i, length in enumerate(np.atleast_1d(lengths)):
-                if length > 0:
-                    active.append((sub, i + 1))
-        return active
+        """Return (sub, ch) pairs for channels that have ROTC data."""
+        return self._get_active_by_node(shot, raw_data, self._get_active_velocity_path)
 
     def _get_active_velocity_raw(self, shot: int, raw_data: dict) -> List[Tuple[str, int]]:
-        """Return (sub, ch) pairs for channels that have ROT data for this analysis type.
-
-        Uses getnci LENGTH arrays: index i corresponds to channel i+1, and
-        LENGTH > 0 means the channel node has data.
-        """
-        active = []
-        for sub in self.SUBSYSTEMS:
-            lengths = self._lookup(raw_data, shot, self._get_active_velocity_raw_path(sub))
-            if lengths is None:
-                continue
-            for i, length in enumerate(np.atleast_1d(lengths)):
-                if length > 0:
-                    active.append((sub, i + 1))
-        return active
+        """Return (sub, ch) pairs for channels that have ROT data."""
+        return self._get_active_by_node(shot, raw_data, self._get_active_velocity_raw_path)
 
     def _get_array_order(self, shot: int, raw_data: dict) -> List[str]:
         """Return the names of CER systems/channels in the order stored."""
