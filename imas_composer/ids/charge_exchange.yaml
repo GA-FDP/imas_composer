@@ -25,15 +25,18 @@ fields:
   - channel.zeff.data
   - channel.zeff.time
   - channel.ion.n_i_over_n_e.data
+  - channel.ion.n_i_over_n_e.data_error_upper
   - channel.ion.n_i_over_n_e.time
   - channel.ion.t_i.data
   - channel.ion.t_i.data_error_upper
+  - channel.ion.t_i.data_error_statistical
   - channel.ion.t_i.time
 # velocity is not a real IMAS field (it has velocity_tor and velocity_pol but the destinction depends on the beam orientation, e.g. channel)
   - channel.ion.velocity.data
 # data_raw is not a real IMAS field either but is worth including since many channels don't have corrections
   - channel.ion.velocity.data_raw
   - channel.ion.velocity.data_error_upper
+  - channel.ion.velocity.data_error_statistical
   - channel.ion.velocity.time
 # total_installed_channels is not in OMAS; derived using getnci on the CALIBRATION tree
   - code.parameters.total_installed_channels
