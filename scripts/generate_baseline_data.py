@@ -33,17 +33,18 @@ def get_all_test_fields():
     """
     # List of all IDS configurations (based on existing test files)
     ids_list = [
-        'equilibrium',
-        'ece',
-        'thomson_scattering',
-        'ec_launchers',
-        'reflectometer_profile',
+        'charge_exchange',
         'core_profiles',
+        'ec_launchers',
+        'ece',
+        'equilibrium',
         'gas_injection',
-        'nbi',
-        'wall',
         'magnetics',
-        'tf'
+        'nbi',
+        'reflectometer_profile',
+        'tf',
+        'thomson_scattering',
+        'wall'
     ]
 
     all_fields = {}

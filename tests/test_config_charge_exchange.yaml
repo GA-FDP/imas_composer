@@ -1,0 +1,16 @@
+# Test configuration for Charge Exchange IDS
+
+# No shots excluded - CER data exists for all standard test shots
+exclude_shots: []
+
+# Field-level exceptions
+field_exceptions: {}
+
+# Requirement validation settings
+requirement_validation:
+  # All CER requirements use the actual shot (no calibration data from a different shot)
+  allow_different_shot: []
+
+  # Active channels are discovered via getnci and only fetched for channels with
+  # LENGTH > 0. No channel requirements will be missing or raise exceptions.
+  optional_requirements: []
