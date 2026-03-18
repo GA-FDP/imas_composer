@@ -43,7 +43,8 @@ def get_all_test_fields():
         'nbi',
         'wall',
         'magnetics',
-        'tf'
+        'tf',
+        'pf_active'
     ]
 
     all_fields = {}

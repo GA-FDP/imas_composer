@@ -1,0 +1,338 @@
+# PF Active (Poloidal Field) IDS Configuration for DIII-D
+# Maps DIII-D PF coil hardware geometry and current measurements to IMAS
+
+# Static values (none for this IDS)
+static_values: {}
+
+# Coil metadata - ordered list of 24 coils
+# First 6 are flux coils (function index 0), remaining 18 are shaping coils (function index 1)
+coil_names:
+  - ECOILA
+  - ECOILB
+  - E567UP
+  - E567DN
+  - E89DN
+  - E89UP
+  - F1A
+  - F2A
+  - F3A
+  - F4A
+  - F5A
+  - F6A
+  - F7A
+  - F8A
+  - F9A
+  - F1B
+  - F2B
+  - F3B
+  - F4B
+  - F5B
+  - F6B
+  - F7B
+  - F8B
+  - F9B
+
+# Hardware geometry - loaded from OMAS support files
+# This is consistent across all DIII-D shot ranges (verified 000001 through 197555)
+# Embedded here to avoid dependency on OMAS installation
+hardware:
+  coil:
+    - identifier: ECOILA
+      name: ECOILA
+      element:
+        - {identifier: ECOILA_0, name: ECOILA_0, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.0382, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_1, name: ECOILA_1, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.1147, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_2, name: ECOILA_2, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.1912, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_3, name: ECOILA_3, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.2677, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_4, name: ECOILA_4, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.3442, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_5, name: ECOILA_5, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.4207, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_6, name: ECOILA_6, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.4972, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_7, name: ECOILA_7, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.5737, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_8, name: ECOILA_8, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.6502, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_9, name: ECOILA_9, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.7267, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_10, name: ECOILA_10, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.8032, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_11, name: ECOILA_11, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.8797, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_12, name: ECOILA_12, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.9562, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_13, name: ECOILA_13, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 1.0326, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_14, name: ECOILA_14, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 1.1091, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_15, name: ECOILA_15, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 1.1853, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_16, name: ECOILA_16, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 1.2615, width: 0.05867, height: 0.07341}}}
+        - {identifier: ECOILA_17, name: ECOILA_17, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 1.3351, width: 0.05867, height: 0.07135}}}
+        - {identifier: ECOILA_18, name: ECOILA_18, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 1.4095, width: 0.05867, height: 0.07021}}}
+        - {identifier: ECOILA_19, name: ECOILA_19, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 1.4801, width: 0.05867, height: 0.06622}}}
+        - {identifier: ECOILA_20, name: ECOILA_20, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 1.5482, width: 0.05867, height: 0.0621}}}
+        - {identifier: ECOILA_21, name: ECOILA_21, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7599, z: 1.6108, width: 0.04953, height: 0.05796}}}
+        - {identifier: ECOILA_22, name: ECOILA_22, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.695, z: 1.6684, width: 0.04953, height: 0.0555}}}
+        - {identifier: ECOILA_23, name: ECOILA_23, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7625, z: 1.7255, width: 0.04953, height: 0.05474}}}
+        - {identifier: ECOILA_24, name: ECOILA_24, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.0382, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_25, name: ECOILA_25, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.1147, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_26, name: ECOILA_26, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.1912, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_27, name: ECOILA_27, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.2677, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_28, name: ECOILA_28, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.3442, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_29, name: ECOILA_29, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.4207, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_30, name: ECOILA_30, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.4972, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_31, name: ECOILA_31, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.5737, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_32, name: ECOILA_32, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.6502, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_33, name: ECOILA_33, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.7267, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_34, name: ECOILA_34, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.8032, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_35, name: ECOILA_35, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.8797, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_36, name: ECOILA_36, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.9562, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_37, name: ECOILA_37, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -1.0326, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_38, name: ECOILA_38, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -1.1091, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_39, name: ECOILA_39, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -1.1853, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILA_40, name: ECOILA_40, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -1.2615, width: 0.05867, height: 0.07341}}}
+        - {identifier: ECOILA_41, name: ECOILA_41, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -1.3351, width: 0.05867, height: 0.07135}}}
+        - {identifier: ECOILA_42, name: ECOILA_42, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -1.4095, width: 0.05867, height: 0.07021}}}
+        - {identifier: ECOILA_43, name: ECOILA_43, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -1.4801, width: 0.05867, height: 0.06622}}}
+        - {identifier: ECOILA_44, name: ECOILA_44, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -1.5482, width: 0.05867, height: 0.0621}}}
+        - {identifier: ECOILA_45, name: ECOILA_45, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.69, z: -1.6108, width: 0.04953, height: 0.05796}}}
+        - {identifier: ECOILA_46, name: ECOILA_46, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7625, z: -1.6684, width: 0.04953, height: 0.0555}}}
+        - {identifier: ECOILA_47, name: ECOILA_47, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7025, z: -1.7255, width: 0.04953, height: 0.05474}}}
+
+    - identifier: ECOILB
+      name: ECOILB
+      element:
+        - {identifier: ECOILB_0, name: ECOILB_0, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.0382, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_1, name: ECOILB_1, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.1147, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_2, name: ECOILB_2, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.1912, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_3, name: ECOILB_3, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.2677, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_4, name: ECOILB_4, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.3442, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_5, name: ECOILB_5, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.4207, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_6, name: ECOILB_6, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.4972, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_7, name: ECOILB_7, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.5737, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_8, name: ECOILB_8, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.6502, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_9, name: ECOILB_9, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.7267, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_10, name: ECOILB_10, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.8032, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_11, name: ECOILB_11, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 0.8797, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_12, name: ECOILB_12, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 0.9562, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_13, name: ECOILB_13, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 1.0326, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_14, name: ECOILB_14, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 1.1091, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_15, name: ECOILB_15, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 1.1853, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_16, name: ECOILB_16, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 1.2615, width: 0.05867, height: 0.07341}}}
+        - {identifier: ECOILB_17, name: ECOILB_17, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 1.3351, width: 0.05867, height: 0.07135}}}
+        - {identifier: ECOILB_18, name: ECOILB_18, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 1.4095, width: 0.05867, height: 0.07021}}}
+        - {identifier: ECOILB_19, name: ECOILB_19, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: 1.4801, width: 0.05867, height: 0.06622}}}
+        - {identifier: ECOILB_20, name: ECOILB_20, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: 1.5482, width: 0.05867, height: 0.0621}}}
+        - {identifier: ECOILB_21, name: ECOILB_21, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.69, z: 1.6108, width: 0.04953, height: 0.05796}}}
+        - {identifier: ECOILB_22, name: ECOILB_22, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7625, z: 1.6684, width: 0.04953, height: 0.0555}}}
+        - {identifier: ECOILB_23, name: ECOILB_23, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7025, z: 1.7255, width: 0.04953, height: 0.05474}}}
+        - {identifier: ECOILB_24, name: ECOILB_24, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.0382, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_25, name: ECOILB_25, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.1147, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_26, name: ECOILB_26, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.1912, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_27, name: ECOILB_27, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.2677, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_28, name: ECOILB_28, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.3442, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_29, name: ECOILB_29, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.4207, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_30, name: ECOILB_30, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.4972, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_31, name: ECOILB_31, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.5737, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_32, name: ECOILB_32, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.6502, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_33, name: ECOILB_33, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.7267, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_34, name: ECOILB_34, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.8032, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_35, name: ECOILB_35, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -0.8797, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_36, name: ECOILB_36, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -0.9562, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_37, name: ECOILB_37, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -1.0326, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_38, name: ECOILB_38, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -1.1091, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_39, name: ECOILB_39, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -1.1853, width: 0.05867, height: 0.07442}}}
+        - {identifier: ECOILB_40, name: ECOILB_40, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -1.2615, width: 0.05867, height: 0.07341}}}
+        - {identifier: ECOILB_41, name: ECOILB_41, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -1.3351, width: 0.05867, height: 0.07135}}}
+        - {identifier: ECOILB_42, name: ECOILB_42, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -1.4095, width: 0.05867, height: 0.07021}}}
+        - {identifier: ECOILB_43, name: ECOILB_43, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7575, z: -1.4801, width: 0.05867, height: 0.06622}}}
+        - {identifier: ECOILB_44, name: ECOILB_44, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.6875, z: -1.5482, width: 0.05867, height: 0.0621}}}
+        - {identifier: ECOILB_45, name: ECOILB_45, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7599, z: -1.6108, width: 0.04953, height: 0.05796}}}
+        - {identifier: ECOILB_46, name: ECOILB_46, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.695, z: -1.6684, width: 0.04953, height: 0.0555}}}
+        - {identifier: ECOILB_47, name: ECOILB_47, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.7625, z: -1.7255, width: 0.04953, height: 0.05474}}}
+
+    - identifier: E567UP
+      name: E567UP
+      element:
+        - {identifier: E567UP_0, name: E567UP_0, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.8792, z: 1.7123, width: 0.1138, height: 0.0293}}}
+        - {identifier: E567UP_1, name: E567UP_1, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.8792, z: 1.7437, width: 0.1138, height: 0.0293}}}
+        - {identifier: E567UP_2, name: E567UP_2, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.8792, z: 1.7751, width: 0.1138, height: 0.0293}}}
+        - {identifier: E567UP_3, name: E567UP_3, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.8792, z: 1.8064, width: 0.1138, height: 0.0293}}}
+        - {identifier: E567UP_4, name: E567UP_4, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 2.3464, z: 1.2286, width: 0.1692, height: 0.0254}}}
+        - {identifier: E567UP_5, name: E567UP_5, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 2.6087, z: 0.5603, width: 0.1692, height: 0.0254}}}
+
+    - identifier: E567DN
+      name: E567DN
+      element:
+        - {identifier: E567DN_0, name: E567DN_0, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.879, z: -1.7128, width: 0.1138, height: 0.0293}}}
+        - {identifier: E567DN_1, name: E567DN_1, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.879, z: -1.7441, width: 0.1138, height: 0.0293}}}
+        - {identifier: E567DN_2, name: E567DN_2, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.879, z: -1.7755, width: 0.1138, height: 0.0293}}}
+        - {identifier: E567DN_3, name: E567DN_3, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.879, z: -1.8069, width: 0.1138, height: 0.0293}}}
+        - {identifier: E567DN_4, name: E567DN_4, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 2.3565, z: -1.2286, width: 0.1692, height: 0.0254}}}
+        - {identifier: E567DN_5, name: E567DN_5, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 2.6087, z: -0.5603, width: 0.1692, height: 0.0254}}}
+
+    - identifier: E89DN
+      name: E89DN
+      element:
+        - {identifier: E89DN_0, name: E89DN_0, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.9533, z: -1.9454, width: 0.0587, height: 0.0559}}}
+        - {identifier: E89DN_1, name: E89DN_1, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.0132, z: -1.9581, width: 0.0587, height: 0.0559}}}
+        - {identifier: E89DN_2, name: E89DN_2, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.0998, z: -1.9851, width: 0.0587, height: 0.0744}}}
+        - {identifier: E89DN_3, name: E89DN_3, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.1648, z: -1.9851, width: 0.0587, height: 0.0744}}}
+        - {identifier: E89DN_4, name: E89DN_4, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.3533, z: -1.8735, width: 0.0888, height: 0.0749}}}
+        - {identifier: E89DN_5, name: E89DN_5, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.3533, z: -1.9505, width: 0.0888, height: 0.0749}}}
+        - {identifier: E89DN_6, name: E89DN_6, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.7876, z: -1.7477, width: 0.1793, height: 0.0279}}}
+
+    - identifier: E89UP
+      name: E89UP
+      element:
+        - {identifier: E89UP_0, name: E89UP_0, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 0.9525, z: 1.9458, width: 0.0587, height: 0.0559}}}
+        - {identifier: E89UP_1, name: E89UP_1, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.0124, z: 1.9585, width: 0.0587, height: 0.0559}}}
+        - {identifier: E89UP_2, name: E89UP_2, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.0991, z: 1.9855, width: 0.0587, height: 0.0744}}}
+        - {identifier: E89UP_3, name: E89UP_3, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.1641, z: 1.9855, width: 0.0587, height: 0.0744}}}
+        - {identifier: E89UP_4, name: E89UP_4, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.3512, z: 1.8745, width: 0.0888, height: 0.0749}}}
+        - {identifier: E89UP_5, name: E89UP_5, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.3512, z: 1.9515, width: 0.0888, height: 0.0749}}}
+        - {identifier: E89UP_6, name: E89UP_6, turns_with_sign: 1.0, geometry: {geometry_type: 2, rectangle: {r: 1.786, z: 1.7479, width: 0.1793, height: 0.0279}}}
+
+    - identifier: F1A
+      name: F1A
+      element:
+        - {identifier: F1A_0, name: F1A_0, turns_with_sign: 58.0, geometry: {geometry_type: 2, rectangle: {r: 0.8608, z: 0.1683, width: 0.0508, height: 0.32106}}}
+
+    - identifier: F2A
+      name: F2A
+      element:
+        - {identifier: F2A_0, name: F2A_0, turns_with_sign: 58.0, geometry: {geometry_type: 2, rectangle: {r: 0.8614, z: 0.5081, width: 0.0508, height: 0.32106}}}
+
+    - identifier: F3A
+      name: F3A
+      element:
+        - {identifier: F3A_0, name: F3A_0, turns_with_sign: 58.0, geometry: {geometry_type: 2, rectangle: {r: 0.8628, z: 0.8491, width: 0.0508, height: 0.32106}}}
+
+    - identifier: F4A
+      name: F4A
+      element:
+        - {identifier: F4A_0, name: F4A_0, turns_with_sign: 58.0, geometry: {geometry_type: 2, rectangle: {r: 0.8611, z: 1.1899, width: 0.0508, height: 0.32106}}}
+
+    - identifier: F5A
+      name: F5A
+      element:
+        - identifier: F5A_0
+          name: F5A_0
+          turns_with_sign: 58.0
+          geometry:
+            geometry_type: 1
+            outline:
+              r: [0.9345, 0.9345, 1.0737, 1.0737]
+              z: [1.3876, 1.507, 1.6461999999999999, 1.5268]
+
+    - identifier: F6A
+      name: F6A
+      element:
+        - identifier: F6A_0
+          name: F6A_0
+          turns_with_sign: 55.0
+          geometry:
+            geometry_type: 1
+            outline:
+              r: [2.529878078275369, 2.521721921724631, 2.694921921724631, 2.703078078275369]
+              z: [0.3403, 0.5348999999999999, 0.5348999999999999, 0.3403]
+
+    - identifier: F7A
+      name: F7A
+      element:
+        - identifier: F7A_0
+          name: F7A_0
+          turns_with_sign: 55.0
+          geometry:
+            geometry_type: 1
+            outline:
+              r: [2.3068861855905696, 2.2517138144094306, 2.4397138144094304, 2.4948861855905693]
+              z: [1.0325, 1.2017, 1.2017, 1.0325]
+
+    - identifier: F8A
+      name: F8A
+      element:
+        - {identifier: F8A_0, name: F8A_0, turns_with_sign: 58.0, geometry: {geometry_type: 2, rectangle: {r: 1.2518, z: 1.6019, width: 0.2349, height: 0.0851}}}
+
+    - identifier: F9A
+      name: F9A
+      element:
+        - {identifier: F9A_0, name: F9A_0, turns_with_sign: 55.0, geometry: {geometry_type: 2, rectangle: {r: 1.689, z: 1.5874, width: 0.1694, height: 0.1331}}}
+
+    - identifier: F1B
+      name: F1B
+      element:
+        - {identifier: F1B_0, name: F1B_0, turns_with_sign: 58.0, geometry: {geometry_type: 2, rectangle: {r: 0.8608, z: -0.1737, width: 0.0508, height: 0.32106}}}
+
+    - identifier: F2B
+      name: F2B
+      element:
+        - {identifier: F2B_0, name: F2B_0, turns_with_sign: 58.0, geometry: {geometry_type: 2, rectangle: {r: 0.8607, z: -0.5135, width: 0.0508, height: 0.32106}}}
+
+    - identifier: F3B
+      name: F3B
+      element:
+        - {identifier: F3B_0, name: F3B_0, turns_with_sign: 58.0, geometry: {geometry_type: 2, rectangle: {r: 0.8611, z: -0.8543, width: 0.0508, height: 0.32106}}}
+
+    - identifier: F4B
+      name: F4B
+      element:
+        - {identifier: F4B_0, name: F4B_0, turns_with_sign: 58.0, geometry: {geometry_type: 2, rectangle: {r: 0.863, z: -1.1957, width: 0.0508, height: 0.32106}}}
+
+    - identifier: F5B
+      name: F5B
+      element:
+        - identifier: F5B_0
+          name: F5B_0
+          turns_with_sign: 58.0
+          geometry:
+            geometry_type: 1
+            outline:
+              r: [0.9329, 0.9329, 1.0720999999999998, 1.0720999999999998]
+              z: [-1.507, -1.3876, -1.5268, -1.6461999999999999]
+
+    - identifier: F6B
+      name: F6B
+      element:
+        - identifier: F6B_0
+          name: F6B_0
+          turns_with_sign: 55.0
+          geometry:
+            geometry_type: 1
+            outline:
+              r: [2.521721921724631, 2.529878078275369, 2.703078078275369, 2.694921921724631]
+              z: [-0.5348999999999999, -0.3403, -0.3403, -0.5348999999999999]
+
+    - identifier: F7B
+      name: F7B
+      element:
+        - identifier: F7B_0
+          name: F7B_0
+          turns_with_sign: 55.0
+          geometry:
+            geometry_type: 1
+            outline:
+              r: [2.2618138144094306, 2.3169861855905696, 2.5049861855905693, 2.4498138144094304]
+              z: [-1.2017, -1.0325, -1.0325, -1.2017]
+
+    - identifier: F8B
+      name: F8B
+      element:
+        - {identifier: F8B_0, name: F8B_0, turns_with_sign: 58.0, geometry: {geometry_type: 2, rectangle: {r: 1.2524, z: -1.6027, width: 0.2349, height: 0.0851}}}
+
+    - identifier: F9B
+      name: F9B
+      element:
+        - {identifier: F9B_0, name: F9B_0, turns_with_sign: 55.0, geometry: {geometry_type: 2, rectangle: {r: 1.6889, z: -1.578, width: 0.1694, height: 0.1331}}}
+
+# Supported fields
+fields:
+  # Coil-level fields
+  - coil.identifier
+  - coil.name
+  - coil.function.index
+
+  # Element-level fields (geometry)
+  - coil.element.identifier
+  - coil.element.name
+  - coil.element.turns_with_sign
+  - coil.element.geometry.geometry_type
+  - coil.element.geometry.rectangle.r
+  - coil.element.geometry.rectangle.z
+  - coil.element.geometry.rectangle.width
+  - coil.element.geometry.rectangle.height
+
+  # Current data
+  - coil.current.data
+  - coil.current.time
+  - coil.current.data_error_upper

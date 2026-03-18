@@ -778,25 +778,19 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
     # Fetch OMAS ODS object
     # For equilibrium and ec_launchers, fetch only specific fields to avoid loading unwanted data
     # For other IDS, still fetch entire IDS with wildcard for backward compatibility
-    if ids_name in ['equilibrium', 'ec_launchers']:
-        # Handle list of paths (for fetch order control) or single path
-        if isinstance(omas_fetch_spec, list):
-            # Fetch each path in order (important for OMAS broadcasting)
-            # Reset cache on first fetch for equilibrium (to avoid field accumulation interference)
-            reset_first = (ids_name == 'equilibrium')
-            ods = omas_data(ids_name, omas_fetch_spec[0], shot=shot, reset_cache=reset_first,
-                          profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
-            for fetch_path in omas_fetch_spec[1:]:
-                omas_data(ids_name, fetch_path, shot=shot,
-                         profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)  # Additional fetches to same ODS
-        else:
-            # Reset cache for equilibrium (to avoid field accumulation interference)
-            reset = (ids_name == 'equilibrium')
-            ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=reset,
-                          profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
+    # Handle list of paths (for fetch order control) or single path
+    if isinstance(omas_fetch_spec, list):
+        # Fetch each path in order (important for OMAS broadcasting)
+        # Reset cache on first fetch for equilibrium (to avoid field accumulation interference)
+        reset_first = (ids_name == 'equilibrium')
+        ods = omas_data(ids_name, omas_fetch_spec[0], shot=shot, reset_cache=reset_first,
+                        profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
+        for fetch_path in omas_fetch_spec[1:]:
+            omas_data(ids_name, fetch_path, shot=shot,
+                        profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)  # Additional fetches to same ODS
     else:
-        ods = omas_data(ids_name, shot=shot,
-                       profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
+        ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=True,
+                        profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
 
     # Recursively compare using ndim-based logic with field-specific tolerances
     _compare_recursive(composer_value, ods, omas_access_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
