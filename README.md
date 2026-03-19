@@ -103,7 +103,7 @@ conda activate imas_composer
 ```
 add imas_python dependencies
 ```
-pip install --no-deps xxhash imas_core
+pip install --no-deps --no-build-isolation imas_data_dictionaries xxhash imas_core
 ```
 Checkout dev version of imas_python
 ```
