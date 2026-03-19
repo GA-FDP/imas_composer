@@ -95,11 +95,17 @@ results = composer.compose(ids_paths, shot, raw_data)
 ```
 
 ## Temporary setup to export to standard IDS (assumes Omega cluster)
+Clone IMAS_composer:
+```
+git clone git@github.com:GA-FDP/imas_composer.git
+cd imas_composer
+```
 Create a new environment:
 ```
 module load conda
 mamba env create -f environment.yaml
 conda activate imas_composer
+pip install --no-deps --no-build-isolation -e .
 ```
 add imas_python dependencies
 ```
@@ -107,13 +113,14 @@ pip install --no-deps --no-build-isolation imas_data_dictionaries xxhash imas_co
 ```
 Checkout dev version of imas_python
 ```
+cd ../
 git clone git@github.com:AreWeDreaming/IMAS-Python.git
 cd IMAS-Python
 git switch awkward_array_support
 ```
 Add imas_python to the environment
 ```
-pip install -e --no-deps --no-build-isolation <path to imas_python>
+pip install --no-deps --no-build-isolation -e  <path to imas_python>
 ```
 Run the simple test:
 ```
