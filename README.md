@@ -341,6 +341,14 @@ When contributing new IDS mappers or fields:
 5. Document any special cases or transformations
 6. Consider working with Claude Code for guidance on architecture
 
+### Code Style Guidelines
+
+**CRITICAL: Module-level imports only**
+- **NEVER** import modules at the function level (e.g., `import awkward as ak` inside a function)
+- All imports must be at the module/file level at the top of the file
+- This ensures consistent performance and avoids import overhead in tight loops
+- Violation of this rule can cause significant performance degradation in tests and production code
+
 ## References
 
 - **IMAS Documentation**: https://www.iter.org/

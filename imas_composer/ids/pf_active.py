@@ -9,6 +9,7 @@ Hardware geometry is embedded in pf_active.yaml to avoid dependency on OMAS inst
 
 from typing import Dict, List
 import numpy as np
+import awkward as ak
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
@@ -161,11 +162,11 @@ class PfActiveMapper(IDSMapper):
         return [Requirement(f'pthead2("{coil_name}",{shot}), __rarray', shot, None)]
 
     # Compose functions - Hardware geometry
-    def _compose_coil_field(self, shot: int, raw_data: dict, field: str) -> list:
+    def _compose_coil_field(self, shot: int, raw_data: dict, field: str) -> np.ndarray:
         """
         Compose coil-level field (identifier or name).
 
-        Returns list of values, one per coil.
+        Returns numpy array of values, one per coil (rectangular).
         """
         coils = self._hardware_data.get('coil', [])
 
@@ -173,13 +174,13 @@ class PfActiveMapper(IDSMapper):
         for coil in coils:
             result.append(coil.get(field, ''))
 
-        return result
+        return np.array(result)
 
-    def _compose_function_index(self, shot: int, raw_data: dict) -> list:
+    def _compose_function_index(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Compose function index for each coil.
 
-        Returns nested list: outer list is coils, inner list is functions.
+        Returns numpy array: (n_coils, 1) shape - rectangular.
         First 6 coils (ECOIL*) have function index 0 (flux).
         Remaining coils (F*) have function index 1 (shaping).
         """
@@ -194,13 +195,13 @@ class PfActiveMapper(IDSMapper):
                 # Shaping function
                 result.append([1])
 
-        return result
+        return np.array(result)
 
-    def _compose_element_field(self, shot: int, raw_data: dict, field: str) -> list:
+    def _compose_element_field(self, shot: int, raw_data: dict, field: str) -> ak.Array:
         """
         Compose element-level field (identifier, name, or turns_with_sign).
 
-        Returns nested list: outer list is coils, inner list is elements per coil.
+        Returns awkward array: ragged array (different element counts per coil).
         """
         coils = self._hardware_data.get('coil', [])
 
@@ -212,13 +213,13 @@ class PfActiveMapper(IDSMapper):
                 coil_elements.append(element.get(field, ''))
             result.append(coil_elements)
 
-        return result
+        return ak.Array(result)
 
-    def _compose_geometry_type(self, shot: int, raw_data: dict) -> list:
+    def _compose_geometry_type(self, shot: int, raw_data: dict) -> ak.Array:
         """
         Compose geometry type for each element.
 
-        Returns nested list: outer list is coils, inner list is elements per coil.
+        Returns awkward array: ragged array (different element counts per coil).
         Geometry type 2 = rectangle, type 1 = outline.
         """
         coils = self._hardware_data.get('coil', [])
@@ -232,15 +233,15 @@ class PfActiveMapper(IDSMapper):
                 coil_elements.append(geometry.get('geometry_type', 2))
             result.append(coil_elements)
 
-        return result
+        return ak.Array(result)
 
-    def _compose_rectangle_field(self, shot: int, raw_data: dict, field: str) -> list:
+    def _compose_rectangle_field(self, shot: int, raw_data: dict, field: str) -> ak.Array:
         """
         Compose rectangle geometry field (r, z, width, or height).
 
-        Returns nested list: outer list is coils, inner list is elements per coil.
+        Returns awkward array: ragged array (different element counts per coil).
         Note: Some coils use outline geometry (type 1) instead of rectangle (type 2).
-        For those elements, rectangle fields will be empty/zero.
+        For those elements, rectangle fields are empty arrays (not present).
         """
         coils = self._hardware_data.get('coil', [])
 
@@ -250,18 +251,21 @@ class PfActiveMapper(IDSMapper):
             coil_elements = []
             for element in elements:
                 geometry = element.get('geometry', {})
-                rectangle = geometry.get('rectangle', {})
-                coil_elements.append(rectangle.get(field, 0.0))
+                # Only add rectangle field if rectangle geometry exists
+                if 'rectangle' in geometry:
+                    rectangle = geometry['rectangle']
+                    coil_elements.append(rectangle.get(field, 0.0))
+                # For outline geometry (type 1), don't add anything - leave empty
             result.append(coil_elements)
 
-        return result
+        return ak.Array(result)
 
     # Compose functions - Current data
-    def _compose_current_data(self, shot: int, raw_data: dict) -> list:
+    def _compose_current_data(self, shot: int, raw_data: dict) -> ak.Array:
         """
         Compose current data for all coils.
 
-        Returns nested list: outer list is coils, inner list is time points per coil.
+        Returns awkward array: ragged array (non-homogeneous time, different lengths per coil).
         IMAS convention: F-coils (indices 6-23) are divided by turns_with_sign.
         Non-homogeneous time: each coil has its own timebase.
         """
@@ -290,13 +294,13 @@ class PfActiveMapper(IDSMapper):
 
             result.append(current)
 
-        return result
+        return ak.Array(result)
 
-    def _compose_current_time(self, shot: int, raw_data: dict) -> list:
+    def _compose_current_time(self, shot: int, raw_data: dict) -> ak.Array:
         """
         Compose current time for all coils.
 
-        Returns nested list: outer list is coils, inner list is time points per coil.
+        Returns awkward array: ragged array (non-homogeneous time, different lengths per coil).
         Unit conversion: ms to s (divide by 1000).
         Non-homogeneous time: each coil has its own timebase.
         """
@@ -315,14 +319,14 @@ class PfActiveMapper(IDSMapper):
             time = raw_data[time_key] / 1000.0  # ms to s
             result.append(time)
 
-        return result
+        return ak.Array(result)
 
-    def _compose_current_data_error_upper(self, shot: int, raw_data: dict) -> list:
+    def _compose_current_data_error_upper(self, shot: int, raw_data: dict) -> ak.Array:
         """
         Compose uncertainty for current data.
 
         From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0
-        Returns nested list: outer list is coils, inner list is time points per coil.
+        Returns awkward array: ragged array (non-homogeneous time, different lengths per coil).
         F-coils also divided by turns_with_sign.
         """
         coils = self._hardware_data.get('coil', [])
@@ -365,7 +369,7 @@ class PfActiveMapper(IDSMapper):
 
             result.append(error)
 
-        return result
+        return ak.Array(result)
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         return self.specs

@@ -710,10 +710,18 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
         # Scalar
         ndim = 0
 
+    # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
+    # Flatten and check length - if zero, verify OMAS is also empty
+    if len(ak.flatten(composer_value, axis=None)) == 0:
+        flat_omas = ak.flatten( ods[omas_path], axis=None)
+        assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
+        return
+    
     # Base case: 0D (scalar) or 1D array - do comparison
     if ndim <= 1 or ":" not in omas_path:
         # Compare
-        compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
+        compare_values(composer_value, ods[omas_path], omas_path,
+                       rtol=rtol, atol_float=atol_float, atol_array=atol_array)
 
     else:
         # Recursive case: ndim > 1, iterate over outer dimension
