@@ -4,7 +4,7 @@ from .fetchers import simple_load
 
 def export_to_ids(fields, shot, **kwargs):
     flat = simple_load(fields, shot, **kwargs)
-    return wrangle(fields)
+    return wrangle(flat, "3.41.0")
 
 
 if __name__ == "__main__":
