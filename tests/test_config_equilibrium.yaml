@@ -1,7 +1,10 @@
 # Test configuration for Equilibrium IDS
 
-# Field-level exceptions for validation
-field_exceptions: {}
+# Fields to skip OMAS comparison for (composer still tested)
+# Format: field_path: "reason for skipping"
+skip_fields: {
+  equilibrium.time_slice.profiles_2d.type.index: "Not available with OMAS. Manually verified to be correct."
+}
 
 # Field-specific tolerance settings
 # Override default rtol=1e-10, atol=1e-6 for specific fields
