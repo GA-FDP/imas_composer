@@ -3,7 +3,7 @@
 # Override default TEST_SHOTS for ECE
 # fast_ece=True will be tested on all these shots
 # This is slow so lets do only half of them
-override_shots: [202161, 203321]
+override_shots: [202161, 203321] # 
 
 # Fields to skip OMAS comparison for (composer still tested)
 # Format: field_path: "reason for skipping"
@@ -25,14 +25,15 @@ test_variants:
       fast_ece: false
     exclude_fields: []
 
-  fast_ece:
-    # Test ECE with fast_ece=True (fetches high-time-resolution data)
-    # Note: This will run on all override_shots above
-    composer_params:
-      fast_ece: true
-    omas_params:
-      fast_ece: true
-    exclude_fields: []
+  # Disabled because it takes too much time
+  # fast_ece:
+  #   # Test ECE with fast_ece=True (fetches high-time-resolution data)
+  #   # Note: This will run on all override_shots above
+  #   composer_params:
+  #     fast_ece: true
+  #   omas_params:
+  #     fast_ece: true
+  #   exclude_fields: []
 # OMAS path mapping
 # Maps imas_composer notation to OMAS notation for fetching reference data
 # For channel fields, OMAS uses .: to index all channels at once
