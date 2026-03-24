@@ -289,6 +289,15 @@ class InterferometerMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # data_error_upper is sum of error components across axis=1
+        self.specs["interferometer.channel.n_e_line.data_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["interferometer.channel.n_e_line.error"],
+            compose=self._compose_n_e_line_data_error_upper,
+            ids_path="interferometer.channel.n_e_line.data_error_upper",
+            docs_file=self.DOCS_PATH
+        )
+
         # Validity depends on all channel validity requirements plus time bases
         validity_deps = [f"interferometer._co2_channel_{i}_validity" for i in range(self.N_CO2_CHANNELS)]
         validity_deps.extend(["interferometer._co2_time", "interferometer._co2_time_valid"])
@@ -802,6 +811,21 @@ class InterferometerMapper(IDSMapper):
                         errors.append([[],[]])
 
         return ak.Array(errors)
+
+    def _compose_n_e_line_data_error_upper(self, shot: int, raw_data: dict) -> ak.Array:
+        """
+        Return upper error estimate for line-integrated density data.
+
+        This is the sum of statistical and systematic errors (axis=1) from n_e_line.error.
+
+        Returns:
+            Awkward array with shape matching n_e_line.data (one error value per time point per channel)
+        """
+        # Get the error array from the already-composed error field
+        error_array = self._compose_n_e_line_error(shot, raw_data)
+
+        # Sum across axis=1 (error components: statistical + systematic)
+        return ak.sum(error_array, axis=1)
 
     def _compose_n_e_line_validity_timed(self, shot: int, raw_data: dict) -> np.ndarray:
         """
