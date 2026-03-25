@@ -452,19 +452,11 @@ class ChargeExchangeMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["charge_exchange.channel.ion.t_i.data_error_upper"] = IDSEntrySpec(
+        self.specs["charge_exchange.channel.ion.t_i.error"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._t_i_error"],
+            depends_on=["charge_exchange._t_i_error", "charge_exchange._t_i_error_statistical"],
             compose=self._compose_t_i_error,
-            ids_path="charge_exchange.channel.ion.t_i.data_error_upper",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["charge_exchange.channel.ion.t_i.data_error_statistical"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=["charge_exchange._t_i_error_statistical"],
-            compose=self._compose_t_i_error_statistical,
-            ids_path="charge_exchange.channel.ion.t_i.data_error_statistical",
+            ids_path="charge_exchange.channel.ion.t_i.error",
             docs_file=self.DOCS_PATH
         )
 
@@ -492,19 +484,11 @@ class ChargeExchangeMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["charge_exchange.channel.ion.velocity.data_error_upper"] = IDSEntrySpec(
+        self.specs["charge_exchange.channel.ion.velocity.error"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._velocity_error"],
+            depends_on=_active_deps + ["charge_exchange._velocity_error", "charge_exchange._velocity_error_statistical"],
             compose=self._compose_velocity_error,
-            ids_path="charge_exchange.channel.ion.velocity.data_error_upper",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["charge_exchange.channel.ion.velocity.data_error_statistical"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._velocity_error_statistical"],
-            compose=self._compose_velocity_error_statistical,
-            ids_path="charge_exchange.channel.ion.velocity.data_error_statistical",
+            ids_path="charge_exchange.channel.ion.velocity.error",
             docs_file=self.DOCS_PATH
         )
 
@@ -688,24 +672,19 @@ class ChargeExchangeMapper(IDSMapper):
         return ak.Array(result)
 
     def _compose_t_i_error(self, shot: int, raw_data: dict) -> ak.Array:
-        """Compose ion temperature upper uncertainty per channel (in eV).
+        """Compose ion temperature errors per channel (in eV), shape (2, n_time) per channel.
 
-        Matches OMAS: ch['ion.0.t_i.data'] = unumpy.uarray(TEMP, TEMP_ERR) → .std_devs
+        Element 0: statistical uncertainty (TEMP_ERR_PS)
+        Element 1: systematic uncertainty (TEMP_ERR)
         """
         active = self._get_active_channels(shot, raw_data)
         result = []
         for sub, ch in active:
-            val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP_ERR'))
-            result.append(np.atleast_1d(val) if val is not None else np.array([np.nan]))
-        return ak.Array(result)
-
-    def _compose_t_i_error_statistical(self, shot: int, raw_data: dict) -> ak.Array:
-        """Compose ion temperature statistical uncertainty per channel (in eV)."""
-        active = self._get_active_channels(shot, raw_data)
-        result = []
-        for sub, ch in active:
-            val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP_ERR_PS'))
-            result.append(np.atleast_1d(val) if val is not None else np.array([np.nan]))
+            stat = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP_ERR_PS'))
+            sys = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP_ERR'))
+            stat_arr = np.atleast_1d(stat) if stat is not None else np.array([np.nan])
+            sys_arr = np.atleast_1d(sys) if sys is not None else np.array([np.nan])
+            result.append(np.stack([stat_arr, sys_arr]))
         return ak.Array(result)
 
     def _compose_t_i_time(self, shot: int, raw_data: dict) -> ak.Array:
@@ -766,7 +745,10 @@ class ChargeExchangeMapper(IDSMapper):
         return ak.Array(result)
 
     def _compose_velocity_error(self, shot: int, raw_data: dict) -> ak.Array:
-        """Compose velocity upper uncertainty per channel (in m/s).
+        """Compose velocity errors per channel (in m/s), shape (2, n_time) per channel.
+
+        Element 0: statistical uncertainty (ROT_ERR_PS)
+        Element 1: systematic uncertainty (ROT_ERR)
 
         This is not part of the IMAS schema, which only has velocity_tor and velocity_pol.
         The direction will depend on the beam orientation and should be extracted accordingly.
@@ -776,33 +758,13 @@ class ChargeExchangeMapper(IDSMapper):
         result = []
         for sub, ch in active:
             if (sub, ch) in active_velocity:
-                val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROT_ERR'))
+                stat = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROT_ERR_PS'))
+                sys = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROT_ERR'))
             else:
-                val = None
-            if val is not None:
-                result.append(np.atleast_1d(val) * 1000.0)  # km/s → m/s
-            else:
-                result.append(np.array([np.nan]))
-        return ak.Array(result)
-
-    def _compose_velocity_error_statistical(self, shot: int, raw_data: dict) -> ak.Array:
-        """Compose velocity statistical uncertainty per channel (in m/s).
-
-        This is not part of the IMAS schema, which only has velocity_tor and velocity_pol.
-        The direction will depend on the beam orientation and should be extracted accordingly.
-        """
-        active = self._get_active_channels(shot, raw_data)
-        active_velocity = self._get_active_velocity_raw(shot, raw_data)
-        result = []
-        for sub, ch in active:
-            if (sub, ch) in active_velocity:
-                val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROT_ERR_PS'))
-            else:
-                val = None
-            if val is not None:
-                result.append(np.atleast_1d(val) * 1000.0)  # km/s → m/s
-            else:
-                result.append(np.array([np.nan]))
+                stat, sys = None, None
+            stat_arr = np.atleast_1d(stat) * 1000.0 if stat is not None else np.array([np.nan])
+            sys_arr = np.atleast_1d(sys) * 1000.0 if sys is not None else np.array([np.nan])
+            result.append(np.stack([stat_arr, sys_arr]))
         return ak.Array(result)
 
     def _compose_velocity_time(self, shot: int, raw_data: dict) -> ak.Array:
