@@ -39,4 +39,5 @@ fields:
   - channel.n_e_line.time
   - channel.n_e_line.data
   - channel.n_e_line.error
+  - channel.n_e_line.data_error_upper
   - channel.n_e_line.validity_timed
