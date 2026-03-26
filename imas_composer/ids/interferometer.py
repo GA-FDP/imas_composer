@@ -580,7 +580,7 @@ class InterferometerMapper(IDSMapper):
         Return array of third point R coordinates.
 
         CO2: Same as first point (closed line of sight) - 4 values
-        RIP: Empty (only has 2 points) - 0 values per channel
+        RIP: Same as first point (closed line of sight) - returns to Rout
 
         Returns awkward array with variable length per channel.
         """
@@ -589,9 +589,9 @@ class InterferometerMapper(IDSMapper):
 
         if self.include_rip:
             rip_channels = self._get_rip_channel_names(shot)
-            # RIP channels: third_point doesn't exist (only 2 points)
-            # Don't add anything for RIP channels
-            pass
+            # RIP channels: third_point exists (same as first_point)
+            for ch in rip_channels:
+                r_values.append(self._get_rip_geometry(ch, shot)['first_point']['r'])
 
         return ak.Array(r_values)
 
@@ -600,7 +600,7 @@ class InterferometerMapper(IDSMapper):
         Return array of third point Z coordinates.
 
         CO2: Same as first point (closed line of sight) - 4 values
-        RIP: Empty (only has 2 points) - 0 values per channel
+        RIP: Same as first point (closed line of sight) - same z coordinate
 
         Returns awkward array with variable length per channel.
         """
@@ -609,9 +609,9 @@ class InterferometerMapper(IDSMapper):
 
         if self.include_rip:
             rip_channels = self._get_rip_channel_names(shot)
-            # RIP channels: third_point doesn't exist (only 2 points)
-            # Don't add anything for RIP channels
-            pass
+            # RIP channels: third_point exists (same as first_point)
+            for ch in rip_channels:
+                z_values.append(self._get_rip_geometry(ch, shot)['first_point']['z'])
 
         return ak.Array(z_values)
 
@@ -620,7 +620,7 @@ class InterferometerMapper(IDSMapper):
         Return array of third point phi coordinates.
 
         CO2: Same as first point (closed line of sight) - 4 values
-        RIP: Empty (only has 2 points) - 0 values per channel
+        RIP: Same as first point (closed line of sight) - same phi angle
 
         Returns awkward array with variable length per channel.
         """
@@ -629,9 +629,9 @@ class InterferometerMapper(IDSMapper):
 
         if self.include_rip:
             rip_channels = self._get_rip_channel_names(shot)
-            # RIP channels: third_point doesn't exist (only 2 points)
-            # Don't add anything for RIP channels
-            pass
+            # RIP channels: third_point exists (same as first_point)
+            for ch in rip_channels:
+                phi_values.append(self._get_rip_geometry(ch, shot)['first_point']['phi'])
 
         return ak.Array(phi_values)
 
