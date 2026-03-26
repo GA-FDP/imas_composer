@@ -178,6 +178,14 @@ class ChargeExchangeMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        self.specs["charge_exchange._t_i_error_statistical"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=_active_deps,
+            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'TEMP_ERR_PS')),
+            ids_path="charge_exchange._t_i_error_statistical",
+            docs_file=self.DOCS_PATH
+        )
+
         self.specs["charge_exchange._t_i_time"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             depends_on=_active_deps,
@@ -207,14 +215,6 @@ class ChargeExchangeMapper(IDSMapper):
             depends_on=_active_velocity_raw_deps,
             derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'ROT_ERR'), self._get_active_velocity_raw),
             ids_path="charge_exchange._velocity_error",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["charge_exchange._t_i_error_statistical"] = IDSEntrySpec(
-            stage=RequirementStage.DERIVED,
-            depends_on=_active_deps,
-            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'TEMP_ERR_PS')),
-            ids_path="charge_exchange._t_i_error_statistical",
             docs_file=self.DOCS_PATH
         )
 
@@ -460,6 +460,14 @@ class ChargeExchangeMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        self.specs["charge_exchange.channel.ion.t_i.data_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["charge_exchange._t_i_error", "charge_exchange._t_i_error_statistical"],
+            compose=self._compose_t_i_data_error_upper,
+            ids_path="charge_exchange.channel.ion.t_i.data_error_upper",
+            docs_file=self.DOCS_PATH
+        )
+
         self.specs["charge_exchange.channel.ion.t_i.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["charge_exchange._t_i_time"],
@@ -489,6 +497,14 @@ class ChargeExchangeMapper(IDSMapper):
             depends_on=_active_deps + ["charge_exchange._velocity_error", "charge_exchange._velocity_error_statistical"],
             compose=self._compose_velocity_error,
             ids_path="charge_exchange.channel.ion.velocity.error",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange.channel.ion.velocity.data_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=_active_deps + ["charge_exchange._velocity_error", "charge_exchange._velocity_error_statistical"],
+            compose=self._compose_velocity_data_error_upper,
+            ids_path="charge_exchange.channel.ion.velocity.data_error_upper",
             docs_file=self.DOCS_PATH
         )
 
@@ -687,6 +703,10 @@ class ChargeExchangeMapper(IDSMapper):
             result.append(np.stack([stat_arr, sys_arr]))
         return ak.Array(result)
 
+    def _compose_t_i_data_error_upper(self, shot: int, raw_data: dict) -> ak.Array:
+        """Compose total ion temperature uncertainty per channel (sum of statistical and systematic, in eV)."""
+        return ak.sum(self._compose_t_i_error(shot, raw_data), axis=1)
+
     def _compose_t_i_time(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose ion temperature time arrays per channel (in seconds).
 
@@ -766,6 +786,10 @@ class ChargeExchangeMapper(IDSMapper):
             sys_arr = np.atleast_1d(sys) * 1000.0 if sys is not None else np.array([np.nan])
             result.append(np.stack([stat_arr, sys_arr]))
         return ak.Array(result)
+
+    def _compose_velocity_data_error_upper(self, shot: int, raw_data: dict) -> ak.Array:
+        """Compose total velocity uncertainty per channel (sum of statistical and systematic, in m/s)."""
+        return ak.sum(self._compose_velocity_error(shot, raw_data), axis=1)
 
     def _compose_velocity_time(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose velocity time arrays per channel (in seconds).
