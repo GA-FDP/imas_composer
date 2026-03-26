@@ -120,6 +120,7 @@ def simple_load(
     profiles_tree: str = "ZIPFIT01",
     profiles_run_id: str = "",
     fast_ece: bool = False,
+    include_rip: bool = False,
     max_iterations: int = 10
 ) -> Dict[str, Any]:
     """
@@ -155,7 +156,8 @@ def simple_load(
             efit_run_id=efit_run_id,
             profiles_tree=profiles_tree,
             profiles_run_id=profiles_run_id,
-            fast_ece=fast_ece
+            fast_ece=fast_ece,
+            include_rip=include_rip
         )
 
     raw_data = {}
