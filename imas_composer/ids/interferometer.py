@@ -481,9 +481,11 @@ class InterferometerMapper(IDSMapper):
     def _get_rip_conversion_factor(self, channel: str) -> float:
         """Get RIP phase-to-density conversion factor."""
         if channel == 'T':
-            return 1.436
+            # Factor 2 since we want double pass value
+            return 1.436*2.0
         else:
-            return 6.71e15  # m^-2/rad
+            # Factor 2 since we want double pass value
+            return 6.71e15*2.0  # m^-2/rad
 
     # Compose functions - Channel metadata
     def _compose_channel_identifier(self, shot: int, raw_data: dict) -> np.ndarray:
