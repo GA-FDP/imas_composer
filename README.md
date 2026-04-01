@@ -123,6 +123,13 @@ Add imas_python to the environment
 ```
 pip install --no-deps --no-build-isolation -e  .
 ```
+Patch `_version.py` missed by `pip install`
+```
+cat > imas/_version.py << 'EOF'
+version="0.0.0"
+version_tuple=[0,0,0]
+EOF
+```
 Run the simple test:
 ```
 cd ../imas_composer
