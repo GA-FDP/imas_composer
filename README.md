@@ -125,7 +125,7 @@ pip install --no-deps --no-build-isolation -e  <path to imas_python>
 ```
 Run the simple test:
 ```
-python imas_composer/convert_to_ids.py
+python convert_to_ids.py
 ```
 
 ## Working with Claude Code to Add New Fields

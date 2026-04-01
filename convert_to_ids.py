@@ -1,5 +1,5 @@
 from imas.wrangler import wrangle
-from .fetchers import simple_load
+from imas_composer.fetchers import simple_load
 
 
 def export_to_ids(fields, shot, **kwargs):
@@ -8,4 +8,4 @@ def export_to_ids(fields, shot, **kwargs):
 
 
 if __name__ == "__main__":
-    print(export_to_ids('equilibrium.time', 200000).time)
+    print(export_to_ids(['equilibrium.time'], 200000)['equilibrium'].time)
