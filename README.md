@@ -98,6 +98,7 @@ results = composer.compose(ids_paths, shot, raw_data)
 Clone IMAS_composer:
 ```
 git clone git@github.com:GA-FDP/imas_composer.git
+git switch imas_python
 cd imas_composer
 ```
 Create a new environment:
