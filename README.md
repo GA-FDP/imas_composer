@@ -98,8 +98,8 @@ results = composer.compose(ids_paths, shot, raw_data)
 Clone IMAS_composer:
 ```
 git clone git@github.com:GA-FDP/imas_composer.git
-git switch imas_python
 cd imas_composer
+git switch imas_python
 ```
 Create a new environment:
 ```
@@ -121,10 +121,11 @@ git switch awkward_array_support
 ```
 Add imas_python to the environment
 ```
-pip install --no-deps --no-build-isolation -e  <path to imas_python>
+pip install --no-deps --no-build-isolation -e  .
 ```
 Run the simple test:
 ```
+cd ../imas_composer
 python convert_to_ids.py
 ```
 
