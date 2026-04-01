@@ -125,6 +125,7 @@ pip install --no-deps --no-build-isolation -e  .
 ```
 Run the simple test:
 ```
+cd ../imas_composer
 python imas_composer/convert_to_ids.py
 ```
 
