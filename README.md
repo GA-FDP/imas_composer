@@ -121,7 +121,7 @@ git switch awkward_array_support
 ```
 Add imas_python to the environment
 ```
-pip install --no-deps --no-build-isolation -e  <path to imas_python>
+pip install --no-deps --no-build-isolation -e  .
 ```
 Run the simple test:
 ```
