@@ -245,11 +245,11 @@ class InterferometerMapper(IDSMapper):
         )
 
         # Wavelength (array across all channels)
-        self.specs["interferometer.channel.wavelength.0.value"] = IDSEntrySpec(
+        self.specs["interferometer.channel.wavelength.value"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
             compose=self._compose_wavelength,
-            ids_path="interferometer.channel.wavelength.0.value",
+            ids_path="interferometer.channel.wavelength.value",
             docs_file=self.DOCS_PATH
         )
 
