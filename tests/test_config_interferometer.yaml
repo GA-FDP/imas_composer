@@ -61,7 +61,7 @@ omas_path_map:
   interferometer.channel.line_of_sight.third_point.r: interferometer.channel.:.line_of_sight.third_point.r
   interferometer.channel.line_of_sight.third_point.z: interferometer.channel.:.line_of_sight.third_point.z
   interferometer.channel.line_of_sight.third_point.phi: interferometer.channel.:.line_of_sight.third_point.phi
-  interferometer.channel.wavelength.0.value: interferometer.channel.:.wavelength.:.value
+  interferometer.channel.wavelength.value: interferometer.channel.:.wavelength.:.value
   interferometer.channel.n_e_line.time: interferometer.channel.:.n_e_line.time
   interferometer.channel.n_e_line.data: interferometer.channel.:.n_e_line.data
   interferometer.channel.n_e_line.error: interferometer.channel.:.n_e_line.error
