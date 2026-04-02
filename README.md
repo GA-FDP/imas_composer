@@ -15,17 +15,17 @@ IMAS Composer provides a clean, declarative API for mapping DIII-D diagnostic an
 
 ### Development Installation
 
-For development, install the package in editable mode using pip:
+For development, install the package in editable mode using mamba:
+```
+cd imas_composer
+module load conda
+mamba env create -f environment.yaml
+conda activate imas_composer
+```
 
 ```bash
-# Navigate to the imas_composer directory
-cd imas_composer
-
 # Install in editable mode with development dependencies
-pip install -e ".[dev]"
-
-# Or install with all optional dependencies
-pip install -e ".[full]"
+pip install --no-deps --no-build-isolation -e .
 ```
 
 **Important:** Use `pip install -e .` instead of `conda develop .` to ensure proper package resolution and relative imports work correctly.
