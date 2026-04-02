@@ -33,7 +33,7 @@ fields:
   - channel.line_of_sight.third_point.phi
 
   # Wavelength (arrays across all channels)
-  - channel.wavelength.0.value
+  - channel.wavelength.value
 
   # Measurement data (arrays across all channels)
   - channel.n_e_line.time
