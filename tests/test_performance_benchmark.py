@@ -16,7 +16,7 @@ from imas_composer.fetchers import fetch_requirements
 from tests.conftest import TEST_SHOTS
 
 
-pytestmark = pytest.mark.benchmark
+pytestmark = [pytest.mark.requires_d3d_data, pytest.mark.benchmark]
 
 
 @pytest.fixture

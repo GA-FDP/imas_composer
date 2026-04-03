@@ -8,7 +8,7 @@ import pytest
 
 from tests.conftest import load_ids_fields, run_requirements_resolution
 
-pytestmark = [pytest.mark.integration, pytest.mark.requires_mdsplus]
+pytestmark = [pytest.mark.integration, pytest.mark.requires_d3d_data]
 @pytest.mark.parametrize('ids_path', load_ids_fields('ec_launchers'))
 def test_can_resolve_requirements(ids_path, composer, test_shot):
     """Test that resolve() can fully resolve requirements for each EC launchers field."""

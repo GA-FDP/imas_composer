@@ -10,6 +10,7 @@ test variants for CO2_only and CO2_RIP configurations.
 import pytest
 
 from tests.conftest import REFERENCE_SHOT, run_requirements_resolution
+pytestmark = pytest.mark.requires_d3d_data
 
 def test_can_resolve_requirements(ids_path, composer):
     """Test that resolve() can fully resolve requirements for each Interferometer field."""

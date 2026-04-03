@@ -10,6 +10,7 @@ test variants for fast_ece configuration.
 import pytest
 
 from tests.conftest import REFERENCE_SHOT, run_requirements_resolution
+pytestmark = pytest.mark.requires_d3d_data
 
 def test_can_resolve_requirements(ids_path, composer):
     """Test that resolve() can fully resolve requirements for each ECE field."""

@@ -10,7 +10,7 @@ test variants for fast_ece configuration.
 import pytest
 from tests.conftest import run_composition_against_omas
 
-pytestmark = [pytest.mark.omas_validation]
+pytestmark = [pytest.mark.requires_d3d_data, pytest.mark.omas_validation]
 
 
 def test_composition_matches_omas(ids_path, composer, omas_data, test_shot):

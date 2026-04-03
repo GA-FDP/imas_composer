@@ -85,7 +85,7 @@ markers = [
     "summary: marks tests that print summary information",
     "omas_validation: marks tests that validate against OMAS reference implementation",
     "integration: marks tests as integration tests that require external services",
-    "requires_mdsplus: marks tests that require MDSplus access to DIII-D data servers",
+    "requires_d3d_data: marks tests that require access to DIII-D data (should be skipped in CI)",
 ]
 addopts = [
     "-v",

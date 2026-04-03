@@ -11,7 +11,7 @@ import pytest
 
 from tests.conftest import REFERENCE_SHOT, run_requirements_resolution
 
-pytestmark = [pytest.mark.integration, pytest.mark.requires_mdsplus]
+pytestmark = [pytest.mark.integration, pytest.mark.requires_d3d_data]
 
 def test_can_resolve_requirements(ids_path, composer):
     """Test that resolve() can fully resolve requirements for each core_profiles field."""

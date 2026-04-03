@@ -2,7 +2,7 @@
 import pytest
 from tests.conftest import load_ids_fields, run_composition_against_omas
 
-pytestmark = [pytest.mark.omas_validation]
+pytestmark = [pytest.mark.requires_d3d_data, pytest.mark.omas_validation]
 
 
 @pytest.mark.parametrize('ids_path', load_ids_fields('reflectometer_profile'))

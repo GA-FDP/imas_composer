@@ -7,6 +7,7 @@ for each Thomson field, tracking resolution depth.
 import pytest
 
 from tests.conftest import REFERENCE_SHOT, load_ids_fields, run_requirements_resolution
+pytestmark = pytest.mark.requires_d3d_data
 
 @pytest.mark.parametrize('ids_path', load_ids_fields('thomson_scattering'))
 def test_can_resolve_requirements(ids_path, composer):
