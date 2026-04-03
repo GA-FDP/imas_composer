@@ -1,245 +1,181 @@
 # IMAS Composer Development Principles
 
-This document outlines the core principles and patterns for developing the IMAS Composer project.
+Core principles and quick reference for developing IMAS Composer. For detailed information, see specialized guides in this directory.
 
-## Core Principle: DRY (Don't Repeat Yourself)
+## Core Principles
 
-**Dryness is a key principle for this project.** Code should NEVER be duplicated. Common patterns must be extracted and shared.
+### 1. DRY (Don't Repeat Yourself)
+- All test logic in `tests/conftest.py` as reusable functions
+- Common mapper functionality in `ids/base.py` base class
+- Configuration in YAML files, never hardcoded
+- IDS-specific test files are ~18 lines each
 
-### Application in Practice
-
-1. **Tests**: All test logic lives in `tests/conftest.py` as reusable functions
-   - Generic test functions work across all IDS types
-   - IDS-specific test files are minimal (~17 lines each)
-   - Adding a new IDS requires only 2 small test files
-
-2. **Mappers**: Common mapper functionality lives in base classes
-   - `IDSMapper` base class in `ids/base.py` handles common patterns
-   - Subclasses only implement IDS-specific logic
-
-3. **Configuration**: Use YAML files, not hardcoded values
-   - Field lists loaded from `ids/<ids_name>.yaml`
-   - Static values defined in YAML, not in code
-   - Tests use `load_ids_fields()` to get field lists dynamically
-
-4. **Utilities**: Shared utilities in `conftest.py` or appropriate modules
-   - `resolve_and_compose()` - full resolve/fetch/compose cycle
-   - `get_omas_value()` - navigate OMAS structures
-   - `compare_values()` - type-aware value comparison
-   - `test_requirements_resolution()` - generic requirement testing
-   - `test_composition_against_omas()` - generic OMAS validation
-
-## Requirement Isolation Principle
-
-**Each IDS field should only fetch exactly what it needs.** Never bundle requirements together.
-
-### Anti-Pattern: Bundled Requirements
+### 2. Requirement Isolation
+**Each field fetches only what it needs.** Never bundle requirements.
 
 ```python
-# BAD - bundles R, Z, PHI together
-self.specs["_geometry_setup"] = IDSEntrySpec(
-    stage=RequirementStage.DIRECT,
+# GOOD - isolated
+self.specs["_position_r"] = IDSEntrySpec(
+    static_requirements=[Requirement('...R', 0, 'TREE')]
+)
+
+# BAD - bundled
+self.specs["_geometry"] = IDSEntrySpec(
     static_requirements=[
-        Requirement('...R', 0, 'ELECTRONS'),
-        Requirement('...Z', 0, 'ELECTRONS'),
-        Requirement('...PHI', 0, 'ELECTRONS'),
+        Requirement('...R', 0, 'TREE'),
+        Requirement('...Z', 0, 'TREE'),  # Don't bundle!
     ]
 )
 ```
 
-### Correct Pattern: Isolated Requirements
+### 3. Batch API
+Both `resolve()` and `compose()` accept **lists of paths**:
 
 ```python
-# GOOD - separate spec for each coordinate
-self.specs["_position_r"] = IDSEntrySpec(
-    stage=RequirementStage.DIRECT,
-    static_requirements=[Requirement('...R', 0, 'ELECTRONS')]
-)
+# Resolve multiple paths together
+status, requirements = composer.resolve(ids_paths, shot, raw_data)  # ids_paths is a list
 
-self.specs["_position_z"] = IDSEntrySpec(
-    stage=RequirementStage.DIRECT,
-    static_requirements=[Requirement('...Z', 0, 'ELECTRONS')]
-)
+# Compose multiple paths together
+results = composer.compose(ids_paths, shot, raw_data)  # Returns dict
 ```
 
-**Rationale**: When requesting `channel.position.r`, we should ONLY fetch R data, not Z and PHI.
-
-## Public API Pattern
-
-Users interact with `ImasComposer` public API, never with mapper internals.
-
-```python
-# Basic usage
-composer = ImasComposer()
-
-# With configuration options
-composer = ImasComposer(efit_tree='EFIT01')  # Specify equilibrium tree
-
-# Resolve requirements iteratively
-raw_data = {}
-while True:
-    fully_resolved, requirements = composer.resolve(ids_path, shot, raw_data)
-    if fully_resolved:
-        break
-    # Fetch requirements...
-    raw_data.update(fetched)
-
-# Compose final data
-result = composer.compose(ids_path, shot, raw_data)
-```
-
-### Tree/Source Selection Pattern
-
-Some IDS types have multiple data sources (e.g., different equilibrium reconstructions):
-
-**Equilibrium**: Multiple EFIT trees (`EFIT01`, `EFIT02`, etc.)
-```python
-# Use EFIT01 (default)
-composer = ImasComposer()
-
-# Use specific tree
-composer = ImasComposer(efit_tree='EFIT02')
-```
-
-**Pattern**: Tree/source selection happens at `ImasComposer` initialization, not per-field.
-
-**Testing**: Tests use default configuration (e.g., `EFIT01`) for consistency.
-
-## Test Configuration System
-
-### Per-IDS Test Customization
-
-**Only create test config files when needed.** If an IDS follows all standard test rules, no config file is required.
-
-When needed, create `tests/test_config_<ids>.yaml` with custom test behavior:
-
-```yaml
-# Thomson Scattering Test Configuration
-field_exceptions:
-  thomson_scattering._hwmap:
-    allow_different_shot: true
-    reason: "Uses calibration shot from calib_nums, not requested shot"
-
-requirement_validation:
-  allow_different_shot:
-    - thomson_scattering._hwmap
-```
-
-**Purpose**: Handle valid exceptions to standard test assertions (e.g., calibration data from different shots)
-
-**When to create a config file**:
-- Field uses calibration/reference data from a different shot
-- Field has valid reason to violate standard requirement rules
-- Document the `reason` in `field_exceptions` for clarity
-
-**Default behavior**: If no config file exists, `load_test_config()` returns empty exceptions and standard validation rules apply
-
-## OMAS Integration Special Cases
-
-### Equilibrium IDS - Field-by-Field Fetching
-
-**Problem**: Equilibrium IDS contains huge 2D grids. Fetching `equilibrium.*` loads thousands of points unnecessarily.
-
-**Solution**: For equilibrium only, fetch each field individually in tests.
-
-```python
-# conftest.py - omas_data fixture supports optional ids_path parameter
-def _fetch_omas_data(ids_name, ids_path=None):
-    # For equilibrium, pass specific field path
-    # For others, use wildcard '{ids_name}.*'
-    if ids_path is None:
-        ids_path = f'{ids_name}.*'
-    machine_to_omas(ods, 'd3d', shot, ids_path, options={'EFIT_tree': 'EFIT01'})
-```
-
-**Usage**:
-```python
-# ECE/Thomson - fetch entire IDS
-omas_ece = omas_data('ece')
-
-# Equilibrium - fetch specific field
-omas_eq_time = omas_data('equilibrium', 'equilibrium.time')
-```
-
-**Implementation**: `run_composition_against_omas` automatically uses field-by-field fetching for equilibrium:
-```python
-if ids_name == 'equilibrium':
-    omas_value = get_omas_value(omas_data(ids_name, ids_path), ids_path)
-else:
-    omas_value = get_omas_value(omas_data(ids_name), ids_path)
-```
-
-**Note**: This is the ONLY IDS that requires field-by-field fetching. All others use wildcard.
-
-## Test Structure
-
-### Two Test Files Per IDS
-
-1. **`test_<ids>_requirements.py`** - Tests requirement resolution
-   - Single parametric test using `load_ids_fields()`
-   - Calls `test_requirements_resolution()` from conftest.py
-   - Verifies all fields can be fully resolved
-
-2. **`test_<ids>_composition.py`** - Tests composition against OMAS
-   - Single parametric test using `load_ids_fields()`
-   - Calls `test_composition_against_omas()` from conftest.py
-   - Verifies output matches OMAS reference
-
-### Test File Template
-
-```python
-"""Test <IDS> requirement resolution."""
-
-import pytest
-from conftest import REFERENCE_SHOT, load_ids_fields, test_requirements_resolution
-
-pytestmark = [pytest.mark.integration, pytest.mark.requires_mdsplus]
-
-@pytest.mark.parametrize('ids_path', load_ids_fields('<ids_name>'))
-def test_can_resolve_requirements(ids_path, composer):
-    """Test that resolve() can fully resolve requirements."""
-    resolution_steps = test_requirements_resolution(ids_path, composer, REFERENCE_SHOT)
-    print(f"\n{ids_path}: resolved in {resolution_steps} steps")
-```
-
-**Total lines per test file**: ~17 lines
-
-## Naming Conventions
-
-### Consistency Between Public API and Internals
-
-- Public API: `compose()` method
-- Internal methods: `_compose_*()` functions
-- **Never** use different terms (like `synthesize`) for the same concept
-
-### Method Naming
-
-- `_compose_*()` - Creates final IDS data
-- `_derive_*_requirements()` - Creates DERIVED stage requirements
-- `_get_*()` - Retrieves values from raw_data
+Benefits: Requirements automatically deduplicated, single fetch cycle.
 
 ## Three-Stage Requirement System
 
-1. **DIRECT** - Static requirements (shot number may vary)
-   ```python
-   static_requirements=[Requirement('\\PATH', 0, 'TREE')]
-   ```
-
-2. **DERIVED** - Requirements that depend on fetched data
-   ```python
-   derive_requirements=lambda shot, raw: [...]
-   ```
-
+1. **DIRECT** - Static MDSplus paths known at init
+2. **DERIVED** - Requirements depending on fetched data
 3. **COMPUTED** - No requirements, synthesizes from raw_data
-   ```python
-   compose=lambda shot, raw: ...
-   ```
 
-## Key Implementation Details
+See `TEST_CONFIGURATION.md` for detailed patterns.
+
+## ImasComposer Constructor
+
+```python
+composer = ImasComposer(
+    efit_tree='EFIT01',           # Equilibrium tree
+    profiles_tree='ZIPFIT01',     # Core profiles tree (ZIPFIT01 or OMFIT_PROFS)
+    profiles_run_id='001',        # Run ID for OMFIT_PROFS
+    fast_ece=False,               # ECE time resolution
+    include_rip=False             # Interferometer RIP data
+)
+```
+
+Tree/source selection at initialization, not per-field.
+
+## Test Configuration Quick Reference
+
+Create `tests/test_config_<ids>.yaml` when needed:
+
+```yaml
+# Shot selection
+override_shots: [200000, 203321]  # Override TEST_SHOTS
+exclude_shots: [202161]            # Filter from TEST_SHOTS
+
+# Field validation
+skip_fields:
+  field.path: "Reason for skipping OMAS comparison"
+
+field_tolerances:
+  field.path:
+    rtol: 1.0e-5
+    atol: 1.0
+
+field_shot_exclusions:
+  field.path: [203321, 204602]
+
+# Requirement validation
+requirement_validation:
+  allow_different_shot:
+    - '.mds.path.to.calibration'
+
+# Test variants (for multiple configurations)
+test_variants:
+  variant_name:
+    composer_params: {fast_ece: true}
+    omas_params: {fast_ece: true}
+    exclude_fields: []
+
+# OMAS path mapping (when needed)
+omas_path_map:
+  composer.path: omas.path.with.colons
+```
+
+**See `TEST_CONFIGURATION.md` for complete reference.**
+
+## Adding a New IDS - Checklist
+
+Required files:
+1. `ids/<ids>.yaml` - Field list and static values
+2. `ids/<ids>.py` - Mapper implementation
+3. Register in `composer.py`
+4. `tests/test_<ids>_requirements.py` (~18 lines)
+5. `tests/test_<ids>_composition.py` (~18 lines)
+
+Optional:
+6. `tests/test_config_<ids>.yaml` - Only if deviating from defaults
+7. Add to `scripts/generate_baseline_data.py`
+
+**See `ADDING_NEW_IDS.md` for step-by-step guide.**
+
+## Common Patterns
+
+### Channel-Based Data
+```python
+# Auxiliary: Channel IDs (DERIVED)
+self.specs["_channel_ids"] = IDSEntrySpec(
+    derive_requirements=lambda shot, raw: [
+        Requirement('.diagnostic.channels', shot, 'TREE')
+    ]
+)
+
+# Final: Data per channel (DERIVED)
+self.specs["diagnostic.channel.data"] = IDSEntrySpec(
+    derive_requirements=lambda shot, raw: [
+        Requirement(f'.diagnostic.ch{ch}.data', shot, 'TREE')
+        for ch in self._get_channel_ids(raw)
+    ]
+)
+```
+
+### Calibration Data
+```python
+# Calibration shot (DIRECT from shot 0)
+self.specs["_calib_shot"] = IDSEntrySpec(
+    static_requirements=[Requirement('.calib_shot', 0, 'TREE')]
+)
+
+# Calibration data (DERIVED using calib shot)
+self.specs["_calib_data"] = IDSEntrySpec(
+    derive_requirements=lambda shot, raw: [
+        Requirement('.calib', raw[('.calib_shot', 0, 'TREE')], 'TREE')
+    ]
+)
+```
+
+**Important:** Add to `allow_different_shot` in test config.
+
+### Unit Conversions
+```python
+# COMPUTED - no requirements
+self.specs["diagnostic.position.r"] = IDSEntrySpec(
+    compose=lambda shot, raw: raw[aux_key] / 100.0  # cm -> m
+)
+```
+
+### Static Values
+```python
+# COMPUTED - constant
+self.specs["diagnostic.name"] = IDSEntrySpec(
+    compose=lambda shot, raw: "Diagnostic Name"
+)
+```
+
+## Key Implementation Rules
 
 ### Requirement Keys
-
 Always use tuple keys matching `Requirement.as_key()`:
+
 ```python
 # Correct
 raw_data[(req.mds_path, req.shot, req.treename)] = value
@@ -248,50 +184,67 @@ raw_data[(req.mds_path, req.shot, req.treename)] = value
 raw_data[req.mds_path] = value
 ```
 
-### OMAS Integration
+### Naming Conventions
+- Public API: `compose()` method
+- Internal methods: `_compose_*()` functions
+- Auxiliary nodes: `_underscore_prefix`
+- Never mix terminology (compose vs synthesize)
 
-- Use `mdsvalue('d3d', treename, shot, mds_path).raw()` to fetch data
-- Use `machine_to_omas(ods, 'd3d', shot, '<ids>.*')` to fetch reference data
-- Use OMAS's list indexing for nested access: `ods[ids_name][field1, field2, ...]`
+### Field Lists in YAML
+```yaml
+fields:
+  # Simple - available for all configs
+  - field.path
 
-## Backwards Compatibility
+  # With tree restriction
+  - field: field.path
+    trees: ['ZIPFIT']  # Only when profiles_tree='ZIPFIT'
+```
 
-**Not a concern.** We can make breaking changes freely during development. Focus on getting the architecture right, not preserving compatibility with earlier versions.
+## Conftest Utilities - Quick Reference
 
-## Adding a New IDS
+```python
+# Configuration
+load_test_config(ids_name)
+load_ids_fields(ids_name, tree_filter=None)
 
-To add support for a new IDS (e.g., `magnetics`):
+# Test execution
+run_requirements_resolution(ids_path, composer, shot)
+run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot)
 
-1. Create `ids/magnetics.yaml` with field list and static values
-2. Create `ids/magnetics.py` with `MagneticsMapper(IDSMapper)` class
-3. Register mapper in `composer.py`
-4. Create `tests/test_magnetics_requirements.py` (~17 lines)
-5. Create `tests/test_magnetics_composition.py` (~17 lines)
-6. (Optional) Create `tests/test_config_magnetics.yaml` if special test rules needed
+# Data operations
+resolve_and_compose(composer, ids_path, shot)
 
-That's it! All test infrastructure is already in place.
+# Validation
+check_skip_field(ids_name, ids_path)
+check_field_shot_exclusion(ids_name, ids_path, shot)
 
-### When to Create Test Config YAML
-
-Create `tests/test_config_<ids>.yaml` when:
-- Fields use calibration/reference data from different shots
-- Requirements need custom validation rules
-- Standard test assertions don't apply to specific fields
-
-Otherwise, the default config (all requirements must match requested shot) is used.
+# Comparison
+compare_values(composer_val, omas_val, label, rtol, atol_float, atol_array)
+```
 
 ## Questions to Ask
 
-When implementing new features, always ask:
-
-1. **Is this duplicating existing code?** → Extract to shared utility
+Before implementing:
+1. **Is this duplicating code?** → Extract to shared utility
 2. **Am I bundling requirements?** → Split into isolated specs
-3. **Is this IDS-specific or generic?** → Put in right place
-4. **Can tests reuse existing functions?** → Use conftest.py functions
-5. **Are field lists hardcoded?** → Load from YAML instead
+3. **Is this IDS-specific or generic?** → Right location (ids/ vs conftest.py)
+4. **Can tests reuse existing functions?** → Use conftest.py
+5. **Are field lists hardcoded?** → Load from YAML
+6. **Does this need test config?** → Only if deviating from defaults
+7. **Is batch API used?** → Pass lists to resolve()/compose()
+8. **Are variant params consistent?** → composer_params must match omas_params
+
+## Detailed Documentation
+
+For comprehensive information, see:
+- **`TEST_CONFIGURATION.md`** - Complete test config reference, parametrization, fixtures
+- **`ADDING_NEW_IDS.md`** - Step-by-step guide for adding new IDS
+- **`OMAS_INTEGRATION.md`** - OMAS path mapping, fetch ordering, tolerances
+- **`COMMON_PATTERNS.md`** - COCOS, ragged arrays, multiple data sources, etc.
 
 ## References
 
-- OMAS implementation: `/home/denks/DIIID_IMAS/omas/omas/machine_mappings/d3d.py`
-- IMAS Data Dictionary: See YAML `docs_file` paths
-- Test patterns: `tests/conftest.py` generic functions
+- Test patterns: `tests/conftest.py`
+- Example mappers: `ids/equilibrium.py`, `ids/thomson_scattering.py`
+- OMAS implementation: Check d3d.py mappings
