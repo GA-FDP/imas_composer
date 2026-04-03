@@ -3,7 +3,7 @@
 # Override default TEST_SHOTS for ECE
 # fast_ece=True will be tested on all these shots
 # This is slow so lets do only half of them
-override_shots: [202161, 203321] # 
+override_shots: [202161, 203321]
 
 # Fields to skip OMAS comparison for (composer still tested)
 # Format: field_path: "reason for skipping"
