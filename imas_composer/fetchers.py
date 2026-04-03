@@ -61,29 +61,46 @@ def fetch_requirements(requirements: List[Requirement]) -> Dict[Tuple[str, int, 
 
     # --- __ptdata__ requirements: translate to ptdata2/pthead2 TDI via OMAS ---
     if ptdata_reqs:
+        # Batch ptdata requirements by shot to minimize mdsvalue calls
+        by_shot = {}
         seen_keys = set()
         for req in ptdata_reqs:
             k = req.as_key()
             if k in seen_keys:
                 continue
             seen_keys.add(k)
-            sig = req.mds_path
             shot = req.shot
-            tdi = {
-                'data':   f'ptdata2("{sig}",{shot})',
-                'times':  f'dim_of(ptdata2("{sig}",{shot}),0)',
-                'rarray': f'pthead2("{sig}",{shot}), __rarray',
-            }
+            if shot not in by_shot:
+                by_shot[shot] = []
+            by_shot[shot].append(req)
+
+        for shot, reqs in by_shot.items():
+            # Build TDI dict for all signals in this shot
+            tdi = {}
+            for req in reqs:
+                sig = req.mds_path
+                # Create unique keys for each signal's data/times/rarray
+                tdi[f'{sig}_data'] = f'ptdata2("{sig}",{shot})'
+                tdi[f'{sig}_times'] = f'dim_of(ptdata2("{sig}",{shot}),0)'
+                tdi[f'{sig}_rarray'] = f'pthead2("{sig}",{shot}), __rarray'
+
             try:
                 result = mdsvalue('d3d', treename=None, pulse=shot, TDI=tdi)
                 tree_data = result.raw()
-                raw_data[k] = {
-                    'data':   tree_data['data'],
-                    'times':  tree_data['times'],
-                    'rarray': tree_data['rarray'],
-                }
+                for req in reqs:
+                    sig = req.mds_path
+                    k = req.as_key()
+                    try:
+                        raw_data[k] = {
+                            'data': tree_data[f'{sig}_data'],
+                            'times': tree_data[f'{sig}_times'],
+                            'rarray': tree_data[f'{sig}_rarray'],
+                        }
+                    except Exception as e:
+                        raw_data[k] = e
             except Exception as e:
-                raw_data[k] = e
+                for req in reqs:
+                    raw_data[req.as_key()] = e
 
     # --- MDSplus requirements ---
     if mds_reqs:
