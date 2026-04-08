@@ -4,9 +4,11 @@ PF Active (Poloidal Field) IDS Mapping for DIII-D
 Maps DIII-D poloidal field coil hardware geometry and current data to IMAS pf_active IDS.
 See OMAS: omas/machine_mappings/d3d.py::pf_active_hardware and pf_active_coil_current_data
 
-Hardware geometry is embedded in pf_active.yaml to avoid dependency on OMAS installation.
+Hardware geometry is loaded from machine_description/D3D/{shot}/mhdin_ods.json.
 """
 
+from pathlib import Path
+import json
 from typing import Dict, List
 import numpy as np
 import awkward as ak
@@ -25,12 +27,46 @@ class PfActiveMapper(IDSMapper):
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
 
-        # Load coil names and hardware data from config
-        self._coil_names = self.config.get('coil_names', [])
-        self._hardware_data = self.config.get('hardware', {})
+        # Load coil names from the latest available mhdin_ods.json
+        # (coil configuration is consistent across all DIII-D shot ranges)
+        self._coil_names = [c['identifier'] for c in self._load_pf_coils_latest()]
 
         # Build IDS specs
         self._build_specs()
+
+    def _load_pf_coils_latest(self) -> list:
+        """Load pf_active coil list from the latest available mhdin_ods.json."""
+        machine_desc_dir = Path(__file__).parent.parent / 'machine_description' / 'D3D'
+        available = sorted(
+            int(d.name) for d in machine_desc_dir.iterdir()
+            if d.is_dir() and d.name.isdigit()
+        )
+        json_path = machine_desc_dir / str(available[-1]) / 'mhdin_ods.json'
+        with open(json_path) as f:
+            data = json.load(f)
+        return data['pf_active']['coil']
+
+    def _load_pf_coils(self, shot: int) -> list:
+        """
+        Load pf_active coil hardware list from mhdin_ods.json.
+
+        Selects the file for the nearest shot boundary <= shot.
+        """
+        machine_desc_dir = Path(__file__).parent.parent / 'machine_description' / 'D3D'
+        available = sorted(
+            int(d.name) for d in machine_desc_dir.iterdir()
+            if d.is_dir() and d.name.isdigit()
+        )
+        shot_dir = available[0]
+        for s in available:
+            if s <= shot:
+                shot_dir = s
+            else:
+                break
+        json_path = machine_desc_dir / str(shot_dir) / 'mhdin_ods.json'
+        with open(json_path) as f:
+            data = json.load(f)
+        return data['pf_active']['coil']
 
     def _build_specs(self):
         """Build all IDS entry specifications"""
@@ -168,7 +204,7 @@ class PfActiveMapper(IDSMapper):
 
         Returns numpy array of values, one per coil (rectangular).
         """
-        coils = self._hardware_data.get('coil', [])
+        coils = self._load_pf_coils(shot)
 
         result = []
         for coil in coils:
@@ -184,7 +220,7 @@ class PfActiveMapper(IDSMapper):
         First 6 coils (ECOIL*) have function index 0 (flux).
         Remaining coils (F*) have function index 1 (shaping).
         """
-        coils = self._hardware_data.get('coil', [])
+        coils = self._load_pf_coils(shot)
 
         result = []
         for k, coil in enumerate(coils):
@@ -203,14 +239,17 @@ class PfActiveMapper(IDSMapper):
 
         Returns awkward array: ragged array (different element counts per coil).
         """
-        coils = self._hardware_data.get('coil', [])
+        coils = self._load_pf_coils(shot)
 
         result = []
         for coil in coils:
             elements = coil.get('element', [])
             coil_elements = []
             for element in elements:
-                coil_elements.append(element.get(field, ''))
+                data = element.get(field, '')
+                if field in ['identifier', 'name'] and data[-2:] == '_0':
+                    data = data[:-2]
+                coil_elements.append(data)
             result.append(coil_elements)
 
         return ak.Array(result)
@@ -222,7 +261,7 @@ class PfActiveMapper(IDSMapper):
         Returns awkward array: ragged array (different element counts per coil).
         Geometry type 2 = rectangle, type 1 = outline.
         """
-        coils = self._hardware_data.get('coil', [])
+        coils = self._load_pf_coils(shot)
 
         result = []
         for coil in coils:
@@ -243,7 +282,7 @@ class PfActiveMapper(IDSMapper):
         Note: Some coils use outline geometry (type 1) instead of rectangle (type 2).
         For those elements, rectangle fields are empty arrays (not present).
         """
-        coils = self._hardware_data.get('coil', [])
+        coils = self._load_pf_coils(shot)
 
         result = []
         for coil in coils:
@@ -269,7 +308,7 @@ class PfActiveMapper(IDSMapper):
         IMAS convention: F-coils (indices 6-23) are divided by turns_with_sign.
         Non-homogeneous time: each coil has its own timebase.
         """
-        coils = self._hardware_data.get('coil', [])
+        coils = self._load_pf_coils(shot)
 
         result = []
         for k, coil_name in enumerate(self._coil_names):
@@ -329,7 +368,7 @@ class PfActiveMapper(IDSMapper):
         Returns awkward array: ragged array (non-homogeneous time, different lengths per coil).
         F-coils also divided by turns_with_sign.
         """
-        coils = self._hardware_data.get('coil', [])
+        coils = self._load_pf_coils(shot)
 
         result = []
         for k, coil_name in enumerate(self._coil_names):
