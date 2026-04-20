@@ -33,33 +33,6 @@ results = simple_load(ids_paths, shot, efit_tree='EFIT01')
 # results = {'equilibrium.time': array(...), 'equilibrium.time_slice.profiles_1d.psi': array(...)}
 ```
 
-### Advanced Usage (manual data fetching)
-
-```python
-from imas_composer import ImasComposer
-from imas_composer.fetchers import fetch_requirements
-
-# Create composer instance
-composer = ImasComposer(efit_tree='EFIT01')
-
-# Resolve requirements iteratively
-shot = 200000
-ids_paths = ['equilibrium.time', 'equilibrium.time_slice.profiles_1d.psi']
-raw_data = {}
-
-while True:
-    status, requirements = composer.resolve(ids_paths, shot, raw_data)
-    if all(status.values()):
-        break
-
-    # Fetch requirements from MDSplus via OMAS
-    fetched = fetch_requirements(requirements)
-    raw_data.update(fetched)
-
-# Compose final IMAS data
-results = composer.compose(ids_paths, shot, raw_data)
-```
-
 ## Working with Claude Code
 
 This project is designed to be extended with AI assistance.
