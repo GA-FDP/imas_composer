@@ -236,10 +236,8 @@ When a test fails:
    - Shot number mismatch → calibration data
 
 2. **Check OMAS reference** - compare your implementation:
-   ```python
-   # In omas/machine_mappings/d3d.py or _efit.json
-   # See exactly what OMAS does
-   ```
+   - In `omas/machine_mappings/d3d.py` or `_efit.json`
+   - See exactly what OMAS does
 
 3. **Add debug prints** (user will run):
    ```python
@@ -249,7 +247,7 @@ When a test fails:
        return result
    ```
 
-4. **Share output with user** - they'll run the test and provide output
+4. **Digest output from user** - they'll run the test and provide output
 
 5. **Iterate** - fix issue, user runs again
 
@@ -279,8 +277,8 @@ All shared test logic lives in `conftest.py`:
 
 1. Create `tests/test_<ids>_requirements.py` (use template above)
 2. Create `tests/test_<ids>_composition.py` (use template above)
-3. (Optional) Create `tests/test_config_<ids>.yaml` if special rules needed
-4. Run tests: `pytest tests/test_<ids>_*.py -v`
+3. Create `tests/test_config_<ids>.yaml` with special rules if needed
+4. User runs tests: as described above
 5. Debug failures using workflow above
 
 That's it! Each test file is ~17 lines. All complexity is in conftest.py (DRY principle).
