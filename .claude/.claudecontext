@@ -27,122 +27,48 @@ This project works with restricted DIII-D fusion data that is NOT publicly acces
 - Modify source and test files
 - Use static analysis tools (Glob, Grep, etc.)
 
-### What you MUST NOT do:
-- Execute Python code in any form (python, python -c, import statements, etc.)
-- Run pytest or any test runners
-- Run scripts that import `omas.mdsvalue`
-- Use Bash to run Python commands
-
 **If you catch yourself about to execute code**: STOP. The user will run it and provide you the results.
 
-## Project Overview
+## Project Architecture at a Glance
 
-**imas_composer** converts DIII-D MDSplus data to IMAS format using a three-stage requirement system.
-
-### Architecture Summary
-
-**Separation of Concerns:**
-- `composer.py` - Requirement resolution and composition logic (NO data fetching)
-- `fetchers.py` - Data retrieval via MDSplus/OMAS (separate module)
-- `ids/*.py` - IDS-specific mappers for each data structure
-
-**Three-Stage Requirement System:**
+**imas_composer** converts DIII-D MDSplus data to IMAS format using a three-stage requirement system:
 
 1. **DIRECT**: Static MDSplus paths known at initialization
-   ```python
-   static_requirements=[Requirement('\\EFIT::TOP.RESULTS.GEQDSK.BCENTR', 0, 'EFIT01')]
-   ```
-
 2. **DERIVED**: Requirements that depend on fetched data (e.g., channel IDs)
-   ```python
-   derive_requirements=lambda shot, raw: [
-       Requirement(f'\\TREE::PATH.{channel_id}', shot, 'TREE')
-       for channel_id in get_channel_ids(raw)
-   ]
-   ```
-
 3. **COMPUTED**: Final composition from raw_data (no new requirements)
-   ```python
-   compose=lambda shot, raw: transform(raw[req_key])
-   ```
 
-**Key Design Principles:**
-- **DRY**: No code duplication - common logic in shared utilities
-- **Requirement Isolation**: Each field fetches only what it needs (no bundling)
+**Key modules:**
+- `composer.py` - Requirement resolution and composition (NO data fetching)
+- `fetchers.py` - Data retrieval via MDSplus/OMAS
+- `ids/*.py` - IDS-specific mappers with YAML configurations
+
+**Core principles:**
+- **DRY**: All common logic in shared utilities (especially `tests/conftest.py`)
+- **Requirement Isolation**: Each field fetches only what it needs
 - **Declarative Config**: Field lists and static values in YAML files
-- **Test-Driven**: Every field has requirement and composition tests vs OMAS
 - **OMAS Compatibility**: Output exactly matches OMAS reference implementation
-
-### File Structure
-```
-imas_composer/
-├── imas_composer/
-│   ├── core.py              # Requirement, RequirementStage classes
-│   ├── composer.py          # ImasComposer API (resolve/compose)
-│   ├── fetchers.py          # Data fetching (fetch_requirements, simple_load)
-│   ├── cocos.py             # COCOS coordinate transformations
-│   └── ids/
-│       ├── base.py          # IDSMapper base class
-│       ├── equilibrium.py   # Equilibrium mapper
-│       ├── equilibrium.yaml # Field configuration
-│       └── ...
-└── tests/
-    ├── conftest.py          # Shared test infrastructure (DRY!)
-    ├── test_equilibrium_requirements.py
-    ├── test_equilibrium_composition.py
-    └── test_config_equilibrium.yaml
-```
 
 ## Quick Reference
 
-### OMAS Integration
-
-**Fetching Pattern:**
+**OMAS Integration:**
 ```python
-machine_to_omas(ods, 'd3d', shot, 'ids_name.*')  # Fetch all fields for an IDS
+machine_to_omas(ods, 'd3d', shot, 'ids_name.*')  # Fetch all fields
 ```
-
-**Uncertainty Access:**
-- `ods['path']['data']` - nominal values
-- `ods['path']['data_error_upper']` - uncertainties
-- (Ignore `unumpy.uarray()` in OMAS source - it auto-converts)
 
 **OMAS → imas_composer mapping:**
 - Static data (known paths in OMAS `query` dict) → **DIRECT** stage
 - Dynamic data (depends on fetch, e.g., OMAS loops) → **DERIVED** stage
 - Unit conversions must match OMAS exactly
 
-### Development Philosophy
-- No backwards compatibility needed - this is a new application
-- Let tests fail when behavior changes - explicit is better than implicit
-- No fallback defaults - clear errors are better than silent fallbacks
+**Development Philosophy:**
+- No backwards compatibility needed - let tests fail when behavior changes
+- Explicit is better than implicit
+- Clear errors are better than silent fallbacks
 
 ## Documentation Index
 
-Read these files for detailed guidance:
-
-1. **DEVELOPMENT_PRINCIPLES.md** (~300 lines) - Core architecture
-   - DRY principle and requirement isolation
-   - Three-stage system details
-   - Public API patterns
-   - Test structure and configuration
-   - YAML configuration system
-   - Adding new IDS guide
-
-2. **IMPLEMENTING_FIELDS.md** - Field implementation workflow
-   - Analyzing OMAS mappings
-   - Creating mapper code
-   - YAML configuration
-   - Common patterns (COCOS, ragged arrays, etc.)
-
-3. **TESTING_GUIDE.md** - Test creation workflow
-   - Test file structure
-   - Running and debugging tests
-   - Test configuration YAML
-   - Field-specific tolerances
-
 **When to read what:**
-- **Starting a session**: Read this file (.claudecontext) - gives you 80% of what you need
-- **Implementing fields**: IMPLEMENTING_FIELDS.md for transcription workflow
-- **Writing tests**: TESTING_GUIDE.md for test patterns
-- **Architecture deep-dive**: DEVELOPMENT_PRINCIPLES.md for complete reference
+- **Starting a session**: This file (.claudecontext) - quick orientation
+- **Architecture details**: DEVELOPMENT_PRINCIPLES.md - three-stage system, DRY patterns, public API
+- **Implementing fields**: IMPLEMENTING_FIELDS.md - transcription workflow from OMAS
+- **Writing tests**: TESTING_GUIDE.md - test patterns and configuration
