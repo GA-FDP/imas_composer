@@ -2,9 +2,15 @@
 
 This document outlines the core architectural principles for the imas_composer project.
 
-## Core Principle: DRY (Don't Repeat Yourself)
 
-**Dryness is a key principle for this project.** Code should NEVER be duplicated. Common patterns must be extracted and shared.
+## Core Principles
+
+### 1. DRY (Don't Repeat Yourself)
+- All test logic in `tests/conftest.py` as reusable functions
+- Common mapper functionality in `ids/base.py` base class
+- Configuration in YAML files, never hardcoded
+- IDS-specific test files are ~18 lines each
+
 
 ### Application in Practice
 
@@ -36,30 +42,29 @@ This document outlines the core architectural principles for the imas_composer p
 ### Anti-Pattern: Bundled Requirements
 
 ```python
-# BAD - bundles R, Z, PHI together
-self.specs["_geometry_setup"] = IDSEntrySpec(
-    stage=RequirementStage.DIRECT,
+# GOOD - isolated
+self.specs["_position_r"] = IDSEntrySpec(
+    static_requirements=[Requirement('...R', 0, 'TREE')]
+)
+
+# BAD - bundled
+self.specs["_geometry"] = IDSEntrySpec(
     static_requirements=[
-        Requirement('...R', 0, 'ELECTRONS'),
-        Requirement('...Z', 0, 'ELECTRONS'),
-        Requirement('...PHI', 0, 'ELECTRONS'),
+        Requirement('...R', 0, 'TREE'),
+        Requirement('...Z', 0, 'TREE'),  # Don't bundle!
     ]
 )
 ```
 
-### Correct Pattern: Isolated Requirements
+### 3. Batch API
+Both `resolve()` and `compose()` accept **lists of paths**:
 
 ```python
-# GOOD - separate spec for each coordinate
-self.specs["_position_r"] = IDSEntrySpec(
-    stage=RequirementStage.DIRECT,
-    static_requirements=[Requirement('...R', 0, 'ELECTRONS')]
-)
+# Resolve multiple paths together
+status, requirements = composer.resolve(ids_paths, shot, raw_data)  # ids_paths is a list
 
-self.specs["_position_z"] = IDSEntrySpec(
-    stage=RequirementStage.DIRECT,
-    static_requirements=[Requirement('...Z', 0, 'ELECTRONS')]
-)
+# Compose multiple paths together
+results = composer.compose(ids_paths, shot, raw_data)  # Returns dict
 ```
 
 **Rationale**: When requesting `channel.position.r`, we should ONLY fetch R data, not Z and PHI.
@@ -213,10 +218,12 @@ The system automatically resolves dependencies:
 
 ### Node Naming
 
+
 - Auxiliary nodes: `_position_r` (leading underscore, not in YAML)
 - Final fields: `thomson_scattering.channel.position.r` (full IDS path, in YAML)
 
 ## Requirement Keys
+
 
 Always use tuple keys matching `Requirement.as_key()`:
 
@@ -311,8 +318,10 @@ machine_to_omas(ods, 'd3d', shot, 'thomson_scattering.*')  # All fields
 ```
 
 This is handled automatically in test infrastructure.
-
-## Backwards Compatibility
+  # With tree restriction
+  - field: field.path
+    trees: ['ZIPFIT']  # Only when profiles_tree='ZIPFIT'
+```
 
 **Not a concern.** We can make breaking changes freely during development. Focus on getting the architecture right, not preserving compatibility.
 
@@ -322,10 +331,10 @@ This is handled automatically in test infrastructure.
 
 ## Questions to Ask
 
-When implementing new features, always ask:
-
-1. **Is this duplicating existing code?** → Extract to shared utility
+Before implementing:
+1. **Is this duplicating code?** → Extract to shared utility
 2. **Am I bundling requirements?** → Split into isolated specs
+
 3. **Is this IDS-specific or generic?** → Put in right place
 4. **Can tests reuse existing functions?** → Use conftest.py functions
 5. **Are field lists hardcoded?** → Load from YAML instead
@@ -348,6 +357,6 @@ See IMPLEMENTING_FIELDS.md for field implementation details and TESTING_GUIDE.md
 
 ## References
 
-- OMAS implementation: `/home/denks/DIIID_IMAS/omas/omas/machine_mappings/d3d.py`
-- IMAS Data Dictionary: See YAML `docs_file` paths
-- Test patterns: `tests/conftest.py` generic functions
+- Test patterns: `tests/conftest.py`
+- Example mappers: `ids/equilibrium.py`, `ids/thomson_scattering.py`
+- OMAS implementation: Check d3d.py mappings
