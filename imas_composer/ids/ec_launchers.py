@@ -6,6 +6,7 @@ See OMAS: omas/machine_mappings/d3d.py::ec_launcher_active_hardware
 
 from typing import Dict, List
 import numpy as np
+import re
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
@@ -477,7 +478,7 @@ class EcLaunchersMapper(IDSMapper):
 
             port_key = Requirement(f'.ECH.SYSTEM_{system_no}.ANTENNA.PORT', shot, 'RF').as_key()
             port_string = raw_data[port_key]
-            phi = np.deg2rad(float(port_string.split(' ')[0]))
+            phi = np.deg2rad(float(re.sub(r'[^0-9.+]', '', port_string).split('+')[0]))
 
             phi_arrays.append(phi * np.ones(ntime))
 

@@ -1,7 +1,7 @@
 # Test configuration for EC Launchers IDS
 
-# Only shot 170325 has EC launcher data, exclude all others
-exclude_shots: []
+# Include all the standard TEST_SHOTS plus one with top launch
+override_shots: [202161, 203321, 204312, 204601, 204602]
 
 # Fields to skip OMAS comparison for (composer still tested)
 # Format: field_path: "reason for skipping"
@@ -12,12 +12,14 @@ skip_fields: {}
 field_shot_exclusions:
   ec_launchers.beam.spot.size:
     - 203321
-    - 204602
+    - 204312
     - 204601
+    - 204602
   ec_launchers.beam.phase.curvature:
     - 203321
-    - 204602
+    - 204312
     - 204601
+    - 204602
 
 # Requirement validation settings
 requirement_validation:

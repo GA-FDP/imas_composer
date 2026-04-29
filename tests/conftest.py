@@ -10,7 +10,7 @@ Key Features:
 - OMAS validation: Compare imas_composer output against OMAS reference implementation
 
 Test Shot Configuration:
-- Default: Tests run on TEST_SHOTS = [202161, 203321, 204602, 204601]
+- Default: Tests run on TEST_SHOTS = [202161, 203321, 204601, 204602]
 - exclude_shots: In test_config_<ids>.yaml, skip specific shots (e.g., no data available)
 - override_shots: In test_config_<ids>.yaml, completely replace TEST_SHOTS with custom list
   Example: For interferometer with RIP data requirement (shots >= 168823):
@@ -51,10 +51,10 @@ def _load_yaml_default(yaml_filename: str, key: str, fallback):
 #          Bt | Ip
 # 202161:  -  | -
 # 203321:  +  | -
-# 204602:  -  | +
 # 204601:  +  | +
+# 204602:  -  | +
 
-TEST_SHOTS = [202161, 203321, 204602, 204601]
+TEST_SHOTS = [202161, 203321, 204601, 204602]
 
 
 # ============================================================================
