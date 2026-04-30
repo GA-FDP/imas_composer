@@ -5,6 +5,7 @@ See OMAS: omas/machine_mappings/d3d.py::wall
 """
 
 from typing import Dict
+import awkward as ak
 import numpy as np
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
@@ -48,27 +49,27 @@ class WallMapper(IDSMapper):
 
         # Public IDS fields
 
-        self.specs["wall.description_2d.0.limiter.unit.0.outline.r"] = IDSEntrySpec(
+        self.specs["wall.description_2d.limiter.unit.outline.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["wall._limiter_data"],
             compose=self._compose_limiter_r,
-            ids_path="wall.description_2d.0.limiter.unit.0.outline.r",
+            ids_path="wall.description_2d.limiter.unit.outline.r",
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["wall.description_2d.0.limiter.unit.0.outline.z"] = IDSEntrySpec(
+        self.specs["wall.description_2d.limiter.unit.outline.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["wall._limiter_data"],
             compose=self._compose_limiter_z,
-            ids_path="wall.description_2d.0.limiter.unit.0.outline.z",
+            ids_path="wall.description_2d.limiter.unit.outline.z",
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["wall.description_2d.0.limiter.type.index"] = IDSEntrySpec(
+        self.specs["wall.description_2d.limiter.type.index"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            compose=lambda shot, raw: self.static_values["description_2d.0.limiter.type.index"],
-            ids_path="wall.description_2d.0.limiter.type.index",
+            compose=lambda shot, raw: np.array([self.static_values["description_2d.limiter.type.index"]]),
+            ids_path="wall.description_2d.limiter.type.index",
             docs_file=self.DOCS_PATH
         )
 
@@ -89,17 +90,17 @@ class WallMapper(IDSMapper):
         )
 
     # Compose functions
-    def _compose_limiter_r(self, shot: int, raw_data: dict) -> np.ndarray:
-        """Compose limiter R coordinates (first column of LIM array)."""
+    def _compose_limiter_r(self, shot: int, raw_data: dict) -> ak.Array:
+        """Compose limiter R coordinates as ak.Array with shape (n_desc2d, n_units, n_points)."""
         lim_key = Requirement('\\TOP.RESULTS.GEQDSK.LIM', shot, self.efit_tree).as_key()
         lim = raw_data[lim_key]
-        return lim[:, 0]
+        return ak.Array([[lim[:, 0]]])
 
-    def _compose_limiter_z(self, shot: int, raw_data: dict) -> np.ndarray:
-        """Compose limiter Z coordinates (second column of LIM array)."""
+    def _compose_limiter_z(self, shot: int, raw_data: dict) -> ak.Array:
+        """Compose limiter Z coordinates as ak.Array with shape (n_desc2d, n_units, n_points)."""
         lim_key = Requirement('\\TOP.RESULTS.GEQDSK.LIM', shot, self.efit_tree).as_key()
         lim = raw_data[lim_key]
-        return lim[:, 1]
+        return ak.Array([[lim[:, 1]]])
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         return self.specs
