@@ -49,6 +49,7 @@ class IDSMapper:
         """Initialize the IDS mapper."""
         # Load configuration (static values and field list)
         config = self._load_config()
+        self.config = config
         self.static_values = config.get('static_values', {})
         self.supported_fields = config.get('fields', [])
 

@@ -9,6 +9,15 @@ static_values:
 # Default ZIPFIT tree
 default_tree: ZIPFIT01
 
+# Ion species mapping (order defines the ion array index in ak.Array outputs)
+ions:
+  - label: D
+    z_n: 1.0
+    a: 2.0141
+  - label: C
+    z_n: 6.0
+    a: 12.011
+
 # Supported fields for ZIPFIT tree
 fields:
   # Time
@@ -23,20 +32,15 @@ fields:
   - profiles_1d.electrons.density_thermal
   - profiles_1d.electrons.temperature
 
-  # Ion[0] - Deuterium
-  - profiles_1d.ion.0.density_thermal
-  - profiles_1d.ion.0.temperature
-  - profiles_1d.ion.0.label
-  - profiles_1d.ion.0.element.0.z_n
-  - profiles_1d.ion.0.element.0.a
-
-  # Ion[1] - Carbon
-  - profiles_1d.ion.1.density_thermal
-  - profiles_1d.ion.1.temperature
-  - profiles_1d.ion.1.rotation_frequency_tor
-  - profiles_1d.ion.1.label
-  - profiles_1d.ion.1.element.0.z_n
-  - profiles_1d.ion.1.element.0.a
+  # Ions (unified ion dimension - ak.Array with axes [time, ion, rho])
+  # Ion ordering follows the `ions:` section above (D=index 0, C=index 1)
+  # rotation_frequency_tor: D is NaN-filled (no measurement), C from TROTFIT
+  - profiles_1d.ion.density_thermal
+  - profiles_1d.ion.temperature
+  - profiles_1d.ion.rotation_frequency_tor
+  - profiles_1d.ion.label
+  - profiles_1d.ion.element.z_n
+  - profiles_1d.ion.element.a
 
   # Global quantities
   - global_quantities.v_loop

@@ -124,10 +124,10 @@ def load_ids_fields(ids_name, tree_filter=None):
         >>> print(fields[:3])
         ['ece.ids_properties.homogeneous_time', 'ece.line_of_sight.first_point.r', ...]
         >>> fields = load_ids_fields('core_profiles', tree_filter='ZIPFIT')
-        >>> 'core_profiles.profiles_1d.ion.1.rotation_frequency_tor' in fields
+        >>> 'core_profiles.profiles_1d.ion.rotation_frequency_tor' in fields
         True
         >>> fields = load_ids_fields('core_profiles', tree_filter='OMFIT_PROFS')
-        >>> 'core_profiles.profiles_1d.ion.1.rotation_frequency_tor' in fields
+        >>> 'core_profiles.profiles_1d.ion.rotation_frequency_tor' in fields
         False
     """
     # Path to YAML file in ids directory
@@ -960,6 +960,21 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
     else:
         ods = omas_data(ids_name, shot=shot,
                        profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
+
+    # Check for ion-sliced comparison: fields where only a subset of ions have
+    # OMAS data (e.g. D rotation is NaN-filled; fit fields only exist for C).
+    # omas_ion_slice specifies which ion index has OMAS data and the path to use.
+    omas_ion_slice = test_config.get('omas_ion_slice', {})
+    if ids_path in omas_ion_slice:
+        import awkward as ak
+        spec = omas_ion_slice[ids_path]
+        ion_idx = spec['ion_index']
+        sliced_omas_path = spec['omas_path']
+        # Slice (n_time, n_ion, ...) → (n_time, ...) for the requested ion
+        sliced_value = ak.Array([composer_value[i][ion_idx] for i in range(len(composer_value))])
+        _compare_recursive(sliced_value, ods, sliced_omas_path,
+                           rtol=rtol, atol_float=atol_float, atol_array=atol_array)
+        return
 
     # Recursively compare using ndim-based logic with field-specific tolerances
     _compare_recursive(composer_value, ods, omas_access_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)

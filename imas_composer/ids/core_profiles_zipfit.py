@@ -7,6 +7,7 @@ See OMAS: omas/machine_mappings/d3d.py::core_profiles_profile_1d (lines 1664-171
 
 from typing import Dict, Any
 import numpy as np
+import awkward as ak
 from scipy.interpolate import interp1d
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
@@ -30,6 +31,9 @@ class CoreProfilesZipfitMapper(IDSMapper):
 
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
+
+        # Ion species list from YAML (defines ordering in ak.Array ion dimension)
+        self.ions = self.config.get('ions', [])
 
         # Build IDS specs
         self._build_specs()
@@ -258,10 +262,10 @@ class CoreProfilesZipfitMapper(IDSMapper):
         )
 
         # ============================================================
-        # Ion[0] (Deuterium) fields
+        # Ion fields (unified ion dimension - ak.Array [time, ion, rho])
+        # Ion ordering follows the `ions:` YAML section (D=index 0, C=index 1)
         # ============================================================
 
-        # Ion[0]: temperature (from ITEMPFIT)
         ion_temp_deps = [
             "core_profiles.profiles_1d._ion_temperature_data",
             "core_profiles.profiles_1d._ion_temperature_time",
@@ -276,60 +280,6 @@ class CoreProfilesZipfitMapper(IDSMapper):
             "core_profiles.profiles_1d._carbon_rotation_rho"
         ]
 
-        self.specs["core_profiles.profiles_1d.ion.0.temperature"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=ion_temp_deps,
-            compose=self._compose_ion_temperature,
-            ids_path="core_profiles.profiles_1d.ion.0.temperature",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[0]: density_thermal (calculated from quasineutrality: n_D = n_e - 6*n_C)
-        deuterium_deps = [
-            "core_profiles.profiles_1d.electrons.density_thermal",
-            "core_profiles.profiles_1d.ion.1.density_thermal"
-        ]
-
-        self.specs["core_profiles.profiles_1d.ion.0.density_thermal"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=deuterium_deps,
-            compose=self._compose_deuterium_density,
-            ids_path="core_profiles.profiles_1d.ion.0.density_thermal",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[0]: label
-        self.specs["core_profiles.profiles_1d.ion.0.label"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=[],
-            compose=lambda shot, raw: "D",
-            ids_path="core_profiles.profiles_1d.ion.0.label",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[0]: element[0].z_n (atomic number)
-        self.specs["core_profiles.profiles_1d.ion.0.element.0.z_n"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=[],
-            compose=lambda shot, raw: 1.0,
-            ids_path="core_profiles.profiles_1d.ion.0.element.0.z_n",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[0]: element[0].a (atomic mass)
-        self.specs["core_profiles.profiles_1d.ion.0.element.0.a"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=[],
-            compose=lambda shot, raw: 2.0141,
-            ids_path="core_profiles.profiles_1d.ion.0.element.0.a",
-            docs_file=self.DOCS_PATH
-        )
-
-        # ============================================================
-        # Ion[1] (Carbon) fields
-        # ============================================================
-
-        # Ion[1]: density_thermal (from ZDENSFIT)
         carbon_density_deps = [
             "core_profiles.profiles_1d._carbon_density_data",
             "core_profiles.profiles_1d._carbon_density_time",
@@ -344,24 +294,6 @@ class CoreProfilesZipfitMapper(IDSMapper):
             "core_profiles.profiles_1d._carbon_rotation_rho"
         ]
 
-        self.specs["core_profiles.profiles_1d.ion.1.density_thermal"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=carbon_density_deps,
-            compose=self._compose_carbon_density,
-            ids_path="core_profiles.profiles_1d.ion.1.density_thermal",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[1]: temperature (from ITEMPFIT, same as ion[0])
-        self.specs["core_profiles.profiles_1d.ion.1.temperature"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=ion_temp_deps,
-            compose=self._compose_ion_temperature,
-            ids_path="core_profiles.profiles_1d.ion.1.temperature",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[1]: rotation_frequency_tor (from TROTFIT)
         carbon_rotation_deps = [
             "core_profiles.profiles_1d._carbon_rotation_data",
             "core_profiles.profiles_1d._carbon_rotation_time",
@@ -376,38 +308,70 @@ class CoreProfilesZipfitMapper(IDSMapper):
             "core_profiles.profiles_1d._carbon_density_rho"
         ]
 
-        self.specs["core_profiles.profiles_1d.ion.1.rotation_frequency_tor"] = IDSEntrySpec(
+        # ion.temperature: both D and C use ITEMPFIT → same data, stacked
+        self.specs["core_profiles.profiles_1d.ion.temperature"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=ion_temp_deps,
+            compose=self._compose_all_ion_temperature,
+            ids_path="core_profiles.profiles_1d.ion.temperature",
+            docs_file=self.DOCS_PATH
+        )
+
+        # ion.density_thermal: D from quasineutrality (n_e - 6*n_C), C from ZDENSFIT
+        ion_density_deps = [
+            "core_profiles.profiles_1d._density_data",
+            "core_profiles.profiles_1d._density_time",
+            "core_profiles.profiles_1d._density_rho",
+            "core_profiles.profiles_1d._carbon_density_data",
+            "core_profiles.profiles_1d._carbon_density_time",
+            "core_profiles.profiles_1d._carbon_density_rho",
+            "core_profiles.profiles_1d._temperature_time",
+            "core_profiles.profiles_1d._temperature_rho",
+            "core_profiles.profiles_1d._ion_temperature_time",
+            "core_profiles.profiles_1d._ion_temperature_rho",
+            "core_profiles.profiles_1d._carbon_rotation_time",
+            "core_profiles.profiles_1d._carbon_rotation_rho"
+        ]
+
+        self.specs["core_profiles.profiles_1d.ion.density_thermal"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=ion_density_deps,
+            compose=self._compose_all_ion_density_thermal,
+            ids_path="core_profiles.profiles_1d.ion.density_thermal",
+            docs_file=self.DOCS_PATH
+        )
+
+        # ion.rotation_frequency_tor: D = NaN-filled, C from TROTFIT
+        self.specs["core_profiles.profiles_1d.ion.rotation_frequency_tor"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=carbon_rotation_deps,
-            compose=self._compose_carbon_rotation,
-            ids_path="core_profiles.profiles_1d.ion.1.rotation_frequency_tor",
+            compose=self._compose_all_ion_rotation,
+            ids_path="core_profiles.profiles_1d.ion.rotation_frequency_tor",
             docs_file=self.DOCS_PATH
         )
 
-        # Ion[1]: label
-        self.specs["core_profiles.profiles_1d.ion.1.label"] = IDSEntrySpec(
+        # Static metadata: label, z_n, a — 1D arrays indexed by ion (from YAML ions: list)
+        self.specs["core_profiles.profiles_1d.ion.label"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            compose=lambda shot, raw: "C",
-            ids_path="core_profiles.profiles_1d.ion.1.label",
+            compose=self._compose_all_ion_label,
+            ids_path="core_profiles.profiles_1d.ion.label",
             docs_file=self.DOCS_PATH
         )
 
-        # Ion[1]: element[0].z_n (atomic number)
-        self.specs["core_profiles.profiles_1d.ion.1.element.0.z_n"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.ion.element.z_n"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            compose=lambda shot, raw: 6.0,
-            ids_path="core_profiles.profiles_1d.ion.1.element.0.z_n",
+            compose=self._compose_all_ion_element_z_n,
+            ids_path="core_profiles.profiles_1d.ion.element.z_n",
             docs_file=self.DOCS_PATH
         )
 
-        # Ion[1]: element[0].a (atomic mass)
-        self.specs["core_profiles.profiles_1d.ion.1.element.0.a"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.ion.element.a"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            compose=lambda shot, raw: 12.011,
-            ids_path="core_profiles.profiles_1d.ion.1.element.0.a",
+            compose=self._compose_all_ion_element_a,
+            ids_path="core_profiles.profiles_1d.ion.element.a",
             docs_file=self.DOCS_PATH
         )
 
@@ -466,6 +430,63 @@ class CoreProfilesZipfitMapper(IDSMapper):
             ids_path="core_profiles.global_quantities.v_loop",
             docs_file=self.DOCS_PATH
         )
+
+    def _stack_ions(self, ion_arrays: Dict[str, np.ndarray]) -> ak.Array:
+        """
+        Stack per-ion (n_time, n_rho) arrays into a (n_time, n_ion, n_rho) ak.Array.
+
+        Ion order follows the `ions:` YAML section so callers do not need to
+        know the numeric index — they just pass a label-keyed dict.
+
+        Args:
+            ion_arrays: dict mapping ion label -> (n_time, n_rho) numpy array
+
+        Returns:
+            ak.Array of shape (n_time, n_ion, n_rho)
+        """
+        ordered = np.stack([ion_arrays[ion['label']] for ion in self.ions], axis=1)
+        return ak.Array(ordered)
+
+    def _compose_all_ion_temperature(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose ion.temperature for all ions: (n_time, n_ion, n_rho) ak.Array.
+
+        Both D and C use ITEMPFIT (same underlying data).
+        """
+        t_ion = self._compose_ion_temperature(shot, raw_data)  # (n_time, n_rho)
+        return self._stack_ions({ion['label']: t_ion for ion in self.ions})
+
+    def _compose_all_ion_density_thermal(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose ion.density_thermal for all ions: (n_time, n_ion, n_rho) ak.Array.
+
+        D from quasineutrality (n_e - 6*n_C), C from ZDENSFIT.
+        """
+        n_D = self._compose_deuterium_density(shot, raw_data)  # (n_time, n_rho)
+        n_C = self._compose_carbon_density(shot, raw_data)     # (n_time, n_rho)
+        return self._stack_ions({'D': n_D, 'C': n_C})
+
+    def _compose_all_ion_rotation(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose ion.rotation_frequency_tor for all ions: (n_time, n_ion, n_rho) ak.Array.
+
+        C from TROTFIT, D is NaN-filled (no measurement available).
+        """
+        c_rotation = self._compose_carbon_rotation(shot, raw_data)  # (n_time, n_rho)
+        d_rotation = np.full_like(c_rotation, np.nan)
+        return self._stack_ions({'D': d_rotation, 'C': c_rotation})
+
+    def _compose_all_ion_label(self, shot: int, raw_data: Dict[str, Any]) -> list:
+        """Return list of ion labels in YAML order, e.g. ['D', 'C']."""
+        return [ion['label'] for ion in self.ions]
+
+    def _compose_all_ion_element_z_n(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Return 1-D array of atomic numbers in YAML ion order."""
+        return np.array([ion['z_n'] for ion in self.ions])
+
+    def _compose_all_ion_element_a(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Return 1-D array of atomic masses in YAML ion order."""
+        return np.array([ion['a'] for ion in self.ions])
 
     def _get_requirement_key(self, field_type: str, shot: int, dim: int = None) -> str:
         """

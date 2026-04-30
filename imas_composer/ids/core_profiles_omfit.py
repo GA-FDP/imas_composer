@@ -34,6 +34,9 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
 
+        # Ion species list from YAML (defines ordering in ak.Array ion dimension)
+        self.ions = self.config.get('ions', [])
+
         # Build IDS specs
         self._build_specs()
 
@@ -416,139 +419,83 @@ class CoreProfilesOmfitMapper(IDSMapper):
         )
 
         # ============================================================
-        # Ion[0] (Deuterium) fields
+        # Ion fields (unified ion dimension - ak.Array [time, ion, rho])
+        # Ion ordering follows the `ions:` YAML section (D=index 0, C=index 1)
         # ============================================================
 
-        # Ion[0]: temperature (from T_D)
-        self.specs["core_profiles.profiles_1d.ion.0.temperature"] = IDSEntrySpec(
+        # ion.temperature: both D and C use T_D → same data, stacked
+        self.specs["core_profiles.profiles_1d.ion.temperature"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["core_profiles.profiles_1d._ion_temperature_data", "core_profiles.profiles_1d._omfit_rho"],
-            compose=self._compose_ion_temperature,
-            ids_path="core_profiles.profiles_1d.ion.0.temperature",
+            depends_on=[
+                "core_profiles.profiles_1d._ion_temperature_data",
+                "core_profiles.profiles_1d._omfit_rho"
+            ],
+            compose=self._compose_all_ion_temperature,
+            ids_path="core_profiles.profiles_1d.ion.temperature",
             docs_file=self.DOCS_PATH
         )
 
-        # Ion[0]: temperature_error_upper
-        self.specs["core_profiles.profiles_1d.ion.0.temperature_error_upper"] = IDSEntrySpec(
+        # ion.temperature_error_upper: D from error_of(T_D), C from error_of(T_C)
+        self.specs["core_profiles.profiles_1d.ion.temperature_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["core_profiles.profiles_1d._ion_temperature_error", "core_profiles.profiles_1d._omfit_rho"],
-            compose=self._compose_ion_temperature_error,
-            ids_path="core_profiles.profiles_1d.ion.0.temperature_error_upper",
+            depends_on=[
+                "core_profiles.profiles_1d._ion_temperature_error",
+                "core_profiles.profiles_1d._carbon_temperature_error",
+                "core_profiles.profiles_1d._omfit_rho"
+            ],
+            compose=self._compose_all_ion_temperature_error,
+            ids_path="core_profiles.profiles_1d.ion.temperature_error_upper",
             docs_file=self.DOCS_PATH
         )
 
-        # Ion[0]: density_thermal (from N_D)
-        self.specs["core_profiles.profiles_1d.ion.0.density_thermal"] = IDSEntrySpec(
+        # ion.density_thermal: D from N_D, C from N_C
+        self.specs["core_profiles.profiles_1d.ion.density_thermal"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
                 "core_profiles.profiles_1d._deuterium_density_data",
+                "core_profiles.profiles_1d._carbon_density_data",
                 "core_profiles.profiles_1d._omfit_rho"
             ],
-            compose=self._compose_deuterium_density,
-            ids_path="core_profiles.profiles_1d.ion.0.density_thermal",
+            compose=self._compose_all_ion_density_thermal,
+            ids_path="core_profiles.profiles_1d.ion.density_thermal",
             docs_file=self.DOCS_PATH
         )
 
-        # Ion[0]: density_thermal_error_upper
-        self.specs["core_profiles.profiles_1d.ion.0.density_thermal_error_upper"] = IDSEntrySpec(
+        # ion.density_thermal_error_upper: D from error_of(N_D), C from error_of(N_C)
+        self.specs["core_profiles.profiles_1d.ion.density_thermal_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["core_profiles.profiles_1d._deuterium_density_error", "core_profiles.profiles_1d._omfit_rho"],
-            compose=self._compose_deuterium_density_error,
-            ids_path="core_profiles.profiles_1d.ion.0.density_thermal_error_upper",
+            depends_on=[
+                "core_profiles.profiles_1d._deuterium_density_error",
+                "core_profiles.profiles_1d._carbon_density_error",
+                "core_profiles.profiles_1d._omfit_rho"
+            ],
+            compose=self._compose_all_ion_density_error,
+            ids_path="core_profiles.profiles_1d.ion.density_thermal_error_upper",
             docs_file=self.DOCS_PATH
         )
 
-        # Ion[0]: label
-        self.specs["core_profiles.profiles_1d.ion.0.label"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=[],
-            compose=lambda shot, raw: "D",
-            ids_path="core_profiles.profiles_1d.ion.0.label",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[0]: element[0].z_n (atomic number)
-        self.specs["core_profiles.profiles_1d.ion.0.element.0.z_n"] = IDSEntrySpec(
+        # Static metadata: label, z_n, a — 1D arrays indexed by ion (from YAML ions: list)
+        self.specs["core_profiles.profiles_1d.ion.label"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            compose=lambda shot, raw: 1.0,
-            ids_path="core_profiles.profiles_1d.ion.0.element.0.z_n",
+            compose=self._compose_all_ion_label,
+            ids_path="core_profiles.profiles_1d.ion.label",
             docs_file=self.DOCS_PATH
         )
 
-        # Ion[0]: element[0].a (atomic mass)
-        self.specs["core_profiles.profiles_1d.ion.0.element.0.a"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.ion.element.z_n"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            compose=lambda shot, raw: 2.0141,
-            ids_path="core_profiles.profiles_1d.ion.0.element.0.a",
+            compose=self._compose_all_ion_element_z_n,
+            ids_path="core_profiles.profiles_1d.ion.element.z_n",
             docs_file=self.DOCS_PATH
         )
 
-        # ============================================================
-        # Ion[1] (Carbon) fields
-        # ============================================================
-
-        # Ion[1]: density_thermal (from N_C)
-        self.specs["core_profiles.profiles_1d.ion.1.density_thermal"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=["core_profiles.profiles_1d._carbon_density_data", "core_profiles.profiles_1d._omfit_rho"],
-            compose=self._compose_carbon_density,
-            ids_path="core_profiles.profiles_1d.ion.1.density_thermal",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[1]: density_thermal_error_upper
-        self.specs["core_profiles.profiles_1d.ion.1.density_thermal_error_upper"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=["core_profiles.profiles_1d._carbon_density_error", "core_profiles.profiles_1d._omfit_rho"],
-            compose=self._compose_carbon_density_error,
-            ids_path="core_profiles.profiles_1d.ion.1.density_thermal_error_upper",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[1]: temperature (from T_D, same as ion[0])
-        self.specs["core_profiles.profiles_1d.ion.1.temperature"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=["core_profiles.profiles_1d._ion_temperature_data", "core_profiles.profiles_1d._omfit_rho"],
-            compose=self._compose_ion_temperature,
-            ids_path="core_profiles.profiles_1d.ion.1.temperature",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[1]: temperature_error_upper
-        self.specs["core_profiles.profiles_1d.ion.1.temperature_error_upper"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=["core_profiles.profiles_1d._carbon_temperature_error", "core_profiles.profiles_1d._omfit_rho"],
-            compose=self._compose_carbon_temperature_error,
-            ids_path="core_profiles.profiles_1d.ion.1.temperature_error_upper",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[1]: label
-        self.specs["core_profiles.profiles_1d.ion.1.label"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.ion.element.a"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            compose=lambda shot, raw: "C",
-            ids_path="core_profiles.profiles_1d.ion.1.label",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[1]: element[0].z_n (atomic number)
-        self.specs["core_profiles.profiles_1d.ion.1.element.0.z_n"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=[],
-            compose=lambda shot, raw: 6.0,
-            ids_path="core_profiles.profiles_1d.ion.1.element.0.z_n",
-            docs_file=self.DOCS_PATH
-        )
-
-        # Ion[1]: element[0].a (atomic mass)
-        self.specs["core_profiles.profiles_1d.ion.1.element.0.a"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=[],
-            compose=lambda shot, raw: 12.011,
-            ids_path="core_profiles.profiles_1d.ion.1.element.0.a",
+            compose=self._compose_all_ion_element_a,
+            ids_path="core_profiles.profiles_1d.ion.element.a",
             docs_file=self.DOCS_PATH
         )
 
@@ -657,28 +604,32 @@ class CoreProfilesOmfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # Ion[1] (Carbon) density_fit.* fields
-        self.specs["core_profiles.profiles_1d.ion.1.density_fit.measured"] = IDSEntrySpec(
+        # Ion fit fields (unified ion dimension)
+        # D has no fit measurements → empty arrays per time slice
+        # C has measured data from MDSplus
+        self.specs["core_profiles.profiles_1d.ion.density_fit.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
                 "core_profiles.profiles_1d._carbon_density_fit_measured",
                 "core_profiles.profiles_1d._omfit_rho"
             ],
-            compose=self._compose_carbon_density_fit_measured,
-            ids_path="core_profiles.profiles_1d.ion.1.density_fit.measured",
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_density_fit_measured),
+            ids_path="core_profiles.profiles_1d.ion.density_fit.measured",
             docs_file=self.DOCS_PATH
         )
-        self.specs["core_profiles.profiles_1d.ion.1.density_fit.psi_norm"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.ion.density_fit.psi_norm"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
                 "core_profiles.profiles_1d._carbon_density_fit_psi_norm",
                 "core_profiles.profiles_1d._carbon_density_fit_measured"
             ],
-            compose=self._compose_carbon_density_fit_psi_norm,
-            ids_path="core_profiles.profiles_1d.ion.1.density_fit.psi_norm",
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_density_fit_psi_norm),
+            ids_path="core_profiles.profiles_1d.ion.density_fit.psi_norm",
             docs_file=self.DOCS_PATH
         )
-        self.specs["core_profiles.profiles_1d.ion.1.density_fit.rho_tor_norm"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.ion.density_fit.rho_tor_norm"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
                 "core_profiles.profiles_1d._carbon_density_fit_psi_norm",
@@ -686,43 +637,45 @@ class CoreProfilesOmfitMapper(IDSMapper):
                 "core_profiles.profiles_1d._omfit_psi_norm",
                 "core_profiles.profiles_1d._omfit_rho"
             ],
-            compose=self._compose_carbon_density_fit_rho_tor_norm,
-            ids_path="core_profiles.profiles_1d.ion.1.density_fit.rho_tor_norm",
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_density_fit_rho_tor_norm),
+            ids_path="core_profiles.profiles_1d.ion.density_fit.rho_tor_norm",
             docs_file=self.DOCS_PATH
         )
-        self.specs["core_profiles.profiles_1d.ion.1.density_fit.measured_error_upper"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.ion.density_fit.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
                 "core_profiles.profiles_1d._carbon_density_fit_error",
                 "core_profiles.profiles_1d._carbon_density_fit_measured"
             ],
-            compose=self._compose_carbon_density_fit_error,
-            ids_path="core_profiles.profiles_1d.ion.1.density_fit.measured_error_upper",
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_density_fit_error),
+            ids_path="core_profiles.profiles_1d.ion.density_fit.measured_error_upper",
             docs_file=self.DOCS_PATH
         )
-
-        # Ion[1] (Carbon) temperature_fit.* fields
-        self.specs["core_profiles.profiles_1d.ion.1.temperature_fit.measured"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.ion.temperature_fit.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
                 "core_profiles.profiles_1d._carbon_temperature_fit_measured",
                 "core_profiles.profiles_1d._omfit_rho"
             ],
-            compose=self._compose_carbon_temperature_fit_measured,
-            ids_path="core_profiles.profiles_1d.ion.1.temperature_fit.measured",
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_temperature_fit_measured),
+            ids_path="core_profiles.profiles_1d.ion.temperature_fit.measured",
             docs_file=self.DOCS_PATH
         )
-        self.specs["core_profiles.profiles_1d.ion.1.temperature_fit.psi_norm"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.ion.temperature_fit.psi_norm"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
                 "core_profiles.profiles_1d._carbon_temperature_fit_psi_norm",
                 "core_profiles.profiles_1d._carbon_temperature_fit_measured"
             ],
-            compose=self._compose_carbon_temperature_fit_psi_norm,
-            ids_path="core_profiles.profiles_1d.ion.1.temperature_fit.psi_norm",
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_temperature_fit_psi_norm),
+            ids_path="core_profiles.profiles_1d.ion.temperature_fit.psi_norm",
             docs_file=self.DOCS_PATH
         )
-        self.specs["core_profiles.profiles_1d.ion.1.temperature_fit.rho_tor_norm"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.ion.temperature_fit.rho_tor_norm"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
                 "core_profiles.profiles_1d._carbon_temperature_fit_psi_norm",
@@ -730,18 +683,20 @@ class CoreProfilesOmfitMapper(IDSMapper):
                 "core_profiles.profiles_1d._omfit_psi_norm",
                 "core_profiles.profiles_1d._omfit_rho"
             ],
-            compose=self._compose_carbon_temperature_fit_rho_tor_norm,
-            ids_path="core_profiles.profiles_1d.ion.1.temperature_fit.rho_tor_norm",
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_temperature_fit_rho_tor_norm),
+            ids_path="core_profiles.profiles_1d.ion.temperature_fit.rho_tor_norm",
             docs_file=self.DOCS_PATH
         )
-        self.specs["core_profiles.profiles_1d.ion.1.temperature_fit.measured_error_upper"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.ion.temperature_fit.measured_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
                 "core_profiles.profiles_1d._carbon_temperature_fit_error",
                 "core_profiles.profiles_1d._carbon_temperature_fit_measured"
             ],
-            compose=self._compose_carbon_temperature_fit_error,
-            ids_path="core_profiles.profiles_1d.ion.1.temperature_fit.measured_error_upper",
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_temperature_fit_error),
+            ids_path="core_profiles.profiles_1d.ion.temperature_fit.measured_error_upper",
             docs_file=self.DOCS_PATH
         )
 
@@ -792,6 +747,135 @@ class CoreProfilesOmfitMapper(IDSMapper):
             ids_path="core_profiles.global_quantities.v_loop",
             docs_file=self.DOCS_PATH
         )
+
+    def _apply_rho_mask(self, shot: int, raw_data: Dict[str, Any],
+                        data_2d: np.ndarray) -> list:
+        """
+        Apply rho <= 1.0 mask per time slice.
+
+        Args:
+            shot: Shot number
+            raw_data: Raw data dict
+            data_2d: (n_time, n_rho) array to mask
+
+        Returns:
+            List of 1D arrays (one per time slice) after masking
+        """
+        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        rho_2d = raw_data[rho_key]
+        result = []
+        for i_time in range(data_2d.shape[0]):
+            mask = rho_2d[i_time, :] <= 1.0
+            result.append(data_2d[i_time, mask])
+        return result
+
+    def _stack_ions(self, ion_slices: dict) -> ak.Array:
+        """
+        Stack per-ion time-slice lists into a (n_time, n_ion, var_rho) ak.Array.
+
+        Ion order follows the `ions:` YAML section so callers use label-keyed
+        dicts instead of numeric indices.
+
+        Args:
+            ion_slices: dict mapping ion label ->
+                        either list of 1D arrays (one per time slice)
+                        or (n_time, n_rho) numpy array
+
+        Returns:
+            ak.Array of shape (n_time, n_ion, var_rho)
+        """
+        def to_list(data):
+            if isinstance(data, np.ndarray) and data.ndim == 2:
+                return [data[i] for i in range(data.shape[0])]
+            return list(data)
+
+        ordered = [to_list(ion_slices[ion['label']]) for ion in self.ions]
+        n_time = len(ordered[0])
+        result = [
+            [ordered[i_ion][i_time] for i_ion in range(len(self.ions))]
+            for i_time in range(n_time)
+        ]
+        return ak.Array(result)
+
+    def _compose_all_ion_temperature(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose ion.temperature for all ions: (n_time, n_ion, var_rho) ak.Array.
+
+        Both D and C use T_D (same underlying data, stacked).
+        """
+        data_key = Requirement('\\TOP.T_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        t_slices = self._apply_rho_mask(shot, raw_data, raw_data[data_key])
+        return self._stack_ions({ion['label']: t_slices for ion in self.ions})
+
+    def _compose_all_ion_density_thermal(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose ion.density_thermal for all ions: (n_time, n_ion, var_rho) ak.Array.
+
+        D from N_D, C from N_C.
+        """
+        d_key = Requirement('\\TOP.N_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        c_key = Requirement('\\TOP.N_C', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        d_slices = self._apply_rho_mask(shot, raw_data, raw_data[d_key])
+        c_slices = self._apply_rho_mask(shot, raw_data, raw_data[c_key])
+        return self._stack_ions({'D': d_slices, 'C': c_slices})
+
+    def _compose_all_ion_temperature_error(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose ion.temperature_error_upper for all ions: (n_time, n_ion, var_rho) ak.Array.
+
+        D from error_of(T_D), C from error_of(T_C).
+        """
+        d_err = self._compose_omfit_error_field(
+            shot, raw_data, "core_profiles.profiles_1d._ion_temperature_error")
+        c_err = self._compose_omfit_error_field(
+            shot, raw_data, "core_profiles.profiles_1d._carbon_temperature_error")
+        return self._stack_ions({'D': d_err, 'C': c_err})
+
+    def _compose_all_ion_density_error(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose ion.density_thermal_error_upper for all ions: (n_time, n_ion, var_rho) ak.Array.
+
+        D from error_of(N_D), C from error_of(N_C).
+        """
+        d_err = self._compose_omfit_error_field(
+            shot, raw_data, "core_profiles.profiles_1d._deuterium_density_error")
+        c_err = self._compose_omfit_error_field(
+            shot, raw_data, "core_profiles.profiles_1d._carbon_density_error")
+        return self._stack_ions({'D': d_err, 'C': c_err})
+
+    def _compose_all_fit_field(self, shot: int, raw_data: Dict[str, Any],
+                               carbon_compose_fn) -> ak.Array:
+        """
+        Build a unified (n_time, n_ion, var_measurements) fit-field ak.Array.
+
+        D has no fit measurements → empty arrays per time slice.
+        C gets data from carbon_compose_fn(shot, raw_data).
+
+        Args:
+            shot: Shot number
+            raw_data: Raw data dict
+            carbon_compose_fn: Callable returning ak.Array (n_time, var) for carbon
+
+        Returns:
+            ak.Array of shape (n_time, n_ion, var_measurements)
+        """
+        c_data = carbon_compose_fn(shot, raw_data)  # ak.Array (n_time, var)
+        n_time = len(c_data)
+        d_slices = [np.array([], dtype=np.float64) for _ in range(n_time)]
+        c_slices = [np.asarray(c_data[i]) for i in range(n_time)]
+        return self._stack_ions({'D': d_slices, 'C': c_slices})
+
+    def _compose_all_ion_label(self, shot: int, raw_data: Dict[str, Any]) -> list:
+        """Return list of ion labels in YAML order, e.g. ['D', 'C']."""
+        return [ion['label'] for ion in self.ions]
+
+    def _compose_all_ion_element_z_n(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Return 1-D array of atomic numbers in YAML ion order."""
+        return np.array([ion['z_n'] for ion in self.ions])
+
+    def _compose_all_ion_element_a(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Return 1-D array of atomic masses in YAML ion order."""
+        return np.array([ion['a'] for ion in self.ions])
 
     def _compose_rho_tor_norm(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
