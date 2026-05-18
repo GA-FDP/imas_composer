@@ -1661,6 +1661,14 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        self.specs["equilibrium.time_slice.profiles_2d.type.index"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._bcentr"],
+            compose=self._compose_profiles_2d_type_index,
+            ids_path="equilibrium.time_slice.profiles_2d.type.index",
+            docs_file=self.DOCS_PATH
+        )
+
         self.specs["equilibrium.time_slice.profiles_2d.psi"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["equilibrium._psirz", "equilibrium._bcentr", "equilibrium._cpasma_cocos"],
@@ -2863,8 +2871,23 @@ class EquilibriumMapper(IDSMapper):
         bcentr = raw_data[bcentr_key]
         n_time = len(bcentr)
 
-        # Return array of [1]s for each time slice and grid type 1 = rectangular R-Z grid 
+        # Return array of [1]s for each time slice and grid type 1 = rectangular R-Z grid
         return np.ones(n_time, dtype=int)[:,None]
+
+    def _compose_profiles_2d_type_index(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose type.index - constant value of 0 for data type.
+
+        Transform: Create array of 0s matching time dimension with extra grid-axes dimension
+        Shape: (n_time, 1) where 1 is the grid-axes dimension for profiles_2d
+        """
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self.resolve_shot(shot), self.efit_tree).as_key()
+        bcentr = raw_data[bcentr_key]
+        n_time = len(bcentr)
+
+        # Return array of [0]s for each time slice with extra dimension for grid-axes
+        # Shape: (n_time, 1) - always 0 indicating the data type
+        return np.zeros(n_time, dtype=int)[:,None]
 
     def _compose_profiles_2d_psi(self, shot: int, raw_data: dict) -> np.ndarray:
         """

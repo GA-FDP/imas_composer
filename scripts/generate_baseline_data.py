@@ -34,6 +34,12 @@ def get_all_test_fields():
     # List of all IDS configurations (based on existing test files)
     ids_list = [
         'charge_exchange',
+        'equilibrium',
+        'ece',
+        'thomson_scattering',
+        'interferometer',
+        'ec_launchers',
+        'reflectometer_profile',
         'core_profiles',
         'ec_launchers',
         'ece',
