@@ -1,34 +1,24 @@
 name: imas_composer
 
-
 channels:
   - conda-forge
-  - ga-fdp
 
 dependencies:
-  - python==3.12
-  - awkward
-  - pyyaml
-  - pytest
-  - numpy 1.*
-  - mdsplus
-  - matplotlib
-  - cython
-  - uncertainties
-  - pint
-  - netcdf4
-  - boto3
-  - botocore
-  - pymongo
-  - dnspython
-  - xmltodict
-  - xarray
-  - pyro5
-  - scipy
-  - h5py
-  - conda-build
-  - pytest-benchmark
-  - pip
-  - pip:
-    # Install imas_composer in editable mode from current directory
-    - -e .
+  # Core runtime deps
+  - python >=3.11
+  - numpy >=1.24
+  - pyyaml *
+  - awkward *
+  - scipy *
+
+  # Test tools
+  - pip *
+  - pytest *
+  - pytest-benchmark *
+  - pytest-xdist *
+  - pexpect *
+  - tqdm *
+  - mdsplus =7.157.0
+
+  # OMAS - available on conda-forge since 0.95.2
+  - omas >=0.95.2

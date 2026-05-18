@@ -7,7 +7,8 @@ Public API:
     simple_load: Simple utility for loading IDS data in one call (requires OMAS)
 """
 
-from .composer import ImasComposer, simple_load
+from .composer import ImasComposer
+from .fetchers import simple_load, fetch_requirements
 from .core import Requirement
 
-__all__ = ['ImasComposer', 'Requirement', 'simple_load']
+__all__ = ['ImasComposer', 'Requirement', 'simple_load', 'fetch_requirements']

@@ -31,7 +31,7 @@ class EceMapper(IDSMapper):
         # MDSplus path prefixes
         self.setup_node = '\\ECE::TOP.SETUP.'
         self.cal_node = f'\\ECE::TOP.CAL{self.fast_suffix}.'
-        self.tece_node = f'\\ECE::TOP.TECE.TECE{self.fast_suffix}'
+        self.tece_node = f'\\ECE::TOP.TECE{self.fast_suffix}.TECE{self.fast_suffix}'
 
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
@@ -232,6 +232,14 @@ class EceMapper(IDSMapper):
             ids_path="ece.channel.t_e.data_error_upper",
             docs_file=self.DOCS_PATH
         )
+
+        self.specs["ece.channel.t_e.time"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["ece._time_base", "ece._numch"],
+            compose=self._compose_channel_time,
+            ids_path="ece.channel.t_e.time",
+            docs_file=self.DOCS_PATH
+        )
     
     # Requirement derivation functions
     def _derive_temperature_requirements(self, shot: int, raw_data: dict) -> List[Requirement]:
@@ -331,5 +339,6 @@ class EceMapper(IDSMapper):
 
         return np.array(uncertainties)
     
+
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         return self.specs
