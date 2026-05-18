@@ -16,6 +16,7 @@ omas_path_map:
   magnetics.ip.data: magnetics.ip.:.data
   magnetics.ip.time: magnetics.ip.:.time
   magnetics.ip.data_error_upper: magnetics.ip.:.data_error_upper
+  magnetics.ip.method_name: magnetics.ip.:.method_name
 
   # Diamagnetic flux (index 0)
   magnetics.diamagnetic_flux.data: magnetics.diamagnetic_flux.:.data
