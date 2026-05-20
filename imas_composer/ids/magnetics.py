@@ -892,7 +892,7 @@ class MagneticsMapper(IDSMapper):
             data_missing = nt <= 1
             weight_invalid = k < len(weights) and weights[k] < 0.5
             if data_missing or weight_invalid:
-                result.append(1.e30 * np.ones(nt))
+                result.append(np.inf * np.ones(nt))
             else:
                 time_s = raw_data[time_key] / 1000.0
                 compensated = self._apply_compensation(corrections, shot, raw_data, p['identifier'], data, time_s)
@@ -1000,7 +1000,7 @@ class MagneticsMapper(IDSMapper):
             data_missing = nt <= 1
             weight_invalid = k < len(weights) and weights[k] < 0.5
             if data_missing or weight_invalid:
-                result.append(1.e30 * np.ones(nt))
+                result.append(np.inf * np.ones(nt))
             else:
                 compensated = self._apply_compensation(corrections, shot, raw_data, f['identifier'], data, time_s)
                 header = raw_data[header_key]
