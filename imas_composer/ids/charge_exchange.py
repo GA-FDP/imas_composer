@@ -53,8 +53,16 @@ class ChargeExchangeMapper(IDSMapper):
         """MDSplus dim_of expression for CER channel node time (returns seconds)."""
         return f'dim_of({self._cer_path(sub, ch, node)}, 0)/1000'
 
+    def _zeff_path(self) -> str:
+        """MDSplus path for bulk ZEFF data — flattened array covering all channels."""
+        return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.ZEFF'
+    
+    def _zeff_time_path(self) -> str:
+        """MDSplus dim_of for ZEFF time axis (seconds)."""
+        return f'dim_of({self._zeff_path()}, 0)/1000'
+
     def _zimp_path(self) -> str:
-        """MDSplus path for bulk ZIMP (Zeff) data — flattened array covering all channels."""
+        """MDSplus path for charge of the impurity measured — flattened array covering all channels."""
         return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.ZIMP'
 
     def _zimp_time_path(self) -> str:
@@ -233,10 +241,24 @@ class ChargeExchangeMapper(IDSMapper):
             ids_path="charge_exchange._velocity_time",
             docs_file=self.DOCS_PATH
         )
-
-        # Bulk IMPDENS data: ZIMP (Zeff) and CONCEN (ion fraction) are flattened arrays
+        # Bulk IMPDENS data: ZEFF, ZIMP (charge of measured impurity) and CONCEN (ion fraction) are flattened arrays
         # covering all channels. INDECIES maps array columns to CER channel numbers.
         # ARRAY_ORDER from CALIBRATION describes the subsystem/channel ordering.
+
+        self.specs["charge_exchange._zeff"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(self._zeff_path(), 0, 'IONS')],
+            ids_path="charge_exchange._zeff",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange._zeff_time"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(self._zeff_time_path(), 0, 'IONS')],
+            ids_path="charge_exchange._zeff_time",
+            docs_file=self.DOCS_PATH
+        )
+
         self.specs["charge_exchange._zimp"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[Requirement(self._zimp_path(), 0, 'IONS')],
@@ -406,7 +428,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.zeff.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._zimp"] + _impdens_deps,
+            depends_on=_active_deps + ["charge_exchange._zeff"] + _impdens_deps,
             compose=self._compose_zeff_data,
             ids_path="charge_exchange.channel.zeff.data",
             docs_file=self.DOCS_PATH
@@ -414,7 +436,7 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.zeff.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._zimp_time"] + _impdens_deps,
+            depends_on=_active_deps + ["charge_exchange._zeff_time"] + _impdens_deps,
             compose=self._compose_zeff_time,
             ids_path="charge_exchange.channel.zeff.time",
             docs_file=self.DOCS_PATH
@@ -644,8 +666,8 @@ class ChargeExchangeMapper(IDSMapper):
         result = []
         for sub, ch in active:
             val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'R'))
-            result.append(np.nan if val is None else float(np.atleast_1d(val)[0]))
-        return np.array(result)
+            result.append([] if val is None else np.atleast_1d(val))
+        return ak.Array(result)
 
     def _compose_position_z_data(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose position Z values (scalar per channel, in meters).
@@ -656,8 +678,8 @@ class ChargeExchangeMapper(IDSMapper):
         result = []
         for sub, ch in active:
             val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'Z'))
-            result.append(np.nan if val is None else float(np.atleast_1d(val)[0]))
-        return np.array(result)
+            result.append([] if val is None else np.atleast_1d(val))
+        return ak.Array(result)
 
     def _compose_position_phi_data(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose position phi values (scalar per channel, in radians, COCOS 11).
@@ -669,11 +691,8 @@ class ChargeExchangeMapper(IDSMapper):
         result = []
         for sub, ch in active:
             val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'VIEW_PHI'))
-            if val is None:
-                result.append(np.nan)
-            else:
-                result.append(float(np.atleast_1d(val)[0]) * -np.pi / 180.0)
-        return np.array(result)
+            result.append(np.atleast_1d(val) * -np.pi / 180.0)
+        return ak.Array(result)
 
     def _compose_t_i_data(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose ion temperature time series per channel (in eV).
@@ -684,7 +703,7 @@ class ChargeExchangeMapper(IDSMapper):
         result = []
         for sub, ch in active:
             val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP'))
-            result.append(np.atleast_1d(val) if val is not None else np.array([np.nan]))
+            result.append(np.atleast_1d(val) if val is not None else np.array([]))
         return ak.Array(result)
 
     def _compose_t_i_error(self, shot: int, raw_data: dict) -> ak.Array:
@@ -698,8 +717,8 @@ class ChargeExchangeMapper(IDSMapper):
         for sub, ch in active:
             stat = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP_ERR_PS'))
             sys = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP_ERR'))
-            stat_arr = np.atleast_1d(stat) if stat is not None else np.array([np.nan])
-            sys_arr = np.atleast_1d(sys) if sys is not None else np.array([np.nan])
+            stat_arr = np.atleast_1d(stat) if stat is not None else np.array([])
+            sys_arr = np.atleast_1d(sys) if sys is not None else np.array([])
             result.append(np.stack([stat_arr, sys_arr]))
         return ak.Array(result)
 
@@ -716,7 +735,7 @@ class ChargeExchangeMapper(IDSMapper):
         result = []
         for sub, ch in active:
             val = self._lookup(raw_data, shot, self._cer_time_path(sub, ch, 'TEMP'))
-            result.append(np.atleast_1d(val) if val is not None else np.array([np.nan]))
+            result.append(np.atleast_1d(val) if val is not None else np.array([]))
         return ak.Array(result)
 
     def _compose_velocity_data(self, shot: int, raw_data: dict) -> ak.Array:
@@ -738,7 +757,7 @@ class ChargeExchangeMapper(IDSMapper):
             if val is not None:
                 result.append(np.atleast_1d(val) * 1000.0)  # km/s → m/s
             else:
-                result.append(np.array([np.nan]))
+                result.append(np.array([]))
         return ak.Array(result)
 
     def _compose_velocity_data_raw(self, shot: int, raw_data: dict) -> ak.Array:
@@ -761,7 +780,7 @@ class ChargeExchangeMapper(IDSMapper):
             if val is not None:
                 result.append(np.atleast_1d(val) * 1000.0)  # km/s → m/s
             else:
-                result.append(np.array([np.nan]))
+                result.append(np.array([]))
         return ak.Array(result)
 
     def _compose_velocity_error(self, shot: int, raw_data: dict) -> ak.Array:
@@ -782,8 +801,8 @@ class ChargeExchangeMapper(IDSMapper):
                 sys = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROT_ERR'))
             else:
                 stat, sys = None, None
-            stat_arr = np.atleast_1d(stat) * 1000.0 if stat is not None else np.array([np.nan])
-            sys_arr = np.atleast_1d(sys) * 1000.0 if sys is not None else np.array([np.nan])
+            stat_arr = np.atleast_1d(stat) * 1000.0 if stat is not None else np.array([])
+            sys_arr = np.atleast_1d(sys) * 1000.0 if sys is not None else np.array([])
             result.append(np.stack([stat_arr, sys_arr]))
         return ak.Array(result)
 
@@ -805,7 +824,7 @@ class ChargeExchangeMapper(IDSMapper):
                 val = self._lookup(raw_data, shot, self._cer_time_path(sub, ch, 'ROT'))
             else:
                 val = None
-            result.append(np.atleast_1d(val) if val is not None else np.array([np.nan]))
+            result.append(np.atleast_1d(val) if val is not None else np.array([]))
         return ak.Array(result)
 
     def _compose_n_i_over_n_e_data(self, shot: int, raw_data: dict) -> ak.Array:
@@ -823,7 +842,7 @@ class ChargeExchangeMapper(IDSMapper):
             ich = array_order.index(f'{sub[0:4]}{ch}')
             ind = slice(indices[ich],indices[ich+1])
             val = np.atleast_1d(concen[ind])
-            result.append(val if len(val) > 0 else np.array([np.nan]))
+            result.append(val if len(val) > 0 else np.array([]))
         return ak.Array(result)
 
     def _compose_n_i_over_n_e_time(self, shot: int, raw_data: dict) -> ak.Array:
@@ -841,7 +860,7 @@ class ChargeExchangeMapper(IDSMapper):
             ich = array_order.index(f'{sub[0:4]}{ch}')
             ind = slice(indices[ich],indices[ich+1])
             val = np.atleast_1d(concen_time[ind])
-            result.append(val if len(val) > 0 else np.array([np.nan]))
+            result.append(val if len(val) > 0 else np.array([]))
         return ak.Array(result)
 
     def _compose_n_i_over_n_e_error(self, shot: int, raw_data: dict) -> ak.Array:
@@ -858,25 +877,25 @@ class ChargeExchangeMapper(IDSMapper):
             ich = array_order.index(f'{sub[0:4]}{ch}')
             ind = slice(indices[ich],indices[ich+1])
             val = np.atleast_1d(concen_err[ind])
-            result.append(val if len(val) > 0 else np.array([np.nan]))
+            result.append(val if len(val) > 0 else np.array([]))
         return ak.Array(result)
 
     def _compose_zeff_data(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose effective charge time series per channel (dimensionless).
 
-        Data source: ZIMP bulk flattened array (all channels), indexed via INDECIES and ARRAY_ORDER.
-        Matches OMAS: ch['zeff.data'] = ZIMP
+        Data source: ZEFF bulk flattened array (all channels), indexed via INDECIES and ARRAY_ORDER.
+        Matches OMAS: ch['zeff.data'] = ZEFF
         """
         active = self._get_active_channels(shot, raw_data)
-        zimp = self._lookup(raw_data, shot, self._zimp_path())
+        zeff = self._lookup(raw_data, shot, self._zeff_path())
         indices = self._lookup(raw_data, shot, self._impdens_indices_path())
         array_order = self._get_array_order(shot, raw_data)
         result = []
         for sub, ch in active:
             ich = array_order.index(f'{sub[0:4]}{ch}')
-            ind = slice(indices[ich],indices[ich+1])
-            val = np.atleast_1d(zimp[ind])
-            result.append(val if len(val) > 0 else np.array([np.nan]))
+            ind = slice(indices[ich], indices[ich+1])
+            val = np.atleast_1d(zeff[ind])
+            result.append(val if len(val) > 0 else np.array([]))
         return ak.Array(result)
 
     def _compose_zeff_time(self, shot: int, raw_data: dict) -> ak.Array:
@@ -894,7 +913,7 @@ class ChargeExchangeMapper(IDSMapper):
             ich = array_order.index(f'{sub[0:4]}{ch}')
             ind = slice(indices[ich],indices[ich+1])
             val = np.atleast_1d(zimp_time[ind])
-            result.append(val if len(val) > 0 else np.array([np.nan]))
+            result.append(val if len(val) > 0 else np.array([]))
         return ak.Array(result)
 
     def _compose_total_installed_channels(self, shot: int, raw_data: dict) -> int:

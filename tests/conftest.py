@@ -833,7 +833,8 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
     # Base case: 0D (scalar) or 1D array - do comparison
     if ":" not in omas_path:
         # Compare
-        compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
+        compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol, 
+                       atol_float=atol_float, atol_array=atol_array)
 
     else:
         # Recursive case: ndim > 1, iterate over outer dimension
