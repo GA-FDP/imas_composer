@@ -1,7 +1,8 @@
 # Test configuration for Magnetics IDS
 
-# Field-level exceptions for validation
-field_exceptions: {}
+# Fields to skip OMAS comparison for (composer still tested)
+# Format: field_path: "reason for skipping"
+skip_fields: {}
 
 # Requirement validation settings
 requirement_validation:
@@ -15,6 +16,7 @@ omas_path_map:
   magnetics.ip.data: magnetics.ip.:.data
   magnetics.ip.time: magnetics.ip.:.time
   magnetics.ip.data_error_upper: magnetics.ip.:.data_error_upper
+  magnetics.ip.method_name: magnetics.ip.:.method_name
 
   # Diamagnetic flux (index 0)
   magnetics.diamagnetic_flux.data: magnetics.diamagnetic_flux.:.data
