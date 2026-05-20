@@ -28,12 +28,12 @@ class ChargeExchangeMapper(IDSMapper):
     DOCS_PATH = "charge_exchange.yaml"
     CONFIG_PATH = "charge_exchange.yaml"
 
-    def __init__(self, analysis_type: str = 'CERQUICK', **kwargs):
+    def __init__(self, analysis_type: str = 'CERAUTO', **kwargs):
         """
         Initialize charge exchange mapper.
 
         Args:
-            analysis_type: CER analysis quality level ('CERQUICK', 'CERAUTO', 'CERFIT')
+            analysis_type: CER analysis quality level ('CERAUTO', 'CERQUICK', 'CERFIT')
         """
         self.analysis_type = analysis_type
         super().__init__()
