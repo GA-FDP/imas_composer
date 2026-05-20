@@ -44,13 +44,14 @@ class IDSMapper:
     # Subclasses should override these
     CONFIG_PATH: str = None  # e.g., "ece.yaml"
     DOCS_PATH: str = None    # e.g., "electron_cyclotron_emission.yaml"
+    config: dict
 
     def __init__(self, **kwargs):
         """Initialize the IDS mapper."""
         # Load configuration (static values and field list)
-        config = self._load_config()
-        self.static_values = config.get('static_values', {})
-        self.supported_fields = config.get('fields', [])
+        self.config = self._load_config()
+        self.static_values = self.config.get('static_values', {})
+        self.supported_fields = self.config.get('fields', [])
 
         # Subclasses should initialize self.specs
         self.specs: Dict = {}

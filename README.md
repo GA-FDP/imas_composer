@@ -66,6 +66,14 @@ When contributing new fields or IDS mappers:
 4. Include both requirement and composition tests
 5. Consider using Claude Code with [.claude/](.claude/) documentation for guidance
 
+### Code Style Guidelines
+
+**CRITICAL: Module-level imports only**
+- **NEVER** import modules at the function level (e.g., `import awkward as ak` inside a function)
+- All imports must be at the module/file level at the top of the file
+- This ensures consistent performance and avoids import overhead in tight loops
+- Violation of this rule can cause significant performance degradation in tests and production code
+
 ## References
 
 - **IMAS Documentation**: https://www.iter.org/

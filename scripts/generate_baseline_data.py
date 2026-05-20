@@ -51,6 +51,7 @@ def get_all_test_fields():
         'tf',
         'thomson_scattering',
         'wall'
+        'pf_active'
     ]
 
     all_fields = {}

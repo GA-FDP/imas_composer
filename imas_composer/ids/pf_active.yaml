@@ -1,0 +1,26 @@
+# PF Active (Poloidal Field) IDS Configuration for DIII-D
+# Maps DIII-D PF coil hardware geometry and current measurements to IMAS
+# Hardware geometry is loaded from machine_description/D3D/{shot}/mhdin_ods.json
+
+static_values: {}
+
+fields:
+  # Coil-level fields
+  - coil.identifier
+  - coil.name
+  - coil.function.index
+
+  # Element-level fields (geometry)
+  - coil.element.identifier
+  - coil.element.name
+  - coil.element.turns_with_sign
+  - coil.element.geometry.geometry_type
+  - coil.element.geometry.rectangle.r
+  - coil.element.geometry.rectangle.z
+  - coil.element.geometry.rectangle.width
+  - coil.element.geometry.rectangle.height
+
+  # Current data
+  - coil.current.data
+  - coil.current.time
+  - coil.current.data_error_upper

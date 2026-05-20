@@ -830,6 +830,13 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
         atol_array: Absolute tolerance for float arrays
     """
 
+    # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
+    # Flatten and check length - if zero, verify OMAS is also empty
+    if not np.isscalar(composer_value) and len(ak.flatten(composer_value, axis=None)) == 0:
+        flat_omas = ak.flatten( ods[omas_path], axis=None)
+        assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
+        return
+    
     # Base case: 0D (scalar) or 1D array - do comparison
     if ":" not in omas_path:
         # Compare
@@ -959,8 +966,8 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
         ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
                        fast_ece=fast_ece_omas)
     else:
-        ods = omas_data(ids_name, shot=shot,
-                       profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
+        ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=True,
+                        profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
 
     # Recursively compare using ndim-based logic with field-specific tolerances
     _compare_recursive(composer_value, ods, omas_access_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
