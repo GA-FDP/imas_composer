@@ -832,7 +832,7 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
 
     # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
     # Flatten and check length - if zero, verify OMAS is also empty
-    if len(ak.flatten(composer_value, axis=None)) == 0:
+    if not np.isscalar(composer_value) and len(ak.flatten(composer_value, axis=None)) == 0:
         flat_omas = ak.flatten( ods[omas_path], axis=None)
         assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
         return
