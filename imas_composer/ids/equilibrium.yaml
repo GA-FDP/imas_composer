@@ -116,6 +116,7 @@ fields:
   - time_slice.profiles_2d.grid.dim1
   - time_slice.profiles_2d.grid.dim2
   - time_slice.profiles_2d.grid_type.index
+  - time_slice.profiles_2d.type.index
   - time_slice.profiles_2d.psi
   - vacuum_toroidal_field.b0
   - vacuum_toroidal_field.r0

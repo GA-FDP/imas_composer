@@ -1,7 +1,8 @@
 # Test configuration for Magnetics IDS
 
-# Field-level exceptions for validation
-field_exceptions: {}
+# Fields to skip OMAS comparison for (composer still tested)
+# Format: field_path: "reason for skipping"
+skip_fields: {}
 
 # Requirement validation settings
 requirement_validation:
@@ -15,8 +16,40 @@ omas_path_map:
   magnetics.ip.data: magnetics.ip.:.data
   magnetics.ip.time: magnetics.ip.:.time
   magnetics.ip.data_error_upper: magnetics.ip.:.data_error_upper
+  magnetics.ip.method_name: magnetics.ip.:.method_name
 
   # Diamagnetic flux (index 0)
   magnetics.diamagnetic_flux.data: magnetics.diamagnetic_flux.:.data
   magnetics.diamagnetic_flux.time: magnetics.diamagnetic_flux.:.time
   magnetics.diamagnetic_flux.data_error_upper: magnetics.diamagnetic_flux.:.data_error_upper
+
+  # b_field_pol_probe - hardware geometry (from mhdin_ods.json via magnetics_hardware)
+  magnetics.b_field_pol_probe.identifier: magnetics.b_field_pol_probe.:.identifier
+  magnetics.b_field_pol_probe.name: magnetics.b_field_pol_probe.:.name
+  magnetics.b_field_pol_probe.length: magnetics.b_field_pol_probe.:.length
+  magnetics.b_field_pol_probe.poloidal_angle: magnetics.b_field_pol_probe.:.poloidal_angle
+  magnetics.b_field_pol_probe.position.r: magnetics.b_field_pol_probe.:.position.r
+  magnetics.b_field_pol_probe.position.z: magnetics.b_field_pol_probe.:.position.z
+  magnetics.b_field_pol_probe.toroidal_angle: magnetics.b_field_pol_probe.:.toroidal_angle
+  magnetics.b_field_pol_probe.turns: magnetics.b_field_pol_probe.:.turns
+  magnetics.b_field_pol_probe.type.index: magnetics.b_field_pol_probe.:.type.index
+
+  # b_field_pol_probe - time-series data (from MDSplus via magnetics_probes_data)
+  magnetics.b_field_pol_probe.field.data: magnetics.b_field_pol_probe.:.field.data
+  magnetics.b_field_pol_probe.field.time: magnetics.b_field_pol_probe.:.field.time
+  magnetics.b_field_pol_probe.field.validity: magnetics.b_field_pol_probe.:.field.validity
+  magnetics.b_field_pol_probe.field.data_error_upper: magnetics.b_field_pol_probe.:.field.data_error_upper
+
+  # flux_loop - hardware geometry (from mhdin_ods.json via magnetics_hardware)
+  # position uses index 0 since DIII-D flux loops each have a single position point
+  magnetics.flux_loop.identifier: magnetics.flux_loop.:.identifier
+  magnetics.flux_loop.name: magnetics.flux_loop.:.name
+  magnetics.flux_loop.position.r: magnetics.flux_loop.:.position.0.r
+  magnetics.flux_loop.position.z: magnetics.flux_loop.:.position.0.z
+  magnetics.flux_loop.type.index: magnetics.flux_loop.:.type.index
+
+  # flux_loop - time-series data (from MDSplus via magnetics_floops_data)
+  magnetics.flux_loop.flux.data: magnetics.flux_loop.:.flux.data
+  magnetics.flux_loop.flux.time: magnetics.flux_loop.:.flux.time
+  magnetics.flux_loop.flux.validity: magnetics.flux_loop.:.flux.validity
+  magnetics.flux_loop.flux.data_error_upper: magnetics.flux_loop.:.flux.data_error_upper
