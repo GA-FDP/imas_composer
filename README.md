@@ -76,7 +76,6 @@ python convert_to_ids.py
 
 ## Working with Claude Code
 
-
 This project is designed to be extended with AI assistance.
 
 **At the start of each Claude Code session, tell Claude:**

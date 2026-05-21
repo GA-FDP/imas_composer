@@ -379,21 +379,21 @@ class CoreProfilesOmfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # Electrons: density_thermal
-        self.specs["core_profiles.profiles_1d.electrons.density_thermal"] = IDSEntrySpec(
+        # Electrons: density
+        self.specs["core_profiles.profiles_1d.electrons.density"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["core_profiles.profiles_1d._density_data", "core_profiles.profiles_1d._omfit_rho"],
-            compose=self._compose_density_thermal,
-            ids_path="core_profiles.profiles_1d.electrons.density_thermal",
+            compose=self._compose_density,
+            ids_path="core_profiles.profiles_1d.electrons.density",
             docs_file=self.DOCS_PATH
         )
 
-        # Electrons: density_thermal_error_upper
-        self.specs["core_profiles.profiles_1d.electrons.density_thermal_error_upper"] = IDSEntrySpec(
+        # Electrons: density_error_upper
+        self.specs["core_profiles.profiles_1d.electrons.density_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=["core_profiles.profiles_1d._density_error", "core_profiles.profiles_1d._omfit_rho"],
             compose=self._compose_density_error,
-            ids_path="core_profiles.profiles_1d.electrons.density_thermal_error_upper",
+            ids_path="core_profiles.profiles_1d.electrons.density_error_upper",
             docs_file=self.DOCS_PATH
         )
 
@@ -852,7 +852,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         return np.array(result)
 
-    def _compose_density_thermal(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+    def _compose_density(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
         Compose electrons.density_thermal.
 
