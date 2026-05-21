@@ -8,7 +8,12 @@ field_exceptions: {}
 
 # Fields to skip OMAS comparison for (composer still tested)
 # Format: field_path: "reason for skipping"
-skip_fields: {}
+skip_fields: {
+  "charge_exchange.channel.ion.n_i_over_n_e.data_error_upper": "Not mapped in OMAS due to missing FZ(system)*_ERR entries.",
+  "charge_exchange.channel.ion.t_i.error": "OMAS does not support error",
+  "charge_exchange.channel.ion.velocity.error": "OMAS does not support error",
+  "charge_exchange.code.parameters.total_installed_channels": "OMAS does not provide this"
+}
 
 # Requirement validation settings
 requirement_validation:
@@ -36,22 +41,21 @@ omas_path_map:
   charge_exchange.channel.position.phi.time: charge_exchange.channel.:.position.phi.time
 
   # Ion temperature
-  charge_exchange.channel.ion.t_i.data: charge_exchange.channel.:.ion.t_i.data
-  charge_exchange.channel.ion.t_i.error: charge_exchange.channel.:.ion.t_i.error
-  charge_exchange.channel.ion.t_i.data_error_upper: charge_exchange.channel.:.ion.t_i.data_error_upper
-  charge_exchange.channel.ion.t_i.time: charge_exchange.channel.:.ion.t_i.time
+  charge_exchange.channel.ion.t_i.data: charge_exchange.channel.:.ion.:.t_i.data
+  charge_exchange.channel.ion.t_i.error: charge_exchange.channel.:.ion.:.t_i.error
+  charge_exchange.channel.ion.t_i.data_error_upper: charge_exchange.channel.:.ion.:.t_i.data_error_upper
+  charge_exchange.channel.ion.t_i.time: charge_exchange.channel.:.ion.:.t_i.time
 
   # Velocity (may need to be skipped if not in OMAS)
-  charge_exchange.channel.ion.velocity.data: charge_exchange.channel.:.ion.velocity.data
-  charge_exchange.channel.ion.velocity.data_raw: charge_exchange.channel.:.ion.velocity.data_raw
-  charge_exchange.channel.ion.velocity.error: charge_exchange.channel.:.ion.velocity.error
-  charge_exchange.channel.ion.velocity.data_error_upper: charge_exchange.channel.:.ion.velocity.data_error_upper
-  charge_exchange.channel.ion.velocity.time: charge_exchange.channel.:.ion.velocity.time
+  charge_exchange.channel.ion.velocity.data: charge_exchange.channel.:.ion.:.velocity_tor.data
+  charge_exchange.channel.ion.velocity.error: charge_exchange.channel.:.ion.:.velocity_tor.error
+  charge_exchange.channel.ion.velocity.data_error_upper: charge_exchange.channel.:.ion.:.velocity_tor.data_error_upper
+  charge_exchange.channel.ion.velocity.time: charge_exchange.channel.:.ion.:.velocity_tor.time
 
   # Ion fraction
-  charge_exchange.channel.ion.n_i_over_n_e.data: charge_exchange.channel.:.ion.n_i_over_n_e.data
-  charge_exchange.channel.ion.n_i_over_n_e.data_error_upper: charge_exchange.channel.:.ion.n_i_over_n_e.data_error_upper
-  charge_exchange.channel.ion.n_i_over_n_e.time: charge_exchange.channel.:.ion.n_i_over_n_e.time
+  charge_exchange.channel.ion.n_i_over_n_e.data: charge_exchange.channel.:.ion.:.n_i_over_n_e.data
+  charge_exchange.channel.ion.n_i_over_n_e.data_error_upper: charge_exchange.channel.:.ion.:.n_i_over_n_e.data_error_upper
+  charge_exchange.channel.ion.n_i_over_n_e.time: charge_exchange.channel.:.ion.:.n_i_over_n_e.time
 
   # Z-effective
   charge_exchange.channel.zeff.data: charge_exchange.channel.:.zeff.data

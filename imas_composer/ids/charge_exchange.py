@@ -45,13 +45,21 @@ class ChargeExchangeMapper(IDSMapper):
     # MDSplus path helpers
     # -------------------------------------------------------------------------
 
+    def _handle_ROTC(self, sub:str, node: str):
+        new_node = node
+        if node == "ROTC" and sub == "VERTICAL":
+            new_node = "ROT"
+        return new_node
+
     def _cer_path(self, sub: str, ch: int, node: str) -> str:
         """Full MDSplus path for a CER channel node."""
-        return f'\\IONS::TOP.CER.{self.analysis_type}.{sub}.CHANNEL{ch:02d}.{node}'
+        new_node = self._handle_ROTC(sub, node)
+        return f'\\IONS::TOP.CER.{self.analysis_type}.{sub}.CHANNEL{ch:02d}.{new_node}'
 
     def _cer_time_path(self, sub: str, ch: int, node: str) -> str:
         """MDSplus dim_of expression for CER channel node time (returns seconds)."""
-        return f'dim_of({self._cer_path(sub, ch, node)}, 0)/1000'
+        new_node = self._handle_ROTC(sub, node)
+        return f'dim_of({self._cer_path(sub, ch, new_node)}, 0)/1000'
 
     def _zeff_path(self) -> str:
         """MDSplus path for bulk ZEFF data — flattened array covering all channels."""
@@ -89,14 +97,6 @@ class ChargeExchangeMapper(IDSMapper):
         """MDSplus path returning TIME node LENGTH for each channel in a subsystem."""
         return f'getnci("CER.{self.analysis_type}.{sub}.CHANNEL*:TIME","LENGTH")'
 
-    def _get_active_velocity_path(self, sub: str) -> str:
-        """MDSplus path returning ROTC node LENGTH for each channel in a subsystem."""
-        return f'getnci("CER.{self.analysis_type}.{sub}.CHANNEL*:ROTC","LENGTH")'
-
-    def _get_active_velocity_raw_path(self, sub: str) -> str:
-        """MDSplus path returning ROT node LENGTH for each channel in a subsystem."""
-        return f'getnci("CER.{self.analysis_type}.{sub}.CHANNEL*:ROT","LENGTH")'
-
     # -------------------------------------------------------------------------
     # Requirement building
     # -------------------------------------------------------------------------
@@ -127,14 +127,6 @@ class ChargeExchangeMapper(IDSMapper):
         _active_deps = [
             "charge_exchange._tangential_active",
             "charge_exchange._vertical_active",
-        ]
-        _active_velocity_deps = [
-            "charge_exchange._tangential_active_velocity",
-            "charge_exchange._vertical_active_velocity",
-        ]
-        _active_velocity_raw_deps = [
-            "charge_exchange._tangential_active_velocity_raw",
-            "charge_exchange._vertical_active_velocity_raw",
         ]
 
         # ---- Phase 2 DERIVED specs: per-channel CER data for active channels only ----
@@ -204,40 +196,33 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange._velocity_data"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
-            depends_on=_active_velocity_deps,
-            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'ROTC'), self._get_active_velocity),
+            depends_on=_active_deps,
+            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'ROTC'), self._get_active_channels),
             ids_path="charge_exchange._velocity_data",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["charge_exchange._velocity_data_raw"] = IDSEntrySpec(
-            stage=RequirementStage.DERIVED,
-            depends_on=_active_velocity_raw_deps,
-            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'ROT'), self._get_active_velocity_raw),
-            ids_path="charge_exchange._velocity_data_raw",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["charge_exchange._velocity_error"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
-            depends_on=_active_velocity_raw_deps,
-            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'ROT_ERR'), self._get_active_velocity_raw),
+            depends_on=_active_deps,
+            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'ROT_ERR'), self._get_active_channels),
             ids_path="charge_exchange._velocity_error",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["charge_exchange._velocity_error_statistical"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
-            depends_on=_active_velocity_raw_deps,
-            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'ROT_ERR_PS'), self._get_active_velocity_raw),
+            depends_on=_active_deps,
+            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_path(s, c, 'ROT_ERR_PS'), self._get_active_channels),
             ids_path="charge_exchange._velocity_error_statistical",
             docs_file=self.DOCS_PATH
         )
 
         self.specs["charge_exchange._velocity_time"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
-            depends_on=_active_velocity_raw_deps,
-            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_time_path(s, c, 'ROT'), self._get_active_velocity_raw),
+            depends_on=_active_deps,
+            derive_requirements=self._make_derive_fn(lambda s, c: self._cer_time_path(s, c, 'ROTC'), 
+                                                     self._get_active_channels),
             ids_path="charge_exchange._velocity_time",
             docs_file=self.DOCS_PATH
         )
@@ -322,37 +307,6 @@ class ChargeExchangeMapper(IDSMapper):
             stage=RequirementStage.DIRECT,
             static_requirements=[Requirement(self._get_active_path('VERTICAL'), 0, 'IONS')],
             ids_path="charge_exchange._vertical_active",
-            docs_file=self.DOCS_PATH
-        )
-
-        # get_active_velocity DIRECT specs: TIME node LENGTH array, one entry per channel node.
-        # LENGTH > 0 means the channel has data for this analysis type.
-        # These drive _get_active_velocity and must appear in depends_on of every channel spec.
-        self.specs["charge_exchange._tangential_active_velocity"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(self._get_active_velocity_path('TANGENTIAL'), 0, 'IONS')],
-            ids_path="charge_exchange._tangential_active_velocity",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["charge_exchange._vertical_active_velocity"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(self._get_active_velocity_path('VERTICAL'), 0, 'IONS')],
-            ids_path="charge_exchange._vertical_active_velocity",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["charge_exchange._tangential_active_velocity_raw"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(self._get_active_velocity_raw_path('TANGENTIAL'), 0, 'IONS')],
-            ids_path="charge_exchange._tangential_active_velocity_raw",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["charge_exchange._vertical_active_velocity_raw"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(self._get_active_velocity_raw_path('VERTICAL'), 0, 'IONS')],
-            ids_path="charge_exchange._vertical_active_velocity_raw",
             docs_file=self.DOCS_PATH
         )
 
@@ -506,17 +460,11 @@ class ChargeExchangeMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        self.specs["charge_exchange.channel.ion.velocity.data_raw"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._velocity_data_raw"],
-            compose=self._compose_velocity_data_raw,
-            ids_path="charge_exchange.channel.ion.velocity.data_raw",
-            docs_file=self.DOCS_PATH
-        )
-
         self.specs["charge_exchange.channel.ion.velocity.error"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._velocity_error", "charge_exchange._velocity_error_statistical"],
+            depends_on=_active_deps + ["charge_exchange._velocity_data", 
+                                       "charge_exchange._velocity_error", 
+                                       "charge_exchange._velocity_error_statistical"],
             compose=self._compose_velocity_error,
             ids_path="charge_exchange.channel.ion.velocity.error",
             docs_file=self.DOCS_PATH
@@ -524,7 +472,9 @@ class ChargeExchangeMapper(IDSMapper):
 
         self.specs["charge_exchange.channel.ion.velocity.data_error_upper"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=_active_deps + ["charge_exchange._velocity_error", "charge_exchange._velocity_error_statistical"],
+            depends_on=_active_deps + ["charge_exchange._velocity_data", 
+                                       "charge_exchange._velocity_error", 
+                                       "charge_exchange._velocity_error_statistical"],
             compose=self._compose_velocity_data_error_upper,
             ids_path="charge_exchange.channel.ion.velocity.data_error_upper",
             docs_file=self.DOCS_PATH
@@ -599,14 +549,6 @@ class ChargeExchangeMapper(IDSMapper):
     def _get_active_channels(self, shot: int, raw_data: dict) -> List[Tuple[str, int]]:
         """Return (sub, ch) pairs for channels that have TIME data."""
         return self._get_active_by_node(shot, raw_data, self._get_active_path)
-
-    def _get_active_velocity(self, shot: int, raw_data: dict) -> List[Tuple[str, int]]:
-        """Return (sub, ch) pairs for channels that have ROTC data."""
-        return self._get_active_by_node(shot, raw_data, self._get_active_velocity_path)
-
-    def _get_active_velocity_raw(self, shot: int, raw_data: dict) -> List[Tuple[str, int]]:
-        """Return (sub, ch) pairs for channels that have ROT data."""
-        return self._get_active_by_node(shot, raw_data, self._get_active_velocity_raw_path)
 
     def _get_array_order(self, shot: int, raw_data: dict) -> List[str]:
         """Return the names of CER systems/channels in the order stored."""
@@ -697,14 +639,14 @@ class ChargeExchangeMapper(IDSMapper):
     def _compose_t_i_data(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose ion temperature time series per channel (in eV).
 
-        Matches OMAS: ch['ion.0.t_i.data'] = unumpy.uarray(TEMP, TEMP_ERR) → .n (nominal)
+        Matches OMAS: ch['ion.:.t_i.data'] = unumpy.uarray(TEMP, TEMP_ERR) → .n (nominal)
         """
         active = self._get_active_channels(shot, raw_data)
         result = []
         for sub, ch in active:
             val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP'))
             result.append(np.atleast_1d(val) if val is not None else np.array([]))
-        return ak.Array(result)
+        return ak.Array(result)[:, None, ...]
 
     def _compose_t_i_error(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose ion temperature errors per channel (in eV), shape (2, n_time) per channel.
@@ -720,23 +662,23 @@ class ChargeExchangeMapper(IDSMapper):
             stat_arr = np.atleast_1d(stat) if stat is not None else np.array([])
             sys_arr = np.atleast_1d(sys) if sys is not None else np.array([])
             result.append(np.stack([stat_arr, sys_arr]))
-        return ak.Array(result)
+        return ak.Array(result)[:, None,...]
 
     def _compose_t_i_data_error_upper(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose total ion temperature uncertainty per channel (sum of statistical and systematic, in eV)."""
-        return ak.sum(self._compose_t_i_error(shot, raw_data), axis=1)
+        return ak.sum(self._compose_t_i_error(shot, raw_data), axis=-2)
 
     def _compose_t_i_time(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose ion temperature time arrays per channel (in seconds).
 
-        Matches OMAS: ch['ion.0.t_i.time'] = dim_of(TEMP, 0)/1000
+        Matches OMAS: ch['ion.:.t_i.time'] = dim_of(TEMP, 0)/1000
         """
         active = self._get_active_channels(shot, raw_data)
         result = []
         for sub, ch in active:
             val = self._lookup(raw_data, shot, self._cer_time_path(sub, ch, 'TEMP'))
             result.append(np.atleast_1d(val) if val is not None else np.array([]))
-        return ak.Array(result)
+        return ak.Array(result)[:, None,...]
 
     def _compose_velocity_data(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose velocity time series per channel (in m/s).
@@ -747,41 +689,15 @@ class ChargeExchangeMapper(IDSMapper):
         The direction will depend on the beam orientation and should be extracted accordingly.
         """
         active = self._get_active_channels(shot, raw_data)
-        active_velocity = self._get_active_velocity(shot, raw_data)
         result = []
         for sub, ch in active:
-            if (sub, ch) in active_velocity:
-                val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROTC'))
-            else:
-                val = None
+            val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROTC'))
             if val is not None:
                 result.append(np.atleast_1d(val) * 1000.0)  # km/s → m/s
             else:
-                result.append(np.array([]))
-        return ak.Array(result)
+                result.append([])
+        return ak.Array(result)[:, None,...]
 
-    def _compose_velocity_data_raw(self, shot: int, raw_data: dict) -> ak.Array:
-        """Compose raw velocity time series per channel (in m/s).
-
-        This is not part of the IMAS schema, which only has velocity_tor and velocity_pol.
-        The direction will depend on the beam orientation and should be extracted accordingly.
-
-        data_raw is also not part of the IMAS schema but is useful since some channels don't have
-        corrected data in MDSplus.
-        """
-        active = self._get_active_channels(shot, raw_data)
-        active_velocity = self._get_active_velocity_raw(shot, raw_data)
-        result = []
-        for sub, ch in active:
-            if (sub, ch) in active_velocity:
-                val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROT'))
-            else:
-                val = None
-            if val is not None:
-                result.append(np.atleast_1d(val) * 1000.0)  # km/s → m/s
-            else:
-                result.append(np.array([]))
-        return ak.Array(result)
 
     def _compose_velocity_error(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose velocity errors per channel (in m/s), shape (2, n_time) per channel.
@@ -793,22 +709,23 @@ class ChargeExchangeMapper(IDSMapper):
         The direction will depend on the beam orientation and should be extracted accordingly.
         """
         active = self._get_active_channels(shot, raw_data)
-        active_velocity = self._get_active_velocity_raw(shot, raw_data)
+        active_velocity = self._get_active_channels(shot, raw_data)
         result = []
         for sub, ch in active:
-            if (sub, ch) in active_velocity:
-                stat = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROT_ERR_PS'))
-                sys = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROT_ERR'))
+            val = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROTC'))
+            stat = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROT_ERR_PS'))
+            sys = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'ROT_ERR'))
+            if val is not None:
+                stat_arr = np.atleast_1d(stat) * 1000.0 if stat is not None else np.array([])
+                sys_arr = np.atleast_1d(sys) * 1000.0 if sys is not None else np.array([])
+                result.append(np.stack([stat_arr, sys_arr]))
             else:
-                stat, sys = None, None
-            stat_arr = np.atleast_1d(stat) * 1000.0 if stat is not None else np.array([])
-            sys_arr = np.atleast_1d(sys) * 1000.0 if sys is not None else np.array([])
-            result.append(np.stack([stat_arr, sys_arr]))
-        return ak.Array(result)
+                result.append(np.stack([[], []]))
+        return ak.Array(result)[:, None,...]
 
     def _compose_velocity_data_error_upper(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose total velocity uncertainty per channel (sum of statistical and systematic, in m/s)."""
-        return ak.sum(self._compose_velocity_error(shot, raw_data), axis=1)
+        return ak.sum(self._compose_velocity_error(shot, raw_data), axis=-2)
 
     def _compose_velocity_time(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose velocity time arrays per channel (in seconds).
@@ -817,21 +734,17 @@ class ChargeExchangeMapper(IDSMapper):
         The direction will depend on the beam orientation and should be extracted accordingly.
         """
         active = self._get_active_channels(shot, raw_data)
-        active_velocity = self._get_active_velocity_raw(shot, raw_data)
         result = []
         for sub, ch in active:
-            if (sub, ch) in active_velocity:
-                val = self._lookup(raw_data, shot, self._cer_time_path(sub, ch, 'ROT'))
-            else:
-                val = None
+            val = self._lookup(raw_data, shot, self._cer_time_path(sub, ch, 'ROTC'))
             result.append(np.atleast_1d(val) if val is not None else np.array([]))
-        return ak.Array(result)
+        return ak.Array(result)[:, None,...]
 
     def _compose_n_i_over_n_e_data(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose ion fraction time series per channel (dimensionless, 0-1).
 
         Data source: CONCEN bulk flattened array (all channels), indexed via INDECIES and ARRAY_ORDER.
-        Matches OMAS: ch['ion.0.n_i_over_n_e.data'] = CONCEN * 0.01  (percent → fraction)
+        Matches OMAS: ch['ion.:.n_i_over_n_e.data'] = CONCEN * 0.01  (percent → fraction)
         """
         active = self._get_active_channels(shot, raw_data)
         concen = self._lookup(raw_data, shot, self._concen_path())
@@ -842,14 +755,14 @@ class ChargeExchangeMapper(IDSMapper):
             ich = array_order.index(f'{sub[0:4]}{ch}')
             ind = slice(indices[ich],indices[ich+1])
             val = np.atleast_1d(concen[ind])
-            result.append(val if len(val) > 0 else np.array([]))
-        return ak.Array(result)
+            result.append(val * 1.e-2 if len(val) > 0 else np.array([])) # remove %
+        return ak.Array(result)[:, None,...]
 
     def _compose_n_i_over_n_e_time(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose ion fraction time arrays per channel (in seconds).
 
         Data source: dim_of(CONCEN) time axis, indexed via INDECIES and ARRAY_ORDER.
-        Matches OMAS: ch['ion.0.n_i_over_n_e.time'] = dim_of(CONCEN, 0)/1000
+        Matches OMAS: ch['ion.:.n_i_over_n_e.time'] = dim_of(CONCEN, 0)/1000
         """
         active = self._get_active_channels(shot, raw_data)
         concen_time = self._lookup(raw_data, shot, self._concen_time_path())
@@ -861,7 +774,7 @@ class ChargeExchangeMapper(IDSMapper):
             ind = slice(indices[ich],indices[ich+1])
             val = np.atleast_1d(concen_time[ind])
             result.append(val if len(val) > 0 else np.array([]))
-        return ak.Array(result)
+        return ak.Array(result)[:, None,...]
 
     def _compose_n_i_over_n_e_error(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose ion fraction upper uncertainty per channel (dimensionless, 0-1).
@@ -877,8 +790,8 @@ class ChargeExchangeMapper(IDSMapper):
             ich = array_order.index(f'{sub[0:4]}{ch}')
             ind = slice(indices[ich],indices[ich+1])
             val = np.atleast_1d(concen_err[ind])
-            result.append(val if len(val) > 0 else np.array([]))
-        return ak.Array(result)
+            result.append(val * 1.e-2  if len(val) > 0 else np.array([]))
+        return ak.Array(result)[:, None,...]
 
     def _compose_zeff_data(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose effective charge time series per channel (dimensionless).
@@ -905,14 +818,14 @@ class ChargeExchangeMapper(IDSMapper):
         Matches OMAS: ch['zeff.time'] = dim_of(ZIMP, 0)/1000
         """
         active = self._get_active_channels(shot, raw_data)
-        zimp_time = self._lookup(raw_data, shot, self._zimp_time_path())
+        zeff_time = self._lookup(raw_data, shot, self._zeff_time_path())
         indices = self._lookup(raw_data, shot, self._impdens_indices_path())
         array_order = self._get_array_order(shot, raw_data)
         result = []
         for sub, ch in active:
             ich = array_order.index(f'{sub[0:4]}{ch}')
             ind = slice(indices[ich],indices[ich+1])
-            val = np.atleast_1d(zimp_time[ind])
+            val = np.atleast_1d(zeff_time[ind])
             result.append(val if len(val) > 0 else np.array([]))
         return ak.Array(result)
 
