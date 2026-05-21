@@ -20,7 +20,7 @@ fields:
   - profiles_1d.grid.rho_tor_norm
 
   # Electrons
-  - profiles_1d.electrons.density_thermal
+  - profiles_1d.electrons.density
   - profiles_1d.electrons.temperature
 
   # Ion[0] - Deuterium
