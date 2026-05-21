@@ -22,8 +22,8 @@ fields:
   - profiles_1d.grid.rho_pol_norm
 
   # Electrons
-  - profiles_1d.electrons.density_thermal
-  - profiles_1d.electrons.density_thermal_error_upper
+  - profiles_1d.electrons.density
+  - profiles_1d.electrons.density_error_upper
   - profiles_1d.electrons.temperature
   - profiles_1d.electrons.temperature_error_upper
 
