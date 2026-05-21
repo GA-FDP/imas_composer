@@ -1,11 +1,38 @@
 # Magnetics IDS Configuration for DIII-D
 
 # Supported fields (complete list of implemented IDS paths)
-# Note: ip and diamagnetic_flux are arrays of measurements (length 1 for DIII-D)
+# Note: ip and diamagnetic_flux are arrays of measurements (length 2 for ip, length 1 for diamagnetic_flux on DIII-D)
 fields:
   - ip.data
   - ip.time
   - ip.data_error_upper
+  - ip.method_name
   - diamagnetic_flux.data
   - diamagnetic_flux.time
   - diamagnetic_flux.data_error_upper
+  # b_field_pol_probe: hardware geometry (from mhdin_ods.json)
+  - b_field_pol_probe.identifier
+  - b_field_pol_probe.name
+  - b_field_pol_probe.length
+  - b_field_pol_probe.poloidal_angle
+  - b_field_pol_probe.position.r
+  - b_field_pol_probe.position.z
+  - b_field_pol_probe.toroidal_angle
+  - b_field_pol_probe.turns
+  - b_field_pol_probe.type.index
+  # b_field_pol_probe: time-series data (from MDSplus via ptdata2)
+  - b_field_pol_probe.field.data
+  - b_field_pol_probe.field.time
+  - b_field_pol_probe.field.validity
+  - b_field_pol_probe.field.data_error_upper
+  # flux_loop: hardware geometry (from mhdin_ods.json)
+  - flux_loop.identifier
+  - flux_loop.name
+  - flux_loop.position.r
+  - flux_loop.position.z
+  - flux_loop.type.index
+  # flux_loop: time-series data (from MDSplus via ptdata2)
+  - flux_loop.flux.data
+  - flux_loop.flux.time
+  - flux_loop.flux.validity
+  - flux_loop.flux.data_error_upper
