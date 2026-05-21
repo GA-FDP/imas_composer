@@ -38,7 +38,6 @@ Clone IMAS_composer:
 ```
 git clone git@github.com:GA-FDP/imas_composer.git
 cd imas_composer
-git switch imas_python
 ```
 Create a new environment:
 ```
