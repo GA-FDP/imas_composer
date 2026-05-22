@@ -69,9 +69,20 @@ omas_path_map:
 
   # Ion static metadata — no time dimension; composer returns 1D array [n_ion].
   # Fixed time index 0, ':' iterates over ion index.
-  core_profiles.profiles_1d.ion.label: core_profiles.profiles_1d.0.ion.:.label
-  core_profiles.profiles_1d.ion.element.z_n: core_profiles.profiles_1d.0.ion.:.element.0.z_n
-  core_profiles.profiles_1d.ion.element.a: core_profiles.profiles_1d.0.ion.:.element.0.a
+  core_profiles.profiles_1d.ion.label: core_profiles.profiles_1d.:.ion.:.label
+  core_profiles.profiles_1d.ion.element.z_n: core_profiles.profiles_1d.:.ion.:.element.:.z_n
+  core_profiles.profiles_1d.ion.element.a: core_profiles.profiles_1d.:.ion.:.element.:.a
+
+  # Ion profiles
+  core_profiles.profiles_1d.ion.rotation_frequency_tor: core_profiles.profiles_1d.:.ion.:.rotation_frequency_tor
+  core_profiles.profiles_1d.ion.density_fit.measured: core_profiles.profiles_1d.:.ion.:.density_fit.measured
+  core_profiles.profiles_1d.ion.density_fit.psi_norm: core_profiles.profiles_1d.:.ion.:.density_fit.psi_norm
+  core_profiles.profiles_1d.ion.density_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.:.density_fit.rho_tor_norm
+  core_profiles.profiles_1d.ion.density_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.:.density_fit.measured_error_upper
+  core_profiles.profiles_1d.ion.temperature_fit.measured: core_profiles.profiles_1d.:.ion.:.temperature_fit.measured
+  core_profiles.profiles_1d.ion.temperature_fit.psi_norm: core_profiles.profiles_1d.:.ion.:.temperature_fit.psi_norm
+  core_profiles.profiles_1d.ion.temperature_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.:.temperature_fit.rho_tor_norm
+  core_profiles.profiles_1d.ion.temperature_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.:.temperature_fit.measured_error_upper
 
   # E-field (OMFIT_PROFS only)
   core_profiles.profiles_1d.e_field.radial: core_profiles.profiles_1d.:.e_field.radial

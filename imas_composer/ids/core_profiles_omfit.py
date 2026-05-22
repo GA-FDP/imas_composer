@@ -477,7 +477,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # Static metadata: label, z_n, a — 1D arrays indexed by ion (from YAML ions: list)
         self.specs["core_profiles.profiles_1d.ion.label"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=[],
+            depends_on=["core_profiles.time"],
             compose=self._compose_all_ion_label,
             ids_path="core_profiles.profiles_1d.ion.label",
             docs_file=self.DOCS_PATH
@@ -485,7 +485,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         self.specs["core_profiles.profiles_1d.ion.element.z_n"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=[],
+            depends_on=["core_profiles.time"],
             compose=self._compose_all_ion_element_z_n,
             ids_path="core_profiles.profiles_1d.ion.element.z_n",
             docs_file=self.DOCS_PATH
@@ -493,7 +493,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         self.specs["core_profiles.profiles_1d.ion.element.a"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=[],
+            depends_on=["core_profiles.time"],
             compose=self._compose_all_ion_element_a,
             ids_path="core_profiles.profiles_1d.ion.element.a",
             docs_file=self.DOCS_PATH
@@ -866,16 +866,27 @@ class CoreProfilesOmfitMapper(IDSMapper):
         return self._stack_ions({'D': d_slices, 'C': c_slices})
 
     def _compose_all_ion_label(self, shot: int, raw_data: Dict[str, Any]) -> list:
-        """Return list of ion labels in YAML order, e.g. ['D', 'C']."""
-        return [ion['label'] for ion in self.ions]
+        """Compose array of ion labels in YAML order (n_time, n_ion)."""
+        profile_time = self.specs["core_profiles.time"].compose(shot, raw_data)
+        return np.tile([ion['label'] for ion in self.ions], (len(profile_time), 1))
 
     def _compose_all_ion_element_z_n(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """Return 1-D array of atomic numbers in YAML ion order."""
-        return np.array([ion['z_n'] for ion in self.ions])
+        """
+        Compose array of atomic numbers in YAML order (n_time, n_ion, n_element).
+
+        n_element is assumed to be 1 for all plasma species.
+        """
+        profile_time = self.specs["core_profiles.time"].compose(shot, raw_data)
+        return np.tile([ion['z_n'] for ion in self.ions], (len(profile_time), 1))[:, :, np.newaxis]
 
     def _compose_all_ion_element_a(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """Return 1-D array of atomic masses in YAML ion order."""
-        return np.array([ion['a'] for ion in self.ions])
+        """
+        Compose array of atomic masses in YAML order (n_time, n_ion, n_element).
+
+        n_element is assumed to be 1 for all plasma species.
+        """
+        profile_time = self.specs["core_profiles.time"].compose(shot, raw_data)
+        return np.tile([ion['a'] for ion in self.ions], (len(profile_time), 1))[:, :, np.newaxis]
 
     def _compose_rho_tor_norm(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """

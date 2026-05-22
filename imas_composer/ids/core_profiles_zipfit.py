@@ -194,7 +194,7 @@ class CoreProfilesZipfitMapper(IDSMapper):
         # ============================================================
 
         # Grid: rho_tor_norm
-        deps = [
+        rho_deps = [
             "core_profiles.profiles_1d._density_time",
             "core_profiles.profiles_1d._density_rho",
             "core_profiles.profiles_1d._temperature_time",
@@ -209,7 +209,7 @@ class CoreProfilesZipfitMapper(IDSMapper):
 
         self.specs["core_profiles.profiles_1d.grid.rho_tor_norm"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=deps,
+            depends_on=rho_deps,
             compose=self._compose_rho_tor_norm,
             ids_path="core_profiles.profiles_1d.grid.rho_tor_norm",
             docs_file=self.DOCS_PATH
@@ -280,34 +280,6 @@ class CoreProfilesZipfitMapper(IDSMapper):
             "core_profiles.profiles_1d._carbon_rotation_rho"
         ]
 
-        carbon_density_deps = [
-            "core_profiles.profiles_1d._carbon_density_data",
-            "core_profiles.profiles_1d._carbon_density_time",
-            "core_profiles.profiles_1d._carbon_density_rho",
-            "core_profiles.profiles_1d._density_time",
-            "core_profiles.profiles_1d._density_rho",
-            "core_profiles.profiles_1d._temperature_time",
-            "core_profiles.profiles_1d._temperature_rho",
-            "core_profiles.profiles_1d._ion_temperature_time",
-            "core_profiles.profiles_1d._ion_temperature_rho",
-            "core_profiles.profiles_1d._carbon_rotation_time",
-            "core_profiles.profiles_1d._carbon_rotation_rho"
-        ]
-
-        carbon_rotation_deps = [
-            "core_profiles.profiles_1d._carbon_rotation_data",
-            "core_profiles.profiles_1d._carbon_rotation_time",
-            "core_profiles.profiles_1d._carbon_rotation_rho",
-            "core_profiles.profiles_1d._density_time",
-            "core_profiles.profiles_1d._density_rho",
-            "core_profiles.profiles_1d._temperature_time",
-            "core_profiles.profiles_1d._temperature_rho",
-            "core_profiles.profiles_1d._ion_temperature_time",
-            "core_profiles.profiles_1d._ion_temperature_rho",
-            "core_profiles.profiles_1d._carbon_density_time",
-            "core_profiles.profiles_1d._carbon_density_rho"
-        ]
-
         # ion.temperature: both D and C use ITEMPFIT → same data, stacked
         self.specs["core_profiles.profiles_1d.ion.temperature"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
@@ -341,6 +313,20 @@ class CoreProfilesZipfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        carbon_rotation_deps = [
+            "core_profiles.profiles_1d._carbon_rotation_data",
+            "core_profiles.profiles_1d._carbon_rotation_time",
+            "core_profiles.profiles_1d._carbon_rotation_rho",
+            "core_profiles.profiles_1d._density_time",
+            "core_profiles.profiles_1d._density_rho",
+            "core_profiles.profiles_1d._temperature_time",
+            "core_profiles.profiles_1d._temperature_rho",
+            "core_profiles.profiles_1d._ion_temperature_time",
+            "core_profiles.profiles_1d._ion_temperature_rho",
+            "core_profiles.profiles_1d._carbon_density_time",
+            "core_profiles.profiles_1d._carbon_density_rho"
+        ]
+
         # ion.rotation_frequency_tor: D = NaN-filled, C from TROTFIT
         self.specs["core_profiles.profiles_1d.ion.rotation_frequency_tor"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
@@ -350,35 +336,6 @@ class CoreProfilesZipfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # Static metadata: label, z_n, a — 1D arrays indexed by ion (from YAML ions: list)
-        self.specs["core_profiles.profiles_1d.ion.label"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=[],
-            compose=self._compose_all_ion_label,
-            ids_path="core_profiles.profiles_1d.ion.label",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["core_profiles.profiles_1d.ion.element.z_n"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=[],
-            compose=self._compose_all_ion_element_z_n,
-            ids_path="core_profiles.profiles_1d.ion.element.z_n",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["core_profiles.profiles_1d.ion.element.a"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=[],
-            compose=self._compose_all_ion_element_a,
-            ids_path="core_profiles.profiles_1d.ion.element.a",
-            docs_file=self.DOCS_PATH
-        )
-
-        # ============================================================
-        # Time and metadata fields
-        # ============================================================
-
         # time: unified time array from all profile signals
         time_deps = [
             "core_profiles.profiles_1d._density_time",
@@ -387,6 +344,35 @@ class CoreProfilesZipfitMapper(IDSMapper):
             "core_profiles.profiles_1d._carbon_density_time",
             "core_profiles.profiles_1d._carbon_rotation_time"
         ]
+
+        # Static metadata: label, z_n, a — 1D arrays indexed by ion (from YAML ions: list)
+        self.specs["core_profiles.profiles_1d.ion.label"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=time_deps,
+            compose=self._compose_all_ion_label,
+            ids_path="core_profiles.profiles_1d.ion.label",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["core_profiles.profiles_1d.ion.element.z_n"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=time_deps,
+            compose=self._compose_all_ion_element_z_n,
+            ids_path="core_profiles.profiles_1d.ion.element.z_n",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["core_profiles.profiles_1d.ion.element.a"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=time_deps,
+            compose=self._compose_all_ion_element_a,
+            ids_path="core_profiles.profiles_1d.ion.element.a",
+            docs_file=self.DOCS_PATH
+        )
+
+        # ============================================================
+        # Time and metadata fields
+        # ============================================================
 
         self.specs["core_profiles.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
@@ -470,23 +456,34 @@ class CoreProfilesZipfitMapper(IDSMapper):
         """
         Compose ion.rotation_frequency_tor for all ions: (n_time, n_ion, n_rho) ak.Array.
 
-        C from TROTFIT, D is NaN-filled (no measurement available).
+        C from TROTFIT, D is empty (no measurement available).
         """
         c_rotation = self._compose_carbon_rotation(shot, raw_data)  # (n_time, n_rho)
         d_rotation = np.full_like(c_rotation, np.nan)
         return self._stack_ions({'D': d_rotation, 'C': c_rotation})
 
     def _compose_all_ion_label(self, shot: int, raw_data: Dict[str, Any]) -> list:
-        """Return list of ion labels in YAML order, e.g. ['D', 'C']."""
-        return [ion['label'] for ion in self.ions]
+        """Compose array of ion labels in YAML order (n_time, n_ion)."""
+        unified_time = self._get_unified_time(shot, raw_data)
+        return np.tile([ion['label'] for ion in self.ions], (len(unified_time), 1))
 
     def _compose_all_ion_element_z_n(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """Return 1-D array of atomic numbers in YAML ion order."""
-        return np.array([ion['z_n'] for ion in self.ions])
+        """
+        Compose array of atomic numbers in YAML order (n_time, n_ion, n_element).
+
+        n_element is assumed to be 1 for all plasma species.
+        """
+        unified_time = self._get_unified_time(shot, raw_data)
+        return np.tile([ion['z_n'] for ion in self.ions], (len(unified_time), 1))[:, :, np.newaxis]
 
     def _compose_all_ion_element_a(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """Return 1-D array of atomic masses in YAML ion order."""
-        return np.array([ion['a'] for ion in self.ions])
+        """
+        Compose array of atomic masses in YAML order (n_time, n_ion, n_element).
+
+        n_element is assumed to be 1 for all plasma species.
+        """
+        unified_time = self._get_unified_time(shot, raw_data)
+        return np.tile([ion['a'] for ion in self.ions], (len(unified_time), 1))[:, :, np.newaxis]
 
     def _get_requirement_key(self, field_type: str, shot: int, dim: int = None) -> str:
         """
