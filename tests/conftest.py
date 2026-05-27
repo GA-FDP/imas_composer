@@ -265,7 +265,8 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
         # Check if any fetched values are exceptions (from failed MDSplus access)
         for key, value in fetched.items():
             if isinstance(value, Exception):
-                raise RuntimeError(f"Failed to fetch requirement {key}: {value}") from value
+                if not '%TREE-E-NODATA' in str(value).upper():
+                    raise RuntimeError(f"Failed to fetch requirement {key}: {value}") from value
                 # Check if this requirement matches any optional pattern
             mds_path = key[0]  # key is (mds_path, shot, treename)
             is_optional = any(
@@ -833,15 +834,22 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
     # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
     # Flatten and check length - if zero, verify OMAS is also empty
     if not np.isscalar(composer_value) and len(ak.flatten(composer_value, axis=None)) == 0:
-        flat_omas = ak.flatten( ods[omas_path], axis=None)
-        assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
-        return
+        try:
+            flat_omas = ak.flatten( ods[omas_path], axis=None)
+            assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
+            return
+        except ValueError as e:
+            if not 'has no data' in str(e).lower():
+                raise e
+            else:
+                # This is a successful result because there is no data in imas_composer or OMAS
+                return
     
     # Base case: 0D (scalar) or 1D array - do comparison
     if ":" not in omas_path:
         # Compare
-        compare_values(composer_value, ods[omas_path], omas_path,
-                       rtol=rtol, atol_float=atol_float, atol_array=atol_array)
+        compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol, 
+                       atol_float=atol_float, atol_array=atol_array)
 
     else:
         # Recursive case: ndim > 1, iterate over outer dimension

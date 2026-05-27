@@ -29,7 +29,7 @@ fields:
   - profiles_1d.grid.rho_tor_norm
 
   # Electrons
-  - profiles_1d.electrons.density_thermal
+  - profiles_1d.electrons.density
   - profiles_1d.electrons.temperature
 
   # Ions (unified ion dimension - ak.Array with axes [time, ion, rho])

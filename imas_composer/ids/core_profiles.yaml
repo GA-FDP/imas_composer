@@ -40,11 +40,11 @@ fields:
     trees: [OMFIT_PROFS]
 
   # Electrons - all trees
-  - profiles_1d.electrons.density_thermal
+  - profiles_1d.electrons.density
   - profiles_1d.electrons.temperature
 
   # Electrons - OMFIT_PROFS only (uncertainties)
-  - field: profiles_1d.electrons.density_thermal_error_upper
+  - field: profiles_1d.electrons.density_error_upper
     trees: [OMFIT_PROFS]
   - field: profiles_1d.electrons.temperature_error_upper
     trees: [OMFIT_PROFS]

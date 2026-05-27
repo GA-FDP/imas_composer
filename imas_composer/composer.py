@@ -413,3 +413,4 @@ class ImasComposer:
             if spec.stage == RequirementStage.COMPUTED
             and (path == ids_path or path.startswith(ids_path + '.'))
         ]
+

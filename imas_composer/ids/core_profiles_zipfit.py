@@ -230,11 +230,11 @@ class CoreProfilesZipfitMapper(IDSMapper):
             "core_profiles.profiles_1d._carbon_rotation_rho"
         ]
 
-        self.specs["core_profiles.profiles_1d.electrons.density_thermal"] = IDSEntrySpec(
+        self.specs["core_profiles.profiles_1d.electrons.density"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=density_deps,
             compose=self._compose_density_thermal,
-            ids_path="core_profiles.profiles_1d.electrons.density_thermal",
+            ids_path="core_profiles.profiles_1d.electrons.density",
             docs_file=self.DOCS_PATH
         )
 
@@ -548,10 +548,10 @@ class CoreProfilesZipfitMapper(IDSMapper):
 
     def _compose_density_thermal(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
-        Compose electrons.density_thermal.
+        Compose electrons.density.
 
         For ZIPFIT (d3d.py:1666, 1687, 1693, 1710):
-            query["electrons.density_thermal"] = "\\TOP.PROFILES.EDENSFIT"
+            query["electrons.density"] = "\\TOP.PROFILES.EDENSFIT"
             data[entry] *= 1E19  # in [m^-3]
             # Interpolate to common grid
 
@@ -849,7 +849,7 @@ class CoreProfilesZipfitMapper(IDSMapper):
         For ZIPFIT (d3d.py:1712):
             # deuterium from quasineutrality
             ods[f"{sh}[{i_time}].ion[0].density_thermal"] =
-                ods[f"{sh}[{i_time}].electrons.density_thermal"] -
+                ods[f"{sh}[{i_time}].electrons.density"] -
                 ods[f"{sh}[{i_time}].ion[1].density_thermal"] * 6
 
         Returns:

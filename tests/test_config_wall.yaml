@@ -13,8 +13,8 @@ requirement_validation:
 # Maps imas_composer notation to OMAS notation for fetching reference data
 # Wall fields are simple scalar/array fields with no nested indexing
 omas_path_map:
-  wall.description_2d.0.limiter.unit.0.outline.r: wall.description_2d.0.limiter.unit.0.outline.r
-  wall.description_2d.0.limiter.unit.0.outline.z: wall.description_2d.0.limiter.unit.0.outline.z
-  wall.description_2d.0.limiter.type.index: wall.description_2d.0.limiter.type.index
+  wall.description_2d.limiter.unit.outline.r: wall.description_2d.:.limiter.unit.:.outline.r
+  wall.description_2d.limiter.unit.outline.z: wall.description_2d.:.limiter.unit.:.outline.z
+  wall.description_2d.limiter.type.index: wall.description_2d.:.limiter.type.index
   wall.time: wall.time
   wall.ids_properties.homogeneous_time: wall.ids_properties.homogeneous_time

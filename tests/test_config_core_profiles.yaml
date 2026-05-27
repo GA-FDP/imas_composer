@@ -41,11 +41,11 @@ omas_path_map:
   core_profiles.profiles_1d.grid.rho_pol_norm: core_profiles.profiles_1d.:.grid.rho_pol_norm
 
   # Electron profiles
-  core_profiles.profiles_1d.electrons.density_thermal: core_profiles.profiles_1d.:.electrons.density_thermal
+  core_profiles.profiles_1d.electrons.density: core_profiles.profiles_1d.:.electrons.density
   core_profiles.profiles_1d.electrons.temperature: core_profiles.profiles_1d.:.electrons.temperature
 
   # Electron uncertainties (OMFIT_PROFS only)
-  core_profiles.profiles_1d.electrons.density_thermal_error_upper: core_profiles.profiles_1d.:.electrons.density_thermal_error_upper
+  core_profiles.profiles_1d.electrons.density_error_upper: core_profiles.profiles_1d.:.electrons.density_error_upper
   core_profiles.profiles_1d.electrons.temperature_error_upper: core_profiles.profiles_1d.:.electrons.temperature_error_upper
 
   # Electron fit fields (OMFIT_PROFS only)
