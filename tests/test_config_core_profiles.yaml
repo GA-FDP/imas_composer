@@ -68,7 +68,6 @@ omas_path_map:
   core_profiles.profiles_1d.ion.temperature_error_upper: core_profiles.profiles_1d.:.ion.:.temperature_error_upper
 
   # Ion static metadata — no time dimension; composer returns 1D array [n_ion].
-  # Fixed time index 0, ':' iterates over ion index.
   core_profiles.profiles_1d.ion.label: core_profiles.profiles_1d.:.ion.:.label
   core_profiles.profiles_1d.ion.element.z_n: core_profiles.profiles_1d.:.ion.:.element.:.z_n
   core_profiles.profiles_1d.ion.element.a: core_profiles.profiles_1d.:.ion.:.element.:.a
@@ -89,41 +88,3 @@ omas_path_map:
 
   # Global quantities
   core_profiles.global_quantities.v_loop: core_profiles.global_quantities.v_loop
-
-# Ion-sliced comparison: fields where only one ion has OMAS data.
-# Slices composer's (n_time, n_ion, ...) to (n_time, ...) for ion_index,
-# then compares against the OMAS path (which uses a fixed ion index).
-# Handled by run_composition_against_omas in conftest.py.
-omas_ion_slice:
-  # Rotation — OMAS only has ion[1] (C); D is NaN-filled in composer
-  core_profiles.profiles_1d.ion.rotation_frequency_tor:
-    ion_index: 1
-    omas_path: core_profiles.profiles_1d.:.ion.1.rotation_frequency_tor
-
-  # Density fit fields — OMAS only has ion[1] (C); D has empty arrays in composer
-  core_profiles.profiles_1d.ion.density_fit.measured:
-    ion_index: 1
-    omas_path: core_profiles.profiles_1d.:.ion.1.density_fit.measured
-  core_profiles.profiles_1d.ion.density_fit.psi_norm:
-    ion_index: 1
-    omas_path: core_profiles.profiles_1d.:.ion.1.density_fit.psi_norm
-  core_profiles.profiles_1d.ion.density_fit.rho_tor_norm:
-    ion_index: 1
-    omas_path: core_profiles.profiles_1d.:.ion.1.density_fit.rho_tor_norm
-  core_profiles.profiles_1d.ion.density_fit.measured_error_upper:
-    ion_index: 1
-    omas_path: core_profiles.profiles_1d.:.ion.1.density_fit.measured_error_upper
-
-  # Temperature fit fields — same: only C (ion[1]) has OMAS data
-  core_profiles.profiles_1d.ion.temperature_fit.measured:
-    ion_index: 1
-    omas_path: core_profiles.profiles_1d.:.ion.1.temperature_fit.measured
-  core_profiles.profiles_1d.ion.temperature_fit.psi_norm:
-    ion_index: 1
-    omas_path: core_profiles.profiles_1d.:.ion.1.temperature_fit.psi_norm
-  core_profiles.profiles_1d.ion.temperature_fit.rho_tor_norm:
-    ion_index: 1
-    omas_path: core_profiles.profiles_1d.:.ion.1.temperature_fit.rho_tor_norm
-  core_profiles.profiles_1d.ion.temperature_fit.measured_error_upper:
-    ion_index: 1
-    omas_path: core_profiles.profiles_1d.:.ion.1.temperature_fit.measured_error_upper

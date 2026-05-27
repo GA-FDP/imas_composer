@@ -327,7 +327,7 @@ class CoreProfilesZipfitMapper(IDSMapper):
             "core_profiles.profiles_1d._carbon_density_rho"
         ]
 
-        # ion.rotation_frequency_tor: D = NaN-filled, C from TROTFIT
+        # ion.rotation_frequency_tor: D = empty, C from TROTFIT
         self.specs["core_profiles.profiles_1d.ion.rotation_frequency_tor"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=carbon_rotation_deps,
@@ -430,8 +430,8 @@ class CoreProfilesZipfitMapper(IDSMapper):
         Returns:
             ak.Array of shape (n_time, n_ion, n_rho)
         """
-        ordered = np.stack([ion_arrays[ion['label']] for ion in self.ions], axis=1)
-        return ak.Array(ordered)
+        n_time = ion_arrays[self.ions[0]['label']].shape[0]
+        return ak.Array([[ion_arrays[ion['label']][t] for ion in self.ions] for t in range(n_time)])
 
     def _compose_all_ion_temperature(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
@@ -459,7 +459,7 @@ class CoreProfilesZipfitMapper(IDSMapper):
         C from TROTFIT, D is empty (no measurement available).
         """
         c_rotation = self._compose_carbon_rotation(shot, raw_data)  # (n_time, n_rho)
-        d_rotation = np.full_like(c_rotation, np.nan)
+        d_rotation = np.array([[]]).reshape(c_rotation.shape[0], 0)
         return self._stack_ions({'D': d_rotation, 'C': c_rotation})
 
     def _compose_all_ion_label(self, shot: int, raw_data: Dict[str, Any]) -> list:

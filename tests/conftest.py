@@ -831,22 +831,22 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
         atol_array: Absolute tolerance for float arrays
     """
 
-    # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
-    # Flatten and check length - if zero, verify OMAS is also empty
-    if not np.isscalar(composer_value) and len(ak.flatten(composer_value, axis=None)) == 0:
-        try:
-            flat_omas = ak.flatten( ods[omas_path], axis=None)
-            assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
-            return
-        except ValueError as e:
-            if not 'has no data' in str(e).lower():
-                raise e
-            else:
-                # This is a successful result because there is no data in imas_composer or OMAS
-                return
-    
     # Base case: 0D (scalar) or 1D array - do comparison
     if ":" not in omas_path:
+        # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
+        # Flatten and check length - if zero, verify OMAS is also empty
+        if not np.isscalar(composer_value) and len(ak.flatten(composer_value, axis=None)) == 0:
+            try:
+                flat_omas = ak.flatten( ods[omas_path], axis=None)
+                assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
+                return
+            except ValueError as e:
+                if not 'has no data' in str(e).lower():
+                    raise e
+                else:
+                    # This is a successful result because there is no data in imas_composer or OMAS
+                    return
+    
         # Compare
         compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol, 
                        atol_float=atol_float, atol_array=atol_array)
@@ -976,21 +976,6 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
     else:
         ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=True,
                         profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
-
-    # Check for ion-sliced comparison: fields where only a subset of ions have
-    # OMAS data (e.g. D rotation is NaN-filled; fit fields only exist for C).
-    # omas_ion_slice specifies which ion index has OMAS data and the path to use.
-    omas_ion_slice = test_config.get('omas_ion_slice', {})
-    if ids_path in omas_ion_slice:
-        import awkward as ak
-        spec = omas_ion_slice[ids_path]
-        ion_idx = spec['ion_index']
-        sliced_omas_path = spec['omas_path']
-        # Slice (n_time, n_ion, ...) → (n_time, ...) for the requested ion
-        sliced_value = ak.Array([composer_value[i][ion_idx] for i in range(len(composer_value))])
-        _compare_recursive(sliced_value, ods, sliced_omas_path,
-                           rtol=rtol, atol_float=atol_float, atol_array=atol_array)
-        return
 
     # Recursively compare using ndim-based logic with field-specific tolerances
     _compare_recursive(composer_value, ods, omas_access_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
