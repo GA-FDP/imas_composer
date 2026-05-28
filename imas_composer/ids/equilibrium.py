@@ -1588,6 +1588,21 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # j_parallel - parallel current density profile (needs interpolate_psi_1d transformation)
+        self.specs["equilibrium._fluxfun_jll"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.JLL', 0, self.efit_tree)],
+            ids_path="equilibrium._fluxfun_jll",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.j_parallel"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._fluxfun_psi", "equilibrium._fluxfun_jll", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin"],
+            compose=self._compose_profiles_1d_j_parallel,
+            ids_path="equilibrium.time_slice.profiles_1d.j_parallel",
+            docs_file=self.DOCS_PATH
+        )
+
         # volume - volume profile (needs interpolate_psi_1d transformation)
         self.specs["equilibrium._fluxfun_vol"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
@@ -2817,6 +2832,39 @@ class EquilibriumMapper(IDSMapper):
             j_tor[i] = interp1d(fluxfun_psi_norm[i], fluxfun_jeff[i], kind='cubic',
                                 bounds_error=False, fill_value=fill_value)(psin)
         return j_tor
+
+    def _compose_profiles_1d_j_parallel(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose j_parallel profile using interpolate_psi_1d transformation.
+
+        OMAS: py2tdi(interpolate_psi_1d,'\\EFIT::TOP.RESULTS.FLUXFUN.PSI','\\EFIT::TOP.RESULTS.FLUXFUN.JLL',
+                     '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY','\\EFIT::TOP.RESULTS.GEQDSK.PSIN')
+        Transform: Interpolate from FLUXFUN.PSI/JLL to GEQDSK.PSIN grid
+        """
+        fluxfun_psi_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.PSI', self.resolve_shot(shot), self.efit_tree).as_key()
+        fluxfun_jll_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.JLL', self.resolve_shot(shot), self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', self.resolve_shot(shot), self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self.resolve_shot(shot), self.efit_tree).as_key()
+        psin_key = Requirement(f'{self.geqdsk_node}.PSIN', self.resolve_shot(shot), self.efit_tree).as_key()
+
+        # Fluxfun quantities come as (radial direction, time), but we need (time, radial direction/psi)
+        fluxfun_psi = raw_data[fluxfun_psi_key].T
+        fluxfun_jll = raw_data[fluxfun_jll_key].T
+        ssimag = raw_data[ssimag_key]
+        ssibry = raw_data[ssibry_key]
+        psin = raw_data[psin_key]
+
+        # Normalize FLUXFUN.PSI
+        fluxfun_psi_norm = (fluxfun_psi - ssimag[:, None]) / (ssibry[:, None] - ssimag[:, None])
+
+        # Interpolate from FLUXFUN grid to GEQDSK grid
+        j_parallel = np.zeros(ssimag.shape + psin.shape)
+        for i in range(fluxfun_psi.shape[0]):
+            # Use constant extrapolation: first and last values for out-of-bounds
+            fill_value = (fluxfun_jll[i][0], fluxfun_jll[i][-1])
+            j_parallel[i] = interp1d(fluxfun_psi_norm[i], fluxfun_jll[i], kind='cubic',
+                                     bounds_error=False, fill_value=fill_value)(psin)
+        return j_parallel
 
     def _compose_profiles_1d_volume(self, shot: int, raw_data: dict) -> np.ndarray:
         """

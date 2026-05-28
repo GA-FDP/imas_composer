@@ -13,6 +13,10 @@ field_tolerances:
   # This uses interpolation so accuracy is limited
     rtol: 1.0e-5
     atol: 1.0
+  equilibrium.time_slice.profiles_1d.j_parallel:
+  # This uses interpolation so accuracy is limited
+    rtol: 1.0e-5
+    atol: 1.0
   equilibrium.time_slice.profiles_1d.volume:
   # This uses interpolation so accuracy is limited
     rtol: 2.0e-5
@@ -219,6 +223,7 @@ omas_path_map:
   equilibrium.time_slice.profiles_1d.psi: equilibrium.time_slice.:.profiles_1d.psi
   equilibrium.time_slice.profiles_1d.q: equilibrium.time_slice.:.profiles_1d.q
   equilibrium.time_slice.profiles_1d.rho_tor_norm: equilibrium.time_slice.:.profiles_1d.rho_tor_norm
+  equilibrium.time_slice.profiles_1d.j_parallel: equilibrium.time_slice.:.profiles_1d.j_parallel
   equilibrium.time_slice.profiles_1d.j_tor: equilibrium.time_slice.:.profiles_1d.j_tor
   equilibrium.time_slice.profiles_1d.volume: equilibrium.time_slice.:.profiles_1d.volume
 
