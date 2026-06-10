@@ -124,10 +124,10 @@ def load_ids_fields(ids_name, tree_filter=None):
         >>> print(fields[:3])
         ['ece.ids_properties.homogeneous_time', 'ece.line_of_sight.first_point.r', ...]
         >>> fields = load_ids_fields('core_profiles', tree_filter='ZIPFIT')
-        >>> 'core_profiles.profiles_1d.ion.1.rotation_frequency_tor' in fields
+        >>> 'core_profiles.profiles_1d.ion.rotation_frequency_tor' in fields
         True
         >>> fields = load_ids_fields('core_profiles', tree_filter='OMFIT_PROFS')
-        >>> 'core_profiles.profiles_1d.ion.1.rotation_frequency_tor' in fields
+        >>> 'core_profiles.profiles_1d.ion.rotation_frequency_tor' in fields
         False
     """
     # Path to YAML file in ids directory
@@ -831,22 +831,22 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
         atol_array: Absolute tolerance for float arrays
     """
 
-    # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
-    # Flatten and check length - if zero, verify OMAS is also empty
-    if not np.isscalar(composer_value) and len(ak.flatten(composer_value, axis=None)) == 0:
-        try:
-            flat_omas = ak.flatten( ods[omas_path], axis=None)
-            assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
-            return
-        except ValueError as e:
-            if not 'has no data' in str(e).lower():
-                raise e
-            else:
-                # This is a successful result because there is no data in imas_composer or OMAS
-                return
-    
     # Base case: 0D (scalar) or 1D array - do comparison
     if ":" not in omas_path:
+        # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
+        # Flatten and check length - if zero, verify OMAS is also empty
+        if not np.isscalar(composer_value) and len(ak.flatten(composer_value, axis=None)) == 0:
+            try:
+                flat_omas = ak.flatten( ods[omas_path], axis=None)
+                assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
+                return
+            except ValueError as e:
+                if not 'has no data' in str(e).lower():
+                    raise e
+                else:
+                    # This is a successful result because there is no data in imas_composer or OMAS
+                    return
+    
         # Compare
         compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol, 
                        atol_float=atol_float, atol_array=atol_array)

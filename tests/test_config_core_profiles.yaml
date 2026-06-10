@@ -1,7 +1,6 @@
 # Test configuration for Core Profiles IDS
 
-# Fields to skip OMAS comparison for (composer still tested)
-# Format: field_path: "reason for skipping"
+# Fields to skip OMAS comparison for (composer still tested for requirements resolution)
 skip_fields: {}
 
 # Requirement validation settings
@@ -21,7 +20,16 @@ field_tolerances:
     atol: 1.0e-8
 
 # OMAS path mapping
-# Maps imas_composer notation to OMAS notation for fetching reference data
+# Maps imas_composer notation to OMAS notation for fetching reference data.
+#
+# Ion fields return ak.Array([time, ion, rho]) so the OMAS path uses two
+# levels of ':' — the first iterates over time slices, the second over ions.
+# _compare_recursive replaces each ':' with the running index, giving paths like
+# core_profiles.profiles_1d.0.ion.1.temperature for (time=0, ion=1).
+#
+# Static metadata (label, z_n, a) has no time dimension — composer returns a
+# 1D array indexed by ion.  A fixed time index of 0 is used and ':' iterates
+# over ions, e.g. core_profiles.profiles_1d.0.ion.:.label.
 omas_path_map:
   # Time fields
   core_profiles.time: core_profiles.time
@@ -50,38 +58,30 @@ omas_path_map:
   core_profiles.profiles_1d.electrons.temperature_fit.rho_tor_norm: core_profiles.profiles_1d.:.electrons.temperature_fit.rho_tor_norm
   core_profiles.profiles_1d.electrons.temperature_fit.measured_error_upper: core_profiles.profiles_1d.:.electrons.temperature_fit.measured_error_upper
 
-  # Ion[0] - Deuterium profiles
-  core_profiles.profiles_1d.ion.0.density_thermal: core_profiles.profiles_1d.:.ion.0.density_thermal
-  core_profiles.profiles_1d.ion.0.temperature: core_profiles.profiles_1d.:.ion.0.temperature
-  core_profiles.profiles_1d.ion.0.label: core_profiles.profiles_1d.0.ion.0.label
-  core_profiles.profiles_1d.ion.0.element.0.z_n: core_profiles.profiles_1d.0.ion.0.element.0.z_n
-  core_profiles.profiles_1d.ion.0.element.0.a: core_profiles.profiles_1d.0.ion.0.element.0.a
+  # Ion profiles — two ':' levels: first=time slice, second=ion index
+  # OMAS populates both ion[0] (D) and ion[1] (C) for these fields
+  core_profiles.profiles_1d.ion.density_thermal: core_profiles.profiles_1d.:.ion.:.density_thermal
+  core_profiles.profiles_1d.ion.temperature: core_profiles.profiles_1d.:.ion.:.temperature
 
-  # Ion[0] - Deuterium uncertainties (OMFIT_PROFS only)
-  core_profiles.profiles_1d.ion.0.density_thermal_error_upper: core_profiles.profiles_1d.:.ion.0.density_thermal_error_upper
-  core_profiles.profiles_1d.ion.0.temperature_error_upper: core_profiles.profiles_1d.:.ion.0.temperature_error_upper
+  # Ion uncertainties (OMFIT_PROFS only) — same two-level ':' pattern
+  core_profiles.profiles_1d.ion.density_thermal_error_upper: core_profiles.profiles_1d.:.ion.:.density_thermal_error_upper
+  core_profiles.profiles_1d.ion.temperature_error_upper: core_profiles.profiles_1d.:.ion.:.temperature_error_upper
 
-  # Ion[1] - Carbon profiles
-  core_profiles.profiles_1d.ion.1.density_thermal: core_profiles.profiles_1d.:.ion.1.density_thermal
-  core_profiles.profiles_1d.ion.1.temperature: core_profiles.profiles_1d.:.ion.1.temperature
-  core_profiles.profiles_1d.ion.1.rotation_frequency_tor: core_profiles.profiles_1d.:.ion.1.rotation_frequency_tor
-  core_profiles.profiles_1d.ion.1.label: core_profiles.profiles_1d.0.ion.1.label
-  core_profiles.profiles_1d.ion.1.element.0.z_n: core_profiles.profiles_1d.0.ion.1.element.0.z_n
-  core_profiles.profiles_1d.ion.1.element.0.a: core_profiles.profiles_1d.0.ion.1.element.0.a
+  # Ion static metadata — no time dimension; composer returns 1D array [n_ion].
+  core_profiles.profiles_1d.ion.label: core_profiles.profiles_1d.:.ion.:.label
+  core_profiles.profiles_1d.ion.element.z_n: core_profiles.profiles_1d.:.ion.:.element.:.z_n
+  core_profiles.profiles_1d.ion.element.a: core_profiles.profiles_1d.:.ion.:.element.:.a
 
-  # Ion[1] - Carbon uncertainties (OMFIT_PROFS only)
-  core_profiles.profiles_1d.ion.1.density_thermal_error_upper: core_profiles.profiles_1d.:.ion.1.density_thermal_error_upper
-  core_profiles.profiles_1d.ion.1.temperature_error_upper: core_profiles.profiles_1d.:.ion.1.temperature_error_upper
-
-  # Ion[1] - Carbon fit fields (OMFIT_PROFS only)
-  core_profiles.profiles_1d.ion.1.density_fit.measured: core_profiles.profiles_1d.:.ion.1.density_fit.measured
-  core_profiles.profiles_1d.ion.1.density_fit.psi_norm: core_profiles.profiles_1d.:.ion.1.density_fit.psi_norm
-  core_profiles.profiles_1d.ion.1.density_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.1.density_fit.rho_tor_norm
-  core_profiles.profiles_1d.ion.1.density_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.1.density_fit.measured_error_upper
-  core_profiles.profiles_1d.ion.1.temperature_fit.measured: core_profiles.profiles_1d.:.ion.1.temperature_fit.measured
-  core_profiles.profiles_1d.ion.1.temperature_fit.psi_norm: core_profiles.profiles_1d.:.ion.1.temperature_fit.psi_norm
-  core_profiles.profiles_1d.ion.1.temperature_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.1.temperature_fit.rho_tor_norm
-  core_profiles.profiles_1d.ion.1.temperature_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.1.temperature_fit.measured_error_upper
+  # Ion profiles
+  core_profiles.profiles_1d.ion.rotation_frequency_tor: core_profiles.profiles_1d.:.ion.:.rotation_frequency_tor
+  core_profiles.profiles_1d.ion.density_fit.measured: core_profiles.profiles_1d.:.ion.:.density_fit.measured
+  core_profiles.profiles_1d.ion.density_fit.psi_norm: core_profiles.profiles_1d.:.ion.:.density_fit.psi_norm
+  core_profiles.profiles_1d.ion.density_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.:.density_fit.rho_tor_norm
+  core_profiles.profiles_1d.ion.density_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.:.density_fit.measured_error_upper
+  core_profiles.profiles_1d.ion.temperature_fit.measured: core_profiles.profiles_1d.:.ion.:.temperature_fit.measured
+  core_profiles.profiles_1d.ion.temperature_fit.psi_norm: core_profiles.profiles_1d.:.ion.:.temperature_fit.psi_norm
+  core_profiles.profiles_1d.ion.temperature_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.:.temperature_fit.rho_tor_norm
+  core_profiles.profiles_1d.ion.temperature_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.:.temperature_fit.measured_error_upper
 
   # E-field (OMFIT_PROFS only)
   core_profiles.profiles_1d.e_field.radial: core_profiles.profiles_1d.:.e_field.radial

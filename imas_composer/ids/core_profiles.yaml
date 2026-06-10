@@ -1,20 +1,31 @@
 # Core Profiles IDS Configuration for DIII-D
-
-# Static values (hardcoded, not from MDSplus)
-static_values:
-  ids_properties.homogeneous_time: 1
+#
+# This file provides shared defaults used by conftest.py.
+# Mapper-specific field lists and ion definitions live in:
+#   core_profiles_omfit.yaml   (OMFIT_PROFS tree)
+#   core_profiles_zipfit.yaml  (ZIPFIT* trees)
 
 # Profiles tree configuration
 # Default to ZIPFIT01
 default_profiles_tree: ZIPFIT01
 default_profiles_run_id: '001'
 
-# Supported fields (complete list of implemented IDS paths)
-# Fields can be specified as:
-#   - Simple string: field available for all trees
-#   - Dict with 'field' and 'trees': field available only for specified trees
-#
-# Available trees: ZIPFIT, OMFIT_PROFS
+# Static values (hardcoded, not from MDSplus)
+static_values:
+  ids_properties.homogeneous_time: 1
+
+# Ion species mapping (order defines the ion array index in ak.Array outputs)
+ions:
+  - label: D
+    z_n: 1.0
+    a: 2.0141
+  - label: C
+    z_n: 6.0
+    a: 12.011
+
+# Reference field list (union of OMFIT and ZIPFIT supported fields)
+# Ion fields use unified ion dimension (ak.Array [time, ion, rho/var])
+# instead of per-ion indexed paths like ion.0.* / ion.1.*
 fields:
   # Time - all trees
   - time
@@ -56,55 +67,41 @@ fields:
   - field: profiles_1d.electrons.temperature_fit.measured_error_upper
     trees: [OMFIT_PROFS]
 
-  # Ion[0] - Deuterium - all trees
-  - profiles_1d.ion.0.density_thermal
-  - profiles_1d.ion.0.temperature
-  - profiles_1d.ion.0.label
-  - profiles_1d.ion.0.element.0.z_n
-  - profiles_1d.ion.0.element.0.a
+  # Ions (unified ion dimension - ak.Array [time, ion, rho])
+  # Ion ordering: D=index 0, C=index 1 (from `ions:` section above)
+  - profiles_1d.ion.density_thermal
+  - profiles_1d.ion.temperature
+  - profiles_1d.ion.label
+  - profiles_1d.ion.element.z_n
+  - profiles_1d.ion.element.a
 
-  # Ion[0] - OMFIT_PROFS only (uncertainties)
-  - field: profiles_1d.ion.0.density_thermal_error_upper
+  # Ions - OMFIT_PROFS only (uncertainties)
+  - field: profiles_1d.ion.density_thermal_error_upper
     trees: [OMFIT_PROFS]
-  - field: profiles_1d.ion.0.temperature_error_upper
-    trees: [OMFIT_PROFS]
-
-  # Ion[1] - Carbon - all trees
-  - profiles_1d.ion.1.density_thermal
-  - profiles_1d.ion.1.temperature
-
-  # Ion[1] - OMFIT_PROFS only (uncertainties)
-  - field: profiles_1d.ion.1.density_thermal_error_upper
-    trees: [OMFIT_PROFS]
-  - field: profiles_1d.ion.1.temperature_error_upper
+  - field: profiles_1d.ion.temperature_error_upper
     trees: [OMFIT_PROFS]
 
-  # Ion[1] - OMFIT_PROFS only (fit fields - raw measurements)
-  - field: profiles_1d.ion.1.density_fit.measured
+  # Ions - OMFIT_PROFS only (fit fields; D has empty arrays, C has measured data)
+  - field: profiles_1d.ion.density_fit.measured
     trees: [OMFIT_PROFS]
-  - field: profiles_1d.ion.1.density_fit.psi_norm
+  - field: profiles_1d.ion.density_fit.psi_norm
     trees: [OMFIT_PROFS]
-  - field: profiles_1d.ion.1.density_fit.rho_tor_norm
+  - field: profiles_1d.ion.density_fit.rho_tor_norm
     trees: [OMFIT_PROFS]
-  - field: profiles_1d.ion.1.density_fit.measured_error_upper
+  - field: profiles_1d.ion.density_fit.measured_error_upper
     trees: [OMFIT_PROFS]
-  - field: profiles_1d.ion.1.temperature_fit.measured
+  - field: profiles_1d.ion.temperature_fit.measured
     trees: [OMFIT_PROFS]
-  - field: profiles_1d.ion.1.temperature_fit.psi_norm
+  - field: profiles_1d.ion.temperature_fit.psi_norm
     trees: [OMFIT_PROFS]
-  - field: profiles_1d.ion.1.temperature_fit.rho_tor_norm
+  - field: profiles_1d.ion.temperature_fit.rho_tor_norm
     trees: [OMFIT_PROFS]
-  - field: profiles_1d.ion.1.temperature_fit.measured_error_upper
+  - field: profiles_1d.ion.temperature_fit.measured_error_upper
     trees: [OMFIT_PROFS]
 
-  # Ion[1] - Carbon rotation - ZIPFIT only
-  - field: profiles_1d.ion.1.rotation_frequency_tor
+  # Ions - ZIPFIT only (rotation: D=NaN, C from TROTFIT)
+  - field: profiles_1d.ion.rotation_frequency_tor
     trees: [ZIPFIT]
-
-  # Ion[1] - Carbon metadata - all trees
-  - profiles_1d.ion.1.label
-  - profiles_1d.ion.1.element.0.z_n
-  - profiles_1d.ion.1.element.0.a
 
   # E-field - OMFIT_PROFS only
   - field: profiles_1d.e_field.radial
