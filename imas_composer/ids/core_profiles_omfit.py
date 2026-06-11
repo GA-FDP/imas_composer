@@ -20,16 +20,16 @@ class CoreProfilesOmfitMapper(IDSMapper):
     DOCS_PATH = "core_profiles_omfit.yaml"
     CONFIG_PATH = "core_profiles_omfit.yaml"
 
-    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', run_id: str = '001', **kwargs):
+    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', profiles_run_id: str = '001', **kwargs):
         """
         Initialize CoreProfilesOMFITMapper.
 
         Args:
             omfit_tree: OMFIT tree to use (default: 'OMFIT_PROFS')
-            run_id: Run ID to append to pulse for OMFIT_PROFS tree (default: '001')
+            profiles_run_id: Run ID to append to pulse for OMFIT_PROFS tree (default: '001')
         """
         self.omfit_tree = omfit_tree
-        self.run_id = run_id
+        self.run_id = profiles_run_id
 
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
