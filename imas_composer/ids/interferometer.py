@@ -22,7 +22,7 @@ class InterferometerMapper(IDSMapper):
 
     Supports two systems:
     - CO2 Interferometer (BCI tree): 4 channels (r0, v1, v2, v3)
-    - Radial Interferometer Polarimeter (RIP tree): 3-4 channels (Z, P, N, [T])
+    - Radial Interferometer Polarimeter (RPI tree): 3-4 channels (Z, P, N, [T])
       - RIP only available for shots >= 168823
       - T channel only available for shots > 202680
     """
@@ -286,6 +286,49 @@ class InterferometerMapper(IDSMapper):
             depends_on=error_deps,
             compose=self._compose_n_e_line_error,
             ids_path="interferometer.channel.n_e_line.error",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Interlock signal from ECSDENSF ptdata2 pointname
+        self.specs["interferometer._interlock_signal_data"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=[],
+            derive_requirements=lambda shot, raw:
+                [Requirement(f'ptdata2("ECSDENSF",{shot})', shot, None)],
+            ids_path="interferometer._interlock_signal_data",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["interferometer._interlock_signal_time"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=[],
+            derive_requirements=lambda shot, raw:
+                [Requirement(f'dim_of(ptdata2("ECSDENSF",{shot}),0)', shot, None)],
+            ids_path="interferometer._interlock_signal_time",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["interferometer.interlock_signal.name"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[],
+            compose=self._compose_interlock_signal_name,
+            ids_path="interferometer.interlock_signal.name",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["interferometer.interlock_signal.time"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["interferometer._interlock_signal_time"],
+            compose=self._compose_interlock_signal_time,
+            ids_path="interferometer.interlock_signal.time",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["interferometer.interlock_signal.data"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["interferometer._interlock_signal_data"],
+            compose=self._compose_interlock_signal_data,
+            ids_path="interferometer.interlock_signal.data",
             docs_file=self.DOCS_PATH
         )
 
@@ -890,6 +933,21 @@ class InterferometerMapper(IDSMapper):
 
         # Return as awkward array if time bases differ
         return ak.Array(all_validity)
+
+    def _compose_interlock_signal_name(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Return 1D array of interlock signal names."""
+        return np.array(["ECSDENSF"])
+
+    def _compose_interlock_signal_time(self, shot: int, raw_data: dict) -> ak.Array:
+        """Return 2D awkward array of interlock signal times, shape (1, n_time). Time in seconds."""
+        time_key = Requirement(f'dim_of(ptdata2("ECSDENSF",{shot}),0)', shot, None).as_key()
+        time_ms = raw_data[time_key]
+        return ak.Array([time_ms / 1.0e3])
+
+    def _compose_interlock_signal_data(self, shot: int, raw_data: dict) -> ak.Array:
+        """Return 2D awkward array of interlock signal data, shape (1, n_time)."""
+        data_key = Requirement(f'ptdata2("ECSDENSF",{shot})', shot, None).as_key()
+        return ak.Array([raw_data[data_key]])
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         """Return all IDS entry specifications"""

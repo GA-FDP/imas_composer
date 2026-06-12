@@ -7,7 +7,10 @@ override_shots: [200000, 203886]
 
 # Fields to skip OMAS comparison for (composer still tested)
 # Format: field_path: "reason for skipping"
-skip_fields: {}
+skip_fields:
+  interferometer.interlock_signal.name: "not in OMAS"
+  interferometer.interlock_signal.time: "not in OMAS"
+  interferometer.interlock_signal.data: "not in OMAS"
 
 field_tolerances:
   interferometer.channel.n_e_line.data:
