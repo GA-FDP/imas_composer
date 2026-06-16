@@ -89,6 +89,18 @@ class ChargeExchangeMapper(IDSMapper):
         """MDSplus path for bulk CONCEN_ERR (ion fraction uncertainty) — flattened array covering all channels."""
         return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.ERR_CONCEN'
 
+    def _impdens_path(self) -> str:
+        """MDSplus path for bulk IMPDENS (ion density) data — flattened array covering all channels."""
+        return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.IMPDENS'
+
+    def _impdens_time_path(self) -> str:
+        """MDSplus dim_of for IMPDENS time axis (seconds)."""
+        return f'dim_of({self._impdens_path()}, 0)/1000'
+
+    def _impdens_err_path(self) -> str:
+        """MDSplus path for bulk ERR_IMPDENS (ion density uncertainty) — flattened array covering all channels."""
+        return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.ERR_IMPDENS'
+
     def _impdens_indices_path(self) -> str:
         """MDSplus path for INDECIES — maps bulk array columns to CER channel numbers."""
         return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.INDECIES'
@@ -279,6 +291,27 @@ class ChargeExchangeMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        self.specs["charge_exchange._impdens"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(self._impdens_path(), 0, 'IONS')],
+            ids_path="charge_exchange._impdens",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange._impdens_time"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(self._impdens_time_path(), 0, 'IONS')],
+            ids_path="charge_exchange._impdens_time",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange._impdens_err"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(self._impdens_err_path(), 0, 'IONS')],
+            ids_path="charge_exchange._impdens_err",
+            docs_file=self.DOCS_PATH
+        )
+
         self.specs["charge_exchange._impdens_indices"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[Requirement(self._impdens_indices_path(), 0, 'IONS')],
@@ -417,6 +450,30 @@ class ChargeExchangeMapper(IDSMapper):
             depends_on=_active_deps + ["charge_exchange._concen_err"] + _impdens_deps,
             compose=self._compose_n_i_over_n_e_error,
             ids_path="charge_exchange.channel.ion.n_i_over_n_e.data_error_upper",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange.channel.ion.n_i.data"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=_active_deps + ["charge_exchange._impdens"] + _impdens_deps,
+            compose=self._compose_n_i_data,
+            ids_path="charge_exchange.channel.ion.n_i.data",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange.channel.ion.n_i.time"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=_active_deps + ["charge_exchange._impdens_time"] + _impdens_deps,
+            compose=self._compose_n_i_time,
+            ids_path="charge_exchange.channel.ion.n_i.time",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange.channel.ion.n_i.data_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=_active_deps + ["charge_exchange._impdens_err"] + _impdens_deps,
+            compose=self._compose_n_i_error,
+            ids_path="charge_exchange.channel.ion.n_i.data_error_upper",
             docs_file=self.DOCS_PATH
         )
 
@@ -791,6 +848,57 @@ class ChargeExchangeMapper(IDSMapper):
             ind = slice(indices[ich],indices[ich+1])
             val = np.atleast_1d(concen_err[ind])
             result.append(val * 1.e-2  if len(val) > 0 else np.array([]))
+        return ak.Array(result)[:, None,...]
+
+    def _compose_n_i_data(self, shot: int, raw_data: dict) -> ak.Array:
+        """Compose ion density time series per channel.
+
+        Data source: IMPDENS bulk flattened array (all channels), indexed via INDECIES and ARRAY_ORDER.
+        """
+        active = self._get_active_channels(shot, raw_data)
+        impdens = self._lookup(raw_data, shot, self._impdens_path())
+        indices = self._lookup(raw_data, shot, self._impdens_indices_path())
+        array_order = self._get_array_order(shot, raw_data)
+        result = []
+        for sub, ch in active:
+            ich = array_order.index(f'{sub[0:4]}{ch}')
+            ind = slice(indices[ich], indices[ich+1])
+            val = np.atleast_1d(impdens[ind])
+            result.append(val if len(val) > 0 else np.array([]))
+        return ak.Array(result)[:, None,...]
+
+    def _compose_n_i_time(self, shot: int, raw_data: dict) -> ak.Array:
+        """Compose ion density time arrays per channel (in seconds).
+
+        Data source: dim_of(IMPDENS) time axis, indexed via INDECIES and ARRAY_ORDER.
+        """
+        active = self._get_active_channels(shot, raw_data)
+        impdens_time = self._lookup(raw_data, shot, self._impdens_time_path())
+        indices = self._lookup(raw_data, shot, self._impdens_indices_path())
+        array_order = self._get_array_order(shot, raw_data)
+        result = []
+        for sub, ch in active:
+            ich = array_order.index(f'{sub[0:4]}{ch}')
+            ind = slice(indices[ich], indices[ich+1])
+            val = np.atleast_1d(impdens_time[ind])
+            result.append(val if len(val) > 0 else np.array([]))
+        return ak.Array(result)[:, None,...]
+
+    def _compose_n_i_error(self, shot: int, raw_data: dict) -> ak.Array:
+        """Compose ion density upper uncertainty per channel.
+
+        Data source: ERR_IMPDENS bulk flattened array, indexed via INDECIES and ARRAY_ORDER.
+        """
+        active = self._get_active_channels(shot, raw_data)
+        impdens_err = self._lookup(raw_data, shot, self._impdens_err_path())
+        indices = self._lookup(raw_data, shot, self._impdens_indices_path())
+        array_order = self._get_array_order(shot, raw_data)
+        result = []
+        for sub, ch in active:
+            ich = array_order.index(f'{sub[0:4]}{ch}')
+            ind = slice(indices[ich], indices[ich+1])
+            val = np.atleast_1d(impdens_err[ind])
+            result.append(val if len(val) > 0 else np.array([]))
         return ak.Array(result)[:, None,...]
 
     def _compose_zeff_data(self, shot: int, raw_data: dict) -> ak.Array:

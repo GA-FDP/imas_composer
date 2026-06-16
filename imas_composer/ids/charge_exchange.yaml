@@ -27,6 +27,9 @@ fields:
   - channel.ion.n_i_over_n_e.data
   - channel.ion.n_i_over_n_e.data_error_upper
   - channel.ion.n_i_over_n_e.time
+  - channel.ion.n_i.data
+  - channel.ion.n_i.data_error_upper
+  - channel.ion.n_i.time
   - channel.ion.t_i.data
 # error is not yet an IMAS field (planned to be an expansion/decomposition of data_error_upper)
 # it has 2 elements with the first being the statistical error and the second the systematic error (data_error_upper is the sum)
