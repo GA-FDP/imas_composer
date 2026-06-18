@@ -159,6 +159,28 @@ class DataLoader(QtCore.QThread):
             self.error.emit(traceback.format_exc())
 
 
+RDB_TIMEOUT_MS = 10_000
+
+
+class D3DrdbWorker(QtCore.QThread):
+    """Runs a single D3DRDB callable in a background thread."""
+
+    finished = QtCore.Signal(object)  # emits the return value on success
+    error    = QtCore.Signal(str)     # emits formatted traceback on failure
+
+    def __init__(self, fn, *args, **kwargs):
+        super().__init__()
+        self._fn = fn
+        self._args = args
+        self._kwargs = kwargs
+
+    def run(self):
+        try:
+            self.finished.emit(self._fn(*self._args, **self._kwargs))
+        except Exception:
+            self.error.emit(traceback.format_exc())
+
+
 # ---------------------------------------------------------------------------
 # Plotting helpers
 # ---------------------------------------------------------------------------
@@ -476,6 +498,9 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         self._data: Optional[Dict[str, Any]] = None
         self._loader: Optional[DataLoader] = None
+        self._rdb_worker: Optional[D3DrdbWorker] = None
+        self._rdb_timeout: Optional[QtCore.QTimer] = None
+        self._pending_load_params: Optional[tuple] = None
         self._shot = shot
         self._flavor = flavor
 
@@ -557,6 +582,12 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         row1.addStretch()
         root.addLayout(row1)
 
+        # Reset run IDs when the context that determined them changes
+        self._shot_spin.valueChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=True))
+        self._flavor_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=True))
+        self._efit_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=False))
+        self._prof_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=False, prof=True))
+
         # ---- status bar ----
         self._status_label = QtWidgets.QLabel('Ready')
         self._status_label.setStyleSheet('color: grey; font-style: italic;')
@@ -610,46 +641,118 @@ class IriCakeViewer(QtWidgets.QMainWindow):
     # Fetch logic
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # D3DRDB helpers (non-blocking)
+    # ------------------------------------------------------------------
+
+    def _start_rdb_worker(self, fn, *args, status_msg: str = 'Querying D3DRDB…', **kwargs):
+        """Launch *fn* in a D3DrdbWorker with a 10-second timeout watchdog."""
+        self._cancel_rdb_worker()
+        self._set_buttons_enabled(False)
+        self._status_label.setStyleSheet('color: grey; font-style: italic;')
+        self._status_label.setText(status_msg)
+
+        self._rdb_worker = D3DrdbWorker(fn, *args, **kwargs)
+
+        self._rdb_timeout = QtCore.QTimer(singleShot=True)
+        self._rdb_timeout.timeout.connect(self._on_rdb_timeout)
+        self._rdb_timeout.start(RDB_TIMEOUT_MS)
+
+        return self._rdb_worker
+
+    def _cancel_rdb_worker(self):
+        """Stop the timeout and disconnect any in-flight rdb worker signals."""
+        if self._rdb_timeout is not None:
+            self._rdb_timeout.stop()
+            self._rdb_timeout = None
+        if self._rdb_worker is not None:
+            for sig in (self._rdb_worker.finished, self._rdb_worker.error):
+                try:
+                    sig.disconnect()
+                except RuntimeError:
+                    pass
+            self._rdb_worker = None
+
+    def _on_rdb_timeout(self):
+        self._cancel_rdb_worker()
+        self._set_buttons_enabled(True)
+        self._status_label.setStyleSheet('color: orange; font-weight: bold;')
+        self._status_label.setText(
+            'D3DRDB connection timed out (10 s). '
+            'Check network, or enter EFIT / profile run IDs manually.'
+        )
+
+    def _on_rdb_error(self, msg: str):
+        self._cancel_rdb_worker()
+        self._set_buttons_enabled(True)
+        last_line = msg.strip().splitlines()[-1]
+        self._status_label.setStyleSheet('color: red; font-style: italic;')
+        self._status_label.setText(f'D3DRDB error: {last_line}')
+        print(msg, file=sys.stderr)
+
+    # ------------------------------------------------------------------
+    # Fetch actions
+    # ------------------------------------------------------------------
+
     def _fetch_latest(self):
-        self._status_label.setText('Querying D3DRDB for latest shot…')
-        QtWidgets.QApplication.processEvents()
-        try:
-            shot, prof_id, eq_id, comment = get_max_iri_shot_and_ids()
-        except Exception as e:
-            self._status_label.setText(f'D3DRDB error: {e}')
-            return
+        worker = self._start_rdb_worker(
+            get_max_iri_shot_and_ids,
+            status_msg='Querying D3DRDB for latest shot…',
+        )
+        worker.finished.connect(self._on_latest_found)
+        worker.error.connect(self._on_rdb_error)
+        worker.start()
+
+    def _on_latest_found(self, result):
+        self._cancel_rdb_worker()
+        shot, prof_id, eq_id, _comment = result
+        # Block reset-triggering signals while populating fields programmatically
+        for w in (self._shot_spin, self._efit_combo, self._prof_combo):
+            w.blockSignals(True)
         self._shot_spin.setValue(shot)
-        self._efit_id_edit.setText(eq_id)
-        self._prof_id_edit.setText(prof_id)
         self._efit_combo.setCurrentText('EFIT')
         self._prof_combo.setCurrentText('OMFIT_PROFS')
+        self._efit_id_edit.setText(eq_id)
+        self._prof_id_edit.setText(prof_id)
+        for w in (self._shot_spin, self._efit_combo, self._prof_combo):
+            w.blockSignals(False)
         self._start_load(shot, 'EFIT', eq_id, 'OMFIT_PROFS', prof_id)
 
     def _trigger_fetch_shot(self):
-        shot = self._shot_spin.value()
-        flavor = self._flavor_combo.currentText()
+        shot      = self._shot_spin.value()
+        flavor    = self._flavor_combo.currentText()
+        eq_id     = self._efit_id_edit.text().strip()
+        prof_id   = self._prof_id_edit.text().strip()
+        efit_tree = self._efit_combo.currentText().strip() or 'EFIT'
+        prof_tree = self._prof_combo.currentText().strip() or 'OMFIT_PROFS'
 
-        eq_id   = self._efit_id_edit.text().strip()
-        prof_id = self._prof_id_edit.text().strip()
-        efit_tree  = self._efit_combo.currentText().strip() or 'EFIT'
-        prof_tree  = self._prof_combo.currentText().strip() or 'OMFIT_PROFS'
+        if eq_id and prof_id:
+            # Both IDs already provided — skip D3DRDB entirely
+            self._start_load(shot, efit_tree, eq_id, prof_tree, prof_id)
+            return
 
-        # Auto-lookup IDs from D3DRDB if not manually set
-        if not eq_id or not prof_id:
-            self._status_label.setText(f'Querying D3DRDB for shot {shot}…')
-            QtWidgets.QApplication.processEvents()
-            try:
-                auto_prof, auto_eq = get_iri_upload_ids(shot, flavor)
-                if not prof_id:
-                    prof_id = auto_prof
-                    self._prof_id_edit.setText(prof_id)
-                if not eq_id:
-                    eq_id = auto_eq
-                    self._efit_id_edit.setText(eq_id)
-            except Exception as e:
-                self._status_label.setText(f'D3DRDB lookup failed: {e}')
-                if not eq_id or not prof_id:
-                    return
+        # Save the non-ID params so _on_ids_found can complete the load
+        self._pending_load_params = (shot, efit_tree, prof_tree, eq_id, prof_id)
+        worker = self._start_rdb_worker(
+            get_iri_upload_ids, shot, flavor,
+            status_msg=f'Querying D3DRDB for shot {shot}…',
+        )
+        worker.finished.connect(self._on_ids_found)
+        worker.error.connect(self._on_rdb_error)
+        worker.start()
+
+    def _on_ids_found(self, result):
+        self._cancel_rdb_worker()
+        auto_prof, auto_eq = result
+        shot, efit_tree, prof_tree, eq_id, prof_id = self._pending_load_params
+        self._pending_load_params = None
+
+        if not eq_id:
+            eq_id = auto_eq
+            self._efit_id_edit.setText(eq_id)
+        if not prof_id:
+            prof_id = auto_prof
+            self._prof_id_edit.setText(prof_id)
 
         self._start_load(shot, efit_tree, eq_id, prof_tree, prof_id)
 
@@ -659,10 +762,15 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             self._loader.wait()
 
         self._set_buttons_enabled(False)
+        self._status_label.setStyleSheet('color: grey; font-style: italic;')
         self._status_label.setText(
             f'Loading shot {shot}  EFIT={efit_tree}{efit_run_id}  '
             f'PROFS={profiles_tree}{profiles_run_id}…'
         )
+        # Restore axes visibility in case a previous fetch showed an error
+        for ax in (self._ax_cx, self._ax_ne, self._ax_ni,
+                   self._ax_te, self._ax_ti, self._ax_jtor, self._ax_pres):
+            ax.set_visible(True)
 
         self._loader = DataLoader(shot, efit_tree, efit_run_id, profiles_tree, profiles_run_id)
         self._loader.status.connect(self._status_label.setText)
@@ -683,6 +791,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             self._time_slider.setMaximum(0)
             self._time_slider.setValue(0)
 
+        self._status_label.setStyleSheet('color: grey; font-style: italic;')
         self._status_label.setText(
             f'Loaded shot {self._shot_spin.value()}  —  '
             f'{len(np.asarray(times)) if times is not None else 0} time slices'
@@ -691,8 +800,30 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
     def _on_load_error(self, msg: str):
         self._set_buttons_enabled(True)
-        self._status_label.setText('Load error — see console')
         print(msg, file=sys.stderr)
+        self._show_fetch_error(msg)
+
+    def _show_fetch_error(self, msg: str):
+        """Clear all plot axes and show a concise error in the status bar."""
+        last_line = msg.strip().splitlines()[-1]
+        self._status_label.setStyleSheet('color: red; font-style: italic;')
+        self._status_label.setText('Load error - see console')
+
+        for ax in (self._ax_cx, self._ax_ne, self._ax_ni,
+                   self._ax_te, self._ax_ti, self._ax_jtor, self._ax_pres):
+            ax.clear()
+            ax.set_visible(False)
+
+        self._title_text.set_text('Load error - see console')
+        # Remove any stale figure-level text left from a previous error
+        self._fig.texts = [t for t in self._fig.texts if t is self._title_text]
+        self._canvas.draw_idle()
+
+    def _reset_run_ids(self, *, efit: bool, prof: bool):
+        if efit:
+            self._efit_id_edit.clear()
+        if prof:
+            self._prof_id_edit.clear()
 
     def _set_buttons_enabled(self, enabled: bool):
         self._fetch_btn.setEnabled(enabled)
