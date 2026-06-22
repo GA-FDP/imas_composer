@@ -93,6 +93,9 @@ class D3DRDB:
             raise RuntimeError("pyodbc is required: pip install pyodbc")
 
         driver = _find_tds_driver()
+        # Use TDS 7.0 for compatibility with d3drdb.gat.com
+        # Note: TDS 8.0 worked on RHEL but not WSL Ubuntu with FreeTDS 1.5.18+
+        # Newer FreeTDS versions require explicit Encrypt=no for unencrypted connections
         conn_str = (
             f"DRIVER={{{driver}}};"
             f"SERVER={SERVER};"
@@ -100,7 +103,7 @@ class D3DRDB:
             f"DATABASE={DATABASE};"
             f"UID={self._username};"
             f"PWD={self._password};"
-            "TDS_Version=8.0;"
+            "TDS_Version=7.0;"
             "Login Timeout=30;"
         )
         self._cnxn = pyodbc.connect(conn_str)
