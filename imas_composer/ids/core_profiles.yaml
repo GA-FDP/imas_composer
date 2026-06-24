@@ -99,6 +99,20 @@ fields:
   - field: profiles_1d.ion.temperature_fit.measured_error_upper
     trees: [OMFIT_PROFS]
 
+  # Ions - OMFIT_PROFS only (toroidal velocity; D and C share V_TOR_C, fit fields C-only)
+  - field: profiles_1d.ion.velocity.toroidal
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.ion.velocity.toroidal_error_upper
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.ion.velocity.toroidal_fit.measured
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.ion.velocity.toroidal_fit.psi_norm
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.ion.velocity.toroidal_fit.rho_tor_norm
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.ion.velocity.toroidal_fit.measured_error_upper
+    trees: [OMFIT_PROFS]
+
   # Ions - ZIPFIT only (rotation: D=NaN, C from TROTFIT)
   - field: profiles_1d.ion.rotation_frequency_tor
     trees: [ZIPFIT]

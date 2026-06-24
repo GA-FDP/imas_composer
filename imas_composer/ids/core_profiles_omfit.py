@@ -73,6 +73,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
             'ion_temperature': '\\TOP.T_D',
             'deuterium_density': '\\TOP.N_D',
             'carbon_density': '\\TOP.N_C',
+            'velocity_toroidal': '\\TOP.V_TOR_C',
         }
 
         if field_type not in path_map:
@@ -131,6 +132,10 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # Deuterium density - OMFIT_PROFS only
         self.specs["core_profiles.profiles_1d._deuterium_density_data"] = self._create_profile_field_spec(
             '_deuterium_density_data', 'deuterium_density')
+
+        # Carbon toroidal velocity - data only (both D and C use V_TOR_C)
+        self.specs["core_profiles.profiles_1d._velocity_toroidal_data"] = self._create_profile_field_spec(
+            '_velocity_toroidal_data', 'velocity_toroidal')
 
         # ============================================================
         # Uncertainty fields - OMFIT_PROFS only
@@ -193,6 +198,16 @@ class CoreProfilesOmfitMapper(IDSMapper):
                 Requirement('error_of(\\TOP.T_C)', self._get_pulse_id(shot), self.omfit_tree)
             ],
             ids_path="core_profiles.profiles_1d._carbon_temperature_error",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Toroidal velocity uncertainty (same for D and C)
+        self.specs["core_profiles.profiles_1d._velocity_toroidal_error"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('error_of(\\TOP.V_TOR_C)', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._velocity_toroidal_error",
             docs_file=self.DOCS_PATH
         )
 
@@ -311,6 +326,32 @@ class CoreProfilesOmfitMapper(IDSMapper):
                 Requirement('error_of(\\TOP.RW_T_C)', self._get_pulse_id(shot), self.omfit_tree)
             ],
             ids_path="core_profiles.profiles_1d._carbon_temperature_fit_error",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Carbon toroidal velocity fit fields
+        self.specs["core_profiles.profiles_1d._carbon_velocity_fit_measured"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('\\TOP.RW_V_TOR_C', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._carbon_velocity_fit_measured",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d._carbon_velocity_fit_psi_norm"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('\\TOP.PS_V_TOR_C', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._carbon_velocity_fit_psi_norm",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d._carbon_velocity_fit_error"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('error_of(\\TOP.RW_V_TOR_C)', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._carbon_velocity_fit_error",
             docs_file=self.DOCS_PATH
         )
 
@@ -701,6 +742,84 @@ class CoreProfilesOmfitMapper(IDSMapper):
         )
 
         # ============================================================
+        # Ion toroidal velocity (OMFIT_PROFS only)
+        # Both D and C carry V_TOR_C (d3d.py copies ion[1] -> ion[0]);
+        # fit fields are C-only (D empty)
+        # ============================================================
+
+        # ion.velocity.toroidal: both D and C use V_TOR_C
+        self.specs["core_profiles.profiles_1d.ion.velocity.toroidal"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._velocity_toroidal_data",
+                "core_profiles.profiles_1d._omfit_rho"
+            ],
+            compose=self._compose_all_ion_velocity_toroidal,
+            ids_path="core_profiles.profiles_1d.ion.velocity.toroidal",
+            docs_file=self.DOCS_PATH
+        )
+
+        # ion.velocity.toroidal_error_upper: both D and C use error_of(V_TOR_C)
+        self.specs["core_profiles.profiles_1d.ion.velocity.toroidal_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._velocity_toroidal_error",
+                "core_profiles.profiles_1d._omfit_rho"
+            ],
+            compose=self._compose_all_ion_velocity_error,
+            ids_path="core_profiles.profiles_1d.ion.velocity.toroidal_error_upper",
+            docs_file=self.DOCS_PATH
+        )
+
+        # ion.velocity.toroidal_fit.* fields (C from MDSplus, D empty)
+        self.specs["core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._carbon_velocity_fit_measured",
+                "core_profiles.profiles_1d._omfit_rho"
+            ],
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_velocity_fit_measured),
+            ids_path="core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d.ion.velocity.toroidal_fit.psi_norm"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._carbon_velocity_fit_psi_norm",
+                "core_profiles.profiles_1d._carbon_velocity_fit_measured"
+            ],
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_velocity_fit_psi_norm),
+            ids_path="core_profiles.profiles_1d.ion.velocity.toroidal_fit.psi_norm",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d.ion.velocity.toroidal_fit.rho_tor_norm"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._carbon_velocity_fit_psi_norm",
+                "core_profiles.profiles_1d._carbon_velocity_fit_measured",
+                "core_profiles.profiles_1d._omfit_psi_norm",
+                "core_profiles.profiles_1d._omfit_rho"
+            ],
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_velocity_fit_rho_tor_norm),
+            ids_path="core_profiles.profiles_1d.ion.velocity.toroidal_fit.rho_tor_norm",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._carbon_velocity_fit_error",
+                "core_profiles.profiles_1d._carbon_velocity_fit_measured"
+            ],
+            compose=lambda shot, raw: self._compose_all_fit_field(
+                shot, raw, self._compose_carbon_velocity_fit_error),
+            ids_path="core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured_error_upper",
+            docs_file=self.DOCS_PATH
+        )
+
+        # ============================================================
         # Time and metadata fields
         # ============================================================
 
@@ -818,6 +937,26 @@ class CoreProfilesOmfitMapper(IDSMapper):
         d_slices = self._apply_rho_mask(shot, raw_data, raw_data[d_key])
         c_slices = self._apply_rho_mask(shot, raw_data, raw_data[c_key])
         return self._stack_ions({'D': d_slices, 'C': c_slices})
+
+    def _compose_all_ion_velocity_toroidal(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose ion.velocity.toroidal for all ions: (n_time, n_ion, var_rho) ak.Array.
+
+        Both D and C use V_TOR_C (d3d.py copies ion[1] velocity to ion[0]).
+        """
+        data_key = Requirement('\\TOP.V_TOR_C', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        v_slices = self._apply_rho_mask(shot, raw_data, raw_data[data_key])
+        return self._stack_ions({ion['label']: v_slices for ion in self.ions})
+
+    def _compose_all_ion_velocity_error(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose ion.velocity.toroidal_error_upper for all ions: (n_time, n_ion, var_rho) ak.Array.
+
+        Both D and C use error_of(V_TOR_C).
+        """
+        v_err = self._compose_omfit_error_field(
+            shot, raw_data, "core_profiles.profiles_1d._velocity_toroidal_error")
+        return self._stack_ions({ion['label']: v_err for ion in self.ions})
 
     def _compose_all_ion_temperature_error(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
@@ -1596,4 +1735,36 @@ class CoreProfilesOmfitMapper(IDSMapper):
             shot, raw_data,
             "core_profiles.profiles_1d._carbon_temperature_fit_error",
             "core_profiles.profiles_1d._carbon_temperature_fit_measured"
+        )
+
+    # Carbon velocity_fit compose methods
+    def _compose_carbon_velocity_fit_measured(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """Compose ion[1].velocity.toroidal_fit.measured for OMFIT_PROFS."""
+        return self._compose_fit_measured(
+            shot, raw_data,
+            "core_profiles.profiles_1d._carbon_velocity_fit_measured"
+        )
+
+    def _compose_carbon_velocity_fit_psi_norm(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """Compose ion[1].velocity.toroidal_fit.psi_norm for OMFIT_PROFS."""
+        return self._compose_fit_psi_norm(
+            shot, raw_data,
+            "core_profiles.profiles_1d._carbon_velocity_fit_psi_norm",
+            "core_profiles.profiles_1d._carbon_velocity_fit_measured"
+        )
+
+    def _compose_carbon_velocity_fit_rho_tor_norm(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """Compose ion[1].velocity.toroidal_fit.rho_tor_norm for OMFIT_PROFS."""
+        return self._compose_fit_rho_tor_norm(
+            shot, raw_data,
+            "core_profiles.profiles_1d._carbon_velocity_fit_psi_norm",
+            "core_profiles.profiles_1d._carbon_velocity_fit_measured"
+        )
+
+    def _compose_carbon_velocity_fit_error(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """Compose ion[1].velocity.toroidal_fit.measured_error_upper for OMFIT_PROFS."""
+        return self._compose_fit_error(
+            shot, raw_data,
+            "core_profiles.profiles_1d._carbon_velocity_fit_error",
+            "core_profiles.profiles_1d._carbon_velocity_fit_measured"
         )
