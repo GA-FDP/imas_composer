@@ -5,9 +5,9 @@ Replicates the functionality of OMFIT-source/scripts/fetch_IRI_CAKE.py without
 any dependency on omas or omfit_classes.  Data is fetched via imas_composer's
 simple_load function; IRI run metadata is queried from D3DRDB via d3drdb.py.
 
-Layout (2 × 4 grid of subplots):
-  [Eq. CX   | ne (e)  | Te (e)  | j_tor OR convergence error ]
-  [  (tall) | ni (ion)| Ti (ion)| Pressure + constraints      ]
+Layout (2 × 5 grid of subplots):
+  [Eq. CX   | ne (e)  | Te (e)  | j_tor             | v_tor (ion) ]
+  [  (tall) | ni (ion)| Ti (ion)| convergence error | Pressure    ]
 
 Usage::
 
@@ -104,6 +104,17 @@ PROF_FIELDS = [
     'core_profiles.profiles_1d.electrons.temperature_fit.psi_norm',
     'core_profiles.profiles_1d.electrons.temperature_fit.measured',
     'core_profiles.profiles_1d.electrons.temperature_fit.measured_error_upper',
+    'core_profiles.profiles_1d.ion.density_fit.psi_norm',
+    'core_profiles.profiles_1d.ion.density_fit.measured',
+    'core_profiles.profiles_1d.ion.density_fit.measured_error_upper',
+    'core_profiles.profiles_1d.ion.temperature_fit.psi_norm',
+    'core_profiles.profiles_1d.ion.temperature_fit.measured',
+    'core_profiles.profiles_1d.ion.temperature_fit.measured_error_upper',
+    'core_profiles.profiles_1d.ion.velocity.toroidal',
+    'core_profiles.profiles_1d.ion.velocity.toroidal_error_upper',
+    'core_profiles.profiles_1d.ion.velocity.toroidal_fit.psi_norm',
+    'core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured',
+    'core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured_error_upper',
 ]
 
 
@@ -365,120 +376,100 @@ def plot_convergence_error(ax, data: Dict, t: int):
     ax.tick_params(labelsize=7)
 
 
-def _plot_profile(ax, x, y, yerr, fit_x, fit_y, fit_err, color_band, color_pts, title, xlabel, scale=1.0, clear_ax=True):
-    """Generic 1D profile plot with error band and raw-data error bars."""
+ION_COLORS = ['tab:green', 'tab:purple', 'tab:red', 'tab:blue', 'tab:orange', 'tab:brown']
+
+
+def _slice(arr, cp_t: int, ion_index: Optional[int] = None):
+    """Return arr[cp_t] (or arr[cp_t][ion_index]) as a numpy array, or None."""
+    if arr is None:
+        return None
+    try:
+        sub = arr[cp_t] if ion_index is None else arr[cp_t][ion_index]
+    except (TypeError, IndexError):
+        return None
+    return np.asarray(sub)
+
+
+def plot_profile_quantity(ax, data: Dict, cp_t: int, base: str, fit: Optional[str],
+                          color: str, title: str, scale: float = 1.0, *,
+                          ion_index: Optional[int] = None, clear_ax: bool = True):
+    """Plot one quantity of one species: smooth profile + band + raw fit points."""
     if clear_ax:
         ax.clear()
-    if x is not None and y is not None:
-        y_s = np.asarray(y) * scale
-        if yerr is not None:
-            ye_s = np.asarray(yerr) * scale
-            ax.fill_between(x, y_s - ye_s, y_s + ye_s, alpha=0.25, color=color_band)
-        ax.plot(x, y_s, color=color_band, linewidth=1.5)
 
-    if fit_x is not None and fit_y is not None and fit_err is not None:
-        fx = np.asarray(fit_x)
-        fy = np.asarray(fit_y) * scale
-        fe = np.asarray(fit_err) * scale
-        # remove NaNs and 100 % uncertainty points
-        mask = np.isfinite(fx) & np.isfinite(fy) & np.isfinite(fe)
-        mask[mask] &= np.abs(fe[mask]) < np.abs(fy[mask])
-        if mask.any():
-            ax.errorbar(fx[mask], fy[mask], fe[mask],
-                        fmt='.', color=color_pts, alpha=0.5, markersize=3,
-                        linewidth=0.5, zorder=-1)
+    x = _cp_psin(data, cp_t)
+    y = _slice(data.get(base), cp_t, ion_index)
+    if x is not None and y is not None:
+        y_s = y * scale
+        yerr = _slice(data.get(base + '_error_upper'), cp_t, ion_index)
+        if yerr is not None:
+            ye_s = yerr * scale
+            ax.fill_between(x, y_s - ye_s, y_s + ye_s, alpha=0.25, color=color)
+        ax.plot(x, y_s, color=color, linewidth=1.5)
+
+    if fit is not None:
+        fx = _slice(data.get(fit + '.psi_norm'), cp_t, ion_index)
+        fy = _slice(data.get(fit + '.measured'), cp_t, ion_index)
+        if fx is not None and fy is not None:
+            fy = fy * scale
+            fe = _slice(data.get(fit + '.measured_error_upper'), cp_t, ion_index)
+            mask = np.isfinite(fx) & np.isfinite(fy)
+            if fe is not None:
+                fe = fe * scale
+                # remove NaNs and 100 % uncertainty points
+                mask &= np.isfinite(fe)
+                mask[mask] &= np.abs(fe[mask]) < np.abs(fy[mask])
+            if mask.any():
+                if fe is not None:
+                    ax.errorbar(fx[mask], fy[mask], fe[mask],
+                                fmt='.', color=color, alpha=0.5, markersize=3,
+                                linewidth=0.5, zorder=-1)
+                else:
+                    ax.plot(fx[mask], fy[mask], '.', color=color, alpha=0.5,
+                            markersize=3, zorder=-1)
 
     ax.set_title(title, y=0.9, va='top', fontsize=9)
-    ax.set_xlabel(xlabel, fontsize=8)
+    ax.set_xlabel(r'$\Psi_\mathrm{n}$', fontsize=8)
     ax.tick_params(labelsize=7)
 
 
-def plot_electron_density(ax, data: Dict, cp_t: int):
-    x    = _cp_psin(data, cp_t)
-    y    = data.get('core_profiles.profiles_1d.electrons.density')
-    yerr = data.get('core_profiles.profiles_1d.electrons.density_error_upper')
-    fx   = data.get('core_profiles.profiles_1d.electrons.density_fit.psi_norm')
-    fy   = data.get('core_profiles.profiles_1d.electrons.density_fit.measured')
-    fe   = data.get('core_profiles.profiles_1d.electrons.density_fit.measured_error_upper')
-    _plot_profile(
-        ax,
-        x,
-        None if y is None else y[cp_t],
-        None if yerr is None else yerr[cp_t],
-        None if fx is None else fx[cp_t],
-        None if fy is None else fy[cp_t],
-        None if fe is None else fe[cp_t],
-        'tab:orange', 'tab:orange',
-        r'$n_e$ [$10^{19}$ m$^{-3}$]',
-        r'$\Psi_\mathrm{n}$',
-        scale=1e-19,
-    )
+def plot_ion_quantity(ax, data: Dict, cp_t: int, base: str, fit: Optional[str],
+                      title: str, scale: float = 1.0):
+    """Plot one ion quantity for every species, one colour per species."""
+    y = data.get(base)
+    if y is None:
+        return
+    for i in range(len(y[cp_t])):
+        plot_profile_quantity(
+            ax, data, cp_t, base, fit,
+            ION_COLORS[i], title, scale,
+            ion_index=i, clear_ax=not i,
+        )
 
 
-def plot_electron_temperature(ax, data: Dict, cp_t: int):
-    x    = _cp_psin(data, cp_t)
-    y    = data.get('core_profiles.profiles_1d.electrons.temperature')
-    yerr = data.get('core_profiles.profiles_1d.electrons.temperature_error_upper')
-    fx   = data.get('core_profiles.profiles_1d.electrons.temperature_fit.psi_norm')
-    fy   = data.get('core_profiles.profiles_1d.electrons.temperature_fit.measured')
-    fe   = data.get('core_profiles.profiles_1d.electrons.temperature_fit.measured_error_upper')
-    _plot_profile(
-        ax,
-        x,
-        None if y is None else y[cp_t],
-        None if yerr is None else yerr[cp_t],
-        None if fx is None else fx[cp_t],
-        None if fy is None else fy[cp_t],
-        None if fe is None else fe[cp_t],
-        'tab:orange', 'tab:orange',
-        r'$T_e$ [keV]',
-        r'$\Psi_\mathrm{n}$',
-        scale=1e-3,
-    )
-
-
-def plot_ion_density(ax, data: Dict, cp_t: int):
-    x    = _cp_psin(data, cp_t)
-    y    = data.get('core_profiles.profiles_1d.ion.density_thermal')
-    yerr = data.get('core_profiles.profiles_1d.ion.density_thermal_error_upper')
-    colors = ['tab:green','tab:purple','tab:red','tab:blue','tab:orange','tab:black']
-    if y is not None:
-        for i in range(len(y[cp_t])):
-            try:
-                err = yerr[cp_t][i]
-            except (TypeError, IndexError):
-                err = None
-            _plot_profile(
-                ax, x,
-                y[cp_t][i],
-                None if err is None else err,
-                None, None, None,
-                colors[i], colors[i],
-                r'$n_i$ [$10^{19}$ m$^{-3}$]',
-                r'$\Psi_\mathrm{n}$',
-                scale=1e-19,
-                clear_ax=not i
+def plot_ion_density(ax, ax2, data: Dict, cp_t: int):
+    """Ion density: main ion on the left axis, minorities (×100) on the twin axis."""
+    base = 'core_profiles.profiles_1d.ion.density_thermal'
+    fit  = 'core_profiles.profiles_1d.ion.density_fit'
+    y = data.get(base)
+    if y is None:
+        return
+    ax.clear()
+    ax2.clear()
+    for i in range(len(y[cp_t])):
+        if i == 0:
+            plot_profile_quantity(
+                ax, data, cp_t, base, fit, ION_COLORS[0],
+                r'$n_i$ [$10^{19}$ m$^{-3}$]', 1e-19,
+                ion_index=0, clear_ax=False,
             )
-
-
-def plot_ion_temperature(ax, data: Dict, cp_t: int):
-    x    = _cp_psin(data, cp_t)
-    y    = data.get('core_profiles.profiles_1d.ion.temperature')
-    yerr = data.get('core_profiles.profiles_1d.ion.temperature_error_upper')
-    colors = ['tab:green','tab:purple','tab:red','tab:blue','tab:orange','tab:black']
-    if y is not None:
-        for i in range(len(y[cp_t])):
-            _plot_profile(
-                ax, x,
-                y[cp_t][i],
-                None if yerr is None else yerr[cp_t][i],
-                None, None, None,
-                colors[i], colors[i],
-                r'$T_i$ [keV]',
-                r'$\Psi_\mathrm{n}$',
-                scale=1e-3,
-                clear_ax=not i
+        else:
+            plot_profile_quantity(
+                ax2, data, cp_t, base, fit, ION_COLORS[i],
+                '', 1e-17, ion_index=i, clear_ax=False,
             )
+    ax2.set_ylabel(r'$n_C\times100$ [$10^{19}$ m$^{-3}$]', fontsize=8, color=ION_COLORS[1])
+    ax2.tick_params(axis='y', labelsize=7, labelcolor=ION_COLORS[1])
 
 
 def _cp_psin(data: Dict, cp_t: int):
@@ -498,7 +489,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
     def __init__(self, shot: int = -1, flavor: str = 'CAKE_FDP'):
         super().__init__()
         self.setWindowTitle('IRI CAKE Viewer')
-        self.resize(1400, 700)
+        self.resize(1700, 700)
 
         self._data: Optional[Dict[str, Any]] = None
         self._loader: Optional[DataLoader] = None
@@ -579,10 +570,6 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._fetch_btn.clicked.connect(self._trigger_fetch_shot)
         row1.addWidget(self._fetch_btn)
 
-        self._error_mode_cb = QtWidgets.QCheckBox('Plot convergence error')
-        row1.addWidget(self._error_mode_cb)
-        self._error_mode_cb.stateChanged.connect(self._replot)
-
         row1.addStretch()
         root.addLayout(row1)
 
@@ -613,17 +600,17 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         root.addLayout(row2)
 
         # ---- matplotlib canvas ----
-        self._fig = Figure(figsize=(14, 5), tight_layout=True)
+        self._fig = Figure(figsize=(17, 5), tight_layout=True)
         self._canvas = FigureCanvas(self._fig)
         root.addWidget(self._canvas, stretch=1)
 
         self._build_axes()
 
     def _build_axes(self):
-        """Create the 2×4 subplot grid."""
+        """Create the 2×5 subplot grid."""
         self._fig.clf()
         gs = gridspec.GridSpec(
-            2, 4,
+            2, 5,
             figure=self._fig,
             left=0.05, right=0.98,
             top=0.93, bottom=0.10,
@@ -633,10 +620,13 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._ax_cx   = self._fig.add_subplot(gs[:, 0])
         self._ax_ne   = self._fig.add_subplot(gs[0, 1])
         self._ax_ni   = self._fig.add_subplot(gs[1, 1])
+        self._ax_ni2  = self._ax_ni.twinx()  # minority ion density (×100)
         self._ax_te   = self._fig.add_subplot(gs[0, 2])
         self._ax_ti   = self._fig.add_subplot(gs[1, 2])
-        self._ax_jtor = self._fig.add_subplot(gs[0, 3])  # or convergence error
-        self._ax_pres = self._fig.add_subplot(gs[1, 3])
+        self._ax_jtor = self._fig.add_subplot(gs[0, 3])
+        self._ax_conv = self._fig.add_subplot(gs[1, 3])
+        self._ax_vtor = self._fig.add_subplot(gs[0, 4])
+        self._ax_pres = self._fig.add_subplot(gs[1, 4])
 
         self._title_text = self._fig.text(0.5, 0.97, '', ha='center', va='top', fontsize=11)
         self._canvas.draw_idle()
@@ -772,8 +762,9 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             f'PROFS={profiles_tree}{profiles_run_id}…'
         )
         # Restore axes visibility in case a previous fetch showed an error
-        for ax in (self._ax_cx, self._ax_ne, self._ax_ni,
-                   self._ax_te, self._ax_ti, self._ax_jtor, self._ax_pres):
+        for ax in (self._ax_cx, self._ax_ne, self._ax_ni, self._ax_ni2,
+                   self._ax_te, self._ax_ti, self._ax_jtor, self._ax_conv,
+                   self._ax_vtor, self._ax_pres):
             ax.set_visible(True)
 
         self._loader = DataLoader(shot, efit_tree, efit_run_id, profiles_tree, profiles_run_id)
@@ -813,8 +804,9 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._status_label.setStyleSheet('color: red; font-style: italic;')
         self._status_label.setText('Load error - see console')
 
-        for ax in (self._ax_cx, self._ax_ne, self._ax_ni,
-                   self._ax_te, self._ax_ti, self._ax_jtor, self._ax_pres):
+        for ax in (self._ax_cx, self._ax_ne, self._ax_ni, self._ax_ni2,
+                   self._ax_te, self._ax_ti, self._ax_jtor, self._ax_conv,
+                   self._ax_vtor, self._ax_pres):
             ax.clear()
             ax.set_visible(False)
 
@@ -869,7 +861,6 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         t = self._time_slider.value()
         d = self._data
-        error_mode = self._error_mode_cb.isChecked()
 
         # Equilibrium time for core-profiles time-matching
         times_eq = d.get('equilibrium.time')
@@ -885,11 +876,23 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             self._ax_cx.text(0.5, 0.5, str(e), transform=self._ax_cx.transAxes,
                              ha='center', va='center', fontsize=7, wrap=True)
 
+        cp = 'core_profiles.profiles_1d'
         for fn, ax in [
-            (lambda ax: plot_electron_density(ax, d, cp_t),   self._ax_ne),
-            (lambda ax: plot_ion_density(ax, d, cp_t),        self._ax_ni),
-            (lambda ax: plot_electron_temperature(ax, d, cp_t), self._ax_te),
-            (lambda ax: plot_ion_temperature(ax, d, cp_t),    self._ax_ti),
+            (lambda ax: plot_profile_quantity(
+                ax, d, cp_t, f'{cp}.electrons.density', f'{cp}.electrons.density_fit',
+                'tab:orange', r'$n_e$ [$10^{19}$ m$^{-3}$]', 1e-19), self._ax_ne),
+            (lambda ax: plot_ion_density(self._ax_ni, self._ax_ni2, d, cp_t), self._ax_ni),
+            (lambda ax: plot_profile_quantity(
+                ax, d, cp_t, f'{cp}.electrons.temperature', f'{cp}.electrons.temperature_fit',
+                'tab:orange', r'$T_e$ [keV]', 1e-3), self._ax_te),
+            (lambda ax: plot_ion_quantity(
+                ax, d, cp_t, f'{cp}.ion.temperature', f'{cp}.ion.temperature_fit',
+                r'$T_i$ [keV]', 1e-3), self._ax_ti),
+            (lambda ax: plot_ion_quantity(
+                ax, d, cp_t, f'{cp}.ion.velocity.toroidal', f'{cp}.ion.velocity.toroidal_fit',
+                r'$v_\mathrm{tor}$ [km/s]', 1e-3), self._ax_vtor),
+            (lambda ax: plot_j_tor(ax, d, t),                 self._ax_jtor),
+            (lambda ax: plot_convergence_error(ax, d, t),     self._ax_conv),
             (lambda ax: plot_pressure(ax, d, t),              self._ax_pres),
         ]:
             try:
@@ -898,16 +901,6 @@ class IriCakeViewer(QtWidgets.QMainWindow):
                 ax.clear()
                 ax.text(0.5, 0.5, str(e), transform=ax.transAxes,
                         ha='center', va='center', fontsize=7, wrap=True)
-
-        try:
-            if error_mode:
-                plot_convergence_error(self._ax_jtor, d, t)
-            else:
-                plot_j_tor(self._ax_jtor, d, t)
-        except Exception as e:
-            self._ax_jtor.clear()
-            self._ax_jtor.text(0.5, 0.5, str(e), transform=self._ax_jtor.transAxes,
-                               ha='center', va='center', fontsize=7, wrap=True)
 
         # Title
         if times_eq is not None and t < len(times_eq):
