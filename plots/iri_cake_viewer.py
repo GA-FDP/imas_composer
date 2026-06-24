@@ -104,6 +104,7 @@ PROF_FIELDS = [
     'core_profiles.profiles_1d.electrons.temperature_fit.psi_norm',
     'core_profiles.profiles_1d.electrons.temperature_fit.measured',
     'core_profiles.profiles_1d.electrons.temperature_fit.measured_error_upper',
+    'core_profiles.profiles_1d.ion.label',
     'core_profiles.profiles_1d.ion.density_fit.psi_norm',
     'core_profiles.profiles_1d.ion.density_fit.measured',
     'core_profiles.profiles_1d.ion.density_fit.measured_error_upper',
@@ -367,7 +368,10 @@ def plot_convergence_error(ax, data: Dict, t: int):
     times = data.get('equilibrium.time')
     cerr  = data.get('equilibrium.time_slice.convergence.grad_shafranov_deviation_value')
     if times is not None and cerr is not None:
-        ax.plot(np.asarray(times) * 1e3, np.asarray(cerr).ravel(), color='tab:blue', linewidth=1)
+        tt = np.asarray(times) * 1e3
+        cc = np.asarray(cerr).ravel()
+        mask = np.isfinite(cc) & (cc > 0)   # log axis drops non-positive values
+        ax.plot(tt[mask], cc[mask], color='tab:blue', linewidth=1)
         ax.axvline(float(times[t]) * 1e3, color='k', linewidth=1, linestyle='--')
         ax.set_yscale('log')
 
@@ -390,10 +394,26 @@ def _slice(arr, cp_t: int, ion_index: Optional[int] = None):
     return np.asarray(sub)
 
 
+def _ion_label(data: Dict, cp_t: int, ion_index: int) -> Optional[str]:
+    """Return the species label (e.g. 'D', 'C') for an ion index, or None."""
+    labels = data.get('core_profiles.profiles_1d.ion.label')
+    if labels is None:
+        return None
+    try:
+        return str(labels[cp_t][ion_index])
+    except (TypeError, IndexError):
+        return None
+
+
 def plot_profile_quantity(ax, data: Dict, cp_t: int, base: str, fit: Optional[str],
                           color: str, title: str, scale: float = 1.0, *,
-                          ion_index: Optional[int] = None, clear_ax: bool = True):
-    """Plot one quantity of one species: smooth profile + band + raw fit points."""
+                          ion_index: Optional[int] = None, clear_ax: bool = True,
+                          label: Optional[str] = None):
+    """Plot one quantity of one species: smooth profile + band + raw fit points.
+
+    Only the smooth profile line carries *label*, so a single legend entry per
+    species covers both the profile and its fit points (they share *color*).
+    """
     if clear_ax:
         ax.clear()
 
@@ -405,7 +425,7 @@ def plot_profile_quantity(ax, data: Dict, cp_t: int, base: str, fit: Optional[st
         if yerr is not None:
             ye_s = yerr * scale
             ax.fill_between(x, y_s - ye_s, y_s + ye_s, alpha=0.25, color=color)
-        ax.plot(x, y_s, color=color, linewidth=1.5)
+        ax.plot(x, y_s, color=color, linewidth=1.5, label=label)
 
     if fit is not None:
         fx = _slice(data.get(fit + '.psi_norm'), cp_t, ion_index)
@@ -444,7 +464,11 @@ def plot_ion_quantity(ax, data: Dict, cp_t: int, base: str, fit: Optional[str],
             ax, data, cp_t, base, fit,
             ION_COLORS[i], title, scale,
             ion_index=i, clear_ax=not i,
+            label=_ion_label(data, cp_t, i),
         )
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(handles, labels, fontsize=7, loc='best')
 
 
 def plot_ion_density(ax, ax2, data: Dict, cp_t: int):
@@ -456,20 +480,31 @@ def plot_ion_density(ax, ax2, data: Dict, cp_t: int):
         return
     ax.clear()
     ax2.clear()
+    # .clear() resets a twinned axis to the left and re-shows its patch
+    ax2.yaxis.set_ticks_position('right')
+    ax2.yaxis.set_label_position('right')
+    ax2.patch.set_visible(False)
     for i in range(len(y[cp_t])):
         if i == 0:
             plot_profile_quantity(
                 ax, data, cp_t, base, fit, ION_COLORS[0],
                 r'$n_i$ [$10^{19}$ m$^{-3}$]', 1e-19,
                 ion_index=0, clear_ax=False,
+                label=_ion_label(data, cp_t, 0),
             )
         else:
             plot_profile_quantity(
                 ax2, data, cp_t, base, fit, ION_COLORS[i],
                 '', 1e-17, ion_index=i, clear_ax=False,
+                label=_ion_label(data, cp_t, i),
             )
     ax2.set_ylabel(r'$n_C\times100$ [$10^{19}$ m$^{-3}$]', fontsize=8, color=ION_COLORS[1])
     ax2.tick_params(axis='y', labelsize=7, labelcolor=ION_COLORS[1])
+
+    handles = ax.get_legend_handles_labels()[0] + ax2.get_legend_handles_labels()[0]
+    labels  = ax.get_legend_handles_labels()[1] + ax2.get_legend_handles_labels()[1]
+    if handles:
+        ax2.legend(handles, labels, fontsize=7, loc='best')
 
 
 def _cp_psin(data: Dict, cp_t: int):
