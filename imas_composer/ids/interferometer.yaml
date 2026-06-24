@@ -41,3 +41,8 @@ fields:
   - channel.n_e_line.error
   - channel.n_e_line.data_error_upper
   - channel.n_e_line.validity_timed
+
+  # Interlock signal (ECSDENSF ptdata2 pointname)
+  - interlock_signal.name
+  - interlock_signal.time
+  - interlock_signal.data
