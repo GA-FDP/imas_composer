@@ -1177,9 +1177,10 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         # Apply rho masking per time slice (no unit conversion needed)
         result = []
-        for i_time in range(error_raw.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
-            result.append(error_raw[i_time, mask])
+        if hasattr(error_raw, 'shape'):
+            for i_time in range(error_raw.shape[0]):
+                mask = rho_2d[i_time, :] <= 1.0
+                result.append(error_raw[i_time, mask])
 
         return np.array(result)
 

@@ -444,10 +444,14 @@ def plot_ion_density(ax, data: Dict, cp_t: int):
     colors = ['tab:green','tab:purple','tab:red','tab:blue','tab:orange','tab:black']
     if y is not None:
         for i in range(len(y[cp_t])):
+            try:
+                err = yerr[cp_t][i]
+            except (TypeError, IndexError):
+                err = None
             _plot_profile(
                 ax, x,
                 y[cp_t][i],
-                None if yerr is None else yerr[cp_t][i],
+                None if err is None else err,
                 None, None, None,
                 colors[i], colors[i],
                 r'$n_i$ [$10^{19}$ m$^{-3}$]',
