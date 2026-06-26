@@ -5,9 +5,10 @@ Replicates the functionality of OMFIT-source/scripts/fetch_IRI_CAKE.py without
 any dependency on omas or omfit_classes.  Data is fetched via imas_composer's
 simple_load function; IRI run metadata is queried from D3DRDB via d3drdb.py.
 
-Layout (2 × 5 grid of subplots):
-  [Eq. CX   | ne (e)  | Te (e)  | j_tor             | v_tor (ion) ]
-  [  (tall) | ni (ion)| Ti (ion)| convergence error | Pressure    ]
+Layout (3 × 4 grid of subplots; Eq. CX spans all three rows of column 0):
+  [        | ne (e)  | Te (e)  | j (current)       ]
+  [ Eq. CX | ni (ion)| Ti (ion)| convergence error ]
+  [ (tall) | v_tor   | Pressure| E_r (radial field)]
 
 Usage::
 
@@ -123,6 +124,7 @@ PROF_FIELDS = [
     'core_profiles.profiles_1d.j_tor',
     'core_profiles.profiles_1d.j_ohmic',
     'core_profiles.profiles_1d.j_bootstrap',
+    'core_profiles.profiles_1d.e_field.radial',
 ]
 
 
@@ -582,7 +584,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
     def __init__(self, shot: int = -1, flavor: str = 'CAKE01'):
         super().__init__()
         self.setWindowTitle('IRI CAKE Viewer')
-        self.resize(1700, 700)
+        self.resize(1700, 1000)
 
         self._data: Optional[Dict[str, Any]] = None
         self._loader: Optional[DataLoader] = None
@@ -696,33 +698,34 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         root.addLayout(row2)
 
         # ---- matplotlib canvas ----
-        self._fig = Figure(figsize=(17, 5), tight_layout=True)
+        self._fig = Figure(figsize=(17, 8), tight_layout=True)
         self._canvas = FigureCanvas(self._fig)
         root.addWidget(self._canvas, stretch=1)
 
         self._build_axes()
 
     def _build_axes(self):
-        """Create the 2×5 subplot grid."""
+        """Create the 3×4 subplot grid (Eq. CX spans all rows of column 0)."""
         self._fig.clf()
         gs = gridspec.GridSpec(
-            2, 5,
+            3, 4,
             figure=self._fig,
             left=0.05, right=0.98,
-            top=0.93, bottom=0.10,
+            top=0.93, bottom=0.07,
             wspace=0.35, hspace=0.40,
         )
-        # Eq. CX spans both rows in column 0
-        self._ax_cx   = self._fig.add_subplot(gs[:, 0])
-        self._ax_ne   = self._fig.add_subplot(gs[0, 1])
-        self._ax_ni   = self._fig.add_subplot(gs[1, 1])
-        self._ax_ni2  = self._ax_ni.twinx()  # minority ion density (×100)
-        self._ax_te   = self._fig.add_subplot(gs[0, 2])
-        self._ax_ti   = self._fig.add_subplot(gs[1, 2])
-        self._ax_jtor = self._fig.add_subplot(gs[0, 3])
-        self._ax_conv = self._fig.add_subplot(gs[1, 3])
-        self._ax_vtor = self._fig.add_subplot(gs[0, 4])
-        self._ax_pres = self._fig.add_subplot(gs[1, 4])
+        # Eq. CX spans all three rows in column 0
+        self._ax_cx     = self._fig.add_subplot(gs[:, 0])
+        self._ax_ne     = self._fig.add_subplot(gs[0, 1])
+        self._ax_te     = self._fig.add_subplot(gs[0, 2])
+        self._ax_jtor   = self._fig.add_subplot(gs[0, 3])
+        self._ax_ni     = self._fig.add_subplot(gs[1, 1])
+        self._ax_ni2    = self._ax_ni.twinx()  # minority ion density (×100)
+        self._ax_ti     = self._fig.add_subplot(gs[1, 2])
+        self._ax_conv   = self._fig.add_subplot(gs[1, 3])
+        self._ax_vtor   = self._fig.add_subplot(gs[2, 1])
+        self._ax_pres   = self._fig.add_subplot(gs[2, 2])
+        self._ax_efield = self._fig.add_subplot(gs[2, 3])
 
         self._title_text = self._fig.text(0.5, 0.97, '', ha='center', va='top', fontsize=11)
         self._canvas.draw_idle()
@@ -884,7 +887,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         # Restore axes visibility in case a previous fetch showed an error
         for ax in (self._ax_cx, self._ax_ne, self._ax_ni, self._ax_ni2,
                    self._ax_te, self._ax_ti, self._ax_jtor, self._ax_conv,
-                   self._ax_vtor, self._ax_pres):
+                   self._ax_vtor, self._ax_pres, self._ax_efield):
             ax.set_visible(True)
 
         self._loader = DataLoader(shot, efit_tree, efit_run_id, profiles_tree, profiles_run_id)
@@ -928,7 +931,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         for ax in (self._ax_cx, self._ax_ne, self._ax_ni, self._ax_ni2,
                    self._ax_te, self._ax_ti, self._ax_jtor, self._ax_conv,
-                   self._ax_vtor, self._ax_pres):
+                   self._ax_vtor, self._ax_pres, self._ax_efield):
             ax.clear()
             ax.set_visible(False)
 
@@ -1021,6 +1024,9 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             (lambda ax: plot_j_tor(ax, d, t),                 self._ax_jtor),
             (lambda ax: plot_convergence_error(ax, d, t),     self._ax_conv),
             (lambda ax: plot_pressure(ax, d, t),              self._ax_pres),
+            (lambda ax: plot_profile_quantity(
+                ax, d, t, f'{cp}.e_field.radial', None,
+                'tab:blue', r'$E_r$ [kV/m]', 1e-3), self._ax_efield),
         ]:
             try:
                 fn(ax)
