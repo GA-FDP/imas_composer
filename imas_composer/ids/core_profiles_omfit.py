@@ -206,6 +206,32 @@ class CoreProfilesOmfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # Current densities (j_tor sourced from J_TOT)
+        self.specs["core_profiles.profiles_1d._j_ohmic_data"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('\\TOP.J_OHM', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._j_ohmic_data",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d._j_tor_data"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('\\TOP.J_TOT', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._j_tor_data",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d._j_bootstrap_data"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('\\TOP.J_BS', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._j_bootstrap_data",
+            docs_file=self.DOCS_PATH
+        )
+
         # ============================================================
         # Fit fields (raw measurements) - OMFIT_PROFS only
         # ============================================================
@@ -509,6 +535,32 @@ class CoreProfilesOmfitMapper(IDSMapper):
             depends_on=["core_profiles.profiles_1d._e_field_radial_data", "core_profiles.profiles_1d._omfit_rho"],
             compose=self._compose_e_field_radial,
             ids_path="core_profiles.profiles_1d.e_field.radial",
+            docs_file=self.DOCS_PATH
+        )
+
+        # ============================================================
+        # Current densities (OMFIT_PROFS only)
+        # ============================================================
+
+        self.specs["core_profiles.profiles_1d.j_ohmic"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["core_profiles.profiles_1d._j_ohmic_data", "core_profiles.profiles_1d._omfit_rho"],
+            compose=self._compose_j_ohmic,
+            ids_path="core_profiles.profiles_1d.j_ohmic",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d.j_tor"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["core_profiles.profiles_1d._j_tor_data", "core_profiles.profiles_1d._omfit_rho"],
+            compose=self._compose_j_tor,
+            ids_path="core_profiles.profiles_1d.j_tor",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d.j_bootstrap"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["core_profiles.profiles_1d._j_bootstrap_data", "core_profiles.profiles_1d._omfit_rho"],
+            compose=self._compose_j_bootstrap,
+            ids_path="core_profiles.profiles_1d.j_bootstrap",
             docs_file=self.DOCS_PATH
         )
 
@@ -1252,6 +1304,60 @@ class CoreProfilesOmfitMapper(IDSMapper):
             result.append(e_field_raw[i_time, mask])
 
         return np.array(result)
+
+    def _compose_omfit_data_field(self, shot: int, raw_data: Dict[str, Any],
+                                  data_key_name: str) -> np.ndarray:
+        """
+        Generic helper to compose rho-masked OMFIT_PROFS profile fields.
+
+        For plain profile data (no uncertainty) already on the common
+        [time, rho] grid:
+        1. Get data from the DERIVED dependency (already in raw_data)
+        2. Apply rho masking per time slice (no unit conversion needed)
+
+        Args:
+            shot: Shot number
+            raw_data: Dictionary of raw data
+            data_key_name: Internal dependency key (e.g., 'core_profiles.profiles_1d._j_ohmic_data')
+
+        Returns:
+            2D array of shape (n_time, n_rho) with masked values
+        """
+        spec = self.specs.get(data_key_name)
+        if spec and spec.derive_requirements:
+            reqs = spec.derive_requirements(shot, raw_data)
+            if reqs:
+                data_key = reqs[0].as_key()
+                data_raw = raw_data[data_key]
+            else:
+                raise ValueError(f"No requirements for {data_key_name}")
+        else:
+            raise ValueError(f"Cannot find spec or requirements for {data_key_name}")
+
+        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        rho_2d = raw_data[rho_key]
+
+        result = []
+        for i_time in range(data_raw.shape[0]):
+            mask = rho_2d[i_time, :] <= 1.0
+            result.append(data_raw[i_time, mask])
+
+        return np.array(result)
+
+    def _compose_j_ohmic(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Compose j_ohmic for OMFIT_PROFS (from \\TOP.J_OHM)."""
+        return self._compose_omfit_data_field(
+            shot, raw_data, "core_profiles.profiles_1d._j_ohmic_data")
+
+    def _compose_j_tor(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Compose j_tor for OMFIT_PROFS (from \\TOP.J_TOT)."""
+        return self._compose_omfit_data_field(
+            shot, raw_data, "core_profiles.profiles_1d._j_tor_data")
+
+    def _compose_j_bootstrap(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Compose j_bootstrap for OMFIT_PROFS (from \\TOP.J_BS)."""
+        return self._compose_omfit_data_field(
+            shot, raw_data, "core_profiles.profiles_1d._j_bootstrap_data")
 
     # ============================================================
     # Fit field compose methods (OMFIT_PROFS only)
