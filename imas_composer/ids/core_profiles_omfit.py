@@ -644,6 +644,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
             ],
             compose=self._compose_pressure_total,
             ids_path="core_profiles.profiles_1d.pressure_total",
+            docs_file=self.DOCS_PATH)
 
         # Current densities (OMFIT_PROFS only)
         # ============================================================
@@ -1530,41 +1531,10 @@ class CoreProfilesOmfitMapper(IDSMapper):
         data_key = Requirement('\\TOP.P_FAST_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
         pressure_raw = raw_data[data_key]
 
-    def _compose_omfit_data_field(self, shot: int, raw_data: Dict[str, Any],
-                                  data_key_name: str) -> np.ndarray:
-        """
-        Generic helper to compose rho-masked OMFIT_PROFS profile fields.
-
-        For plain profile data (no uncertainty) already on the common
-        [time, rho] grid:
-        1. Get data from the DERIVED dependency (already in raw_data)
-        2. Apply rho masking per time slice (no unit conversion needed)
-
-        Args:
-            shot: Shot number
-            raw_data: Dictionary of raw data
-            data_key_name: Internal dependency key (e.g., 'core_profiles.profiles_1d._j_ohmic_data')
-
-        Returns:
-            2D array of shape (n_time, n_rho) with masked values
-        """
-        spec = self.specs.get(data_key_name)
-        if spec and spec.derive_requirements:
-            reqs = spec.derive_requirements(shot, raw_data)
-            if reqs:
-                data_key = reqs[0].as_key()
-                data_raw = raw_data[data_key]
-            else:
-                raise ValueError(f"No requirements for {data_key_name}")
-        else:
-            raise ValueError(f"Cannot find spec or requirements for {data_key_name}")
-
-
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
         rho_2d = raw_data[rho_key]
 
         result = []
-
         for i_time in range(pressure_raw.shape[0]):
             mask = rho_2d[i_time, :] <= 1.0
             result.append(pressure_raw[i_time, mask])
@@ -1628,12 +1598,44 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         return p_non_thermal + p_ion_total + p_electron
 
+    def _compose_omfit_data_field(self, shot: int, raw_data: Dict[str, Any],
+                                  data_key_name: str) -> np.ndarray:
+        """
+        Generic helper to compose rho-masked OMFIT_PROFS profile fields.
+
+        For plain profile data (no uncertainty) already on the common
+        [time, rho] grid:
+        1. Get data from the DERIVED dependency (already in raw_data)
+        2. Apply rho masking per time slice (no unit conversion needed)
+
+        Args:
+            shot: Shot number
+            raw_data: Dictionary of raw data
+            data_key_name: Internal dependency key (e.g., 'core_profiles.profiles_1d._j_ohmic_data')
+
+        Returns:
+            2D array of shape (n_time, n_rho) with masked values
+        """
+        spec = self.specs.get(data_key_name)
+        if spec and spec.derive_requirements:
+            reqs = spec.derive_requirements(shot, raw_data)
+            if reqs:
+                data_key = reqs[0].as_key()
+                data_raw = raw_data[data_key]
+            else:
+                raise ValueError(f"No requirements for {data_key_name}")
+        else:
+            raise ValueError(f"Cannot find spec or requirements for {data_key_name}")
+
+        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        rho_2d = raw_data[rho_key]
+
+        result = []
         for i_time in range(data_raw.shape[0]):
             mask = rho_2d[i_time, :] <= 1.0
             result.append(data_raw[i_time, mask])
 
         return np.array(result)
-
     def _compose_j_ohmic(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose j_ohmic for OMFIT_PROFS (from \\TOP.J_OHM)."""
         return self._compose_omfit_data_field(
@@ -1648,7 +1650,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
         """Compose j_bootstrap for OMFIT_PROFS (from \\TOP.J_BS)."""
         return self._compose_omfit_data_field(
             shot, raw_data, "core_profiles.profiles_1d._j_bootstrap_data")
-
 
     # ============================================================
     # Fit field compose methods (OMFIT_PROFS only)
