@@ -116,6 +116,10 @@ PROF_FIELDS = [
     'core_profiles.profiles_1d.ion.velocity.toroidal_fit.psi_norm',
     'core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured',
     'core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured_error_upper',
+    'core_profiles.profiles_1d.electrons.pressure',
+    'core_profiles.profiles_1d.pressure_ion_total',
+    'core_profiles.profiles_1d.pressure_ion_non_thermal',
+    'core_profiles.profiles_1d.pressure_total',
 ]
 
 
@@ -126,9 +130,11 @@ PROF_FIELDS = [
 class DataLoader(QtCore.QThread):
     """Fetches IDS data in a background thread."""
 
-    finished = QtCore.Signal(dict)   # emits the data dict on success
-    error    = QtCore.Signal(str)    # emits error message on failure
-    status   = QtCore.Signal(str)    # progress messages
+    # NB: not named "finished" — that would shadow QThread's built-in finished
+    # signal, which the window relies on to know when a thread may be deleted.
+    loaded = QtCore.Signal(dict)   # emits the data dict on success
+    error  = QtCore.Signal(str)    # emits error message on failure
+    status = QtCore.Signal(str)    # progress messages
 
     def __init__(
         self,
@@ -165,7 +171,17 @@ class DataLoader(QtCore.QThread):
             self.status.emit("Fetching core profiles…")
             prof_data = simple_load(PROF_FIELDS, self.shot, composer=composer)
 
-            self.finished.emit({**eq_data, **wall_data, **prof_data})
+            eq_time = np.asarray(eq_data['equilibrium.time'])
+            cp_time = np.asarray(prof_data['core_profiles.time'])
+            assert len(eq_time) == len(cp_time), (
+                f"equilibrium has {len(eq_time)} time slices but "
+                f"core_profiles has {len(cp_time)}"
+            )
+            assert np.max(np.abs(eq_time - cp_time)) <= 1e-3, (
+                "equilibrium and core_profiles time bases differ by more than 1 ms"
+            )
+
+            self.loaded.emit({**eq_data, **wall_data, **prof_data})
 
         except Exception:
             self.error.emit(traceback.format_exc())
@@ -177,8 +193,9 @@ RDB_TIMEOUT_MS = 10_000
 class D3DrdbWorker(QtCore.QThread):
     """Runs a single D3DRDB callable in a background thread."""
 
-    finished = QtCore.Signal(object)  # emits the return value on success
-    error    = QtCore.Signal(str)     # emits formatted traceback on failure
+    # NB: not named "finished" — see DataLoader for why.
+    result = QtCore.Signal(object)  # emits the return value on success
+    error  = QtCore.Signal(str)     # emits formatted traceback on failure
 
     def __init__(self, fn, *args, **kwargs):
         super().__init__()
@@ -188,7 +205,7 @@ class D3DrdbWorker(QtCore.QThread):
 
     def run(self):
         try:
-            self.finished.emit(self._fn(*self._args, **self._kwargs))
+            self.result.emit(self._fn(*self._args, **self._kwargs))
         except Exception:
             self.error.emit(traceback.format_exc())
 
@@ -211,11 +228,6 @@ def _safe(data: Dict, key: str, t: int = 0):
     except Exception:
         pass
     return None
-
-
-def _nearest_time_index(times: np.ndarray, target: float) -> int:
-    """Return index of the time in *times* closest to *target*."""
-    return int(np.argmin(np.abs(np.asarray(times) - target)))
 
 
 def plot_equilibrium_cx(ax, data: Dict, t: int):
@@ -304,8 +316,17 @@ def _psi_norm(psi, psi_ax, psi_bdy):
     return (psi - psi_ax) / (psi_bdy - psi_ax)
 
 
+# Kinetic pressures mapped from core_profiles (OMFIT_PROFS), in (base, colour, label) form
+CP_PRESSURES = [
+    ('core_profiles.profiles_1d.electrons.pressure',      'tab:orange', r'$p_e$'),
+    ('core_profiles.profiles_1d.pressure_ion_total',      'tab:green',  r'$p_i$'),
+    ('core_profiles.profiles_1d.pressure_ion_non_thermal', 'tab:purple', r'$p_\mathrm{fast}$'),
+    ('core_profiles.profiles_1d.pressure_total',          'black',      r'$p_\mathrm{tot}$'),
+]
+
+
 def plot_pressure(ax, data: Dict, t: int):
-    """Fitted pressure profile + constraint points."""
+    """Equilibrium fitted pressure + constraints, overlaid with kinetic pressures."""
     ax.clear()
 
     psi_ax  = float(data['equilibrium.time_slice.global_quantities.psi_axis'][t])
@@ -315,7 +336,7 @@ def plot_pressure(ax, data: Dict, t: int):
     pres  = data.get('equilibrium.time_slice.profiles_1d.pressure')
     if psi1d is not None and pres is not None:
         x = _psi_norm(psi1d[t], psi_ax, psi_bdy)
-        ax.plot(x, pres[t] * 1e-3, color='tab:blue', linewidth=1.5)
+        ax.plot(x, pres[t] * 1e-3, color='tab:blue', linewidth=1.5, label='EFIT')
 
     # constraint points
     c_psi = data.get('equilibrium.time_slice.constraints.pressure.position.psi')
@@ -329,6 +350,18 @@ def plot_pressure(ax, data: Dict, t: int):
             ax.errorbar(cx, cy, yerr=ce, fmt='', color='red', alpha=0.3, linewidth=0.8)
         else:
             ax.plot(cx, cy, '.', color='red', alpha=0.3)
+
+    # kinetic pressures from core_profiles (OMFIT_PROFS only)
+    xk = _cp_psin(data, t)
+    if xk is not None:
+        for base, color, label in CP_PRESSURES:
+            y = _slice(data.get(base), t)
+            if y is not None:
+                ax.plot(xk, y * 1e-3, color=color, linewidth=1.0, label=label)
+
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(handles, labels, fontsize=7, loc='best')
 
     ax.set_title(r'Pressure [kPa]', y=0.9, va='top', fontsize=9)
     ax.set_xlabel(r'$\Psi_\mathrm{n}$', fontsize=8)
@@ -422,7 +455,7 @@ def plot_profile_quantity(ax, data: Dict, cp_t: int, base: str, fit: Optional[st
     if x is not None and y is not None:
         y_s = y * scale
         yerr = _slice(data.get(base + '_error_upper'), cp_t, ion_index)
-        if yerr is not None:
+        if yerr is not None and len(yerr) > 0:
             ye_s = yerr * scale
             ax.fill_between(x, y_s - ye_s, y_s + ye_s, alpha=0.25, color=color)
         ax.plot(x, y_s, color=color, linewidth=1.5, label=label)
@@ -521,7 +554,7 @@ def _cp_psin(data: Dict, cp_t: int):
 
 class IriCakeViewer(QtWidgets.QMainWindow):
 
-    def __init__(self, shot: int = -1, flavor: str = 'CAKE_FDP'):
+    def __init__(self, shot: int = -1, flavor: str = 'CAKE01'):
         super().__init__()
         self.setWindowTitle('IRI CAKE Viewer')
         self.resize(1700, 700)
@@ -529,6 +562,9 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._data: Optional[Dict[str, Any]] = None
         self._loader: Optional[DataLoader] = None
         self._rdb_worker: Optional[D3DrdbWorker] = None
+        # Every started QThread lives here until its run() actually returns, so
+        # Qt never destroys a still-running thread (which aborts the process).
+        self._live_threads: list = []
         self._rdb_timeout: Optional[QtCore.QTimer] = None
         self._pending_load_params: Optional[tuple] = None
         self._shot = shot
@@ -563,7 +599,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         row1.addWidget(QtWidgets.QLabel('Tag:'))
         self._flavor_combo = QtWidgets.QComboBox()
-        self._flavor_combo.addItems(['CAKE_FDP', 'IRI_CAKE01', 'IRI_CAKE02', 'cake_nersc_testing', 'cake_nersc_testing_2'])
+        self._flavor_combo.addItems(['CAKE01', 'CAKE02', 'CAKE_FDP', 'cake_nersc_testing', 'cake_nersc_testing_2'])
         self._flavor_combo.setCurrentText(self._flavor)
         self._flavor_combo.setEditable(True)
         self._flavor_combo.setFixedWidth(180)
@@ -682,6 +718,8 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._status_label.setText(status_msg)
 
         self._rdb_worker = D3DrdbWorker(fn, *args, **kwargs)
+        self._live_threads.append(self._rdb_worker)
+        self._rdb_worker.finished.connect(lambda t=self._rdb_worker: self._reap_thread(t))
 
         self._rdb_timeout = QtCore.QTimer(singleShot=True)
         self._rdb_timeout.timeout.connect(self._on_rdb_timeout)
@@ -690,17 +728,32 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         return self._rdb_worker
 
     def _cancel_rdb_worker(self):
-        """Stop the timeout and disconnect any in-flight rdb worker signals."""
+        """Stop the timeout and stop listening to the in-flight rdb worker.
+
+        The worker is *not* deleted here: it stays in ``_live_threads`` and
+        self-reaps once its (possibly still-running) call returns, so Qt never
+        destroys a running QThread.
+        """
         if self._rdb_timeout is not None:
             self._rdb_timeout.stop()
             self._rdb_timeout = None
         if self._rdb_worker is not None:
-            for sig in (self._rdb_worker.finished, self._rdb_worker.error):
+            for sig in (self._rdb_worker.result, self._rdb_worker.error):
                 try:
                     sig.disconnect()
                 except RuntimeError:
                     pass
             self._rdb_worker = None
+
+    def _reap_thread(self, thread):
+        """Drop our reference to a thread once it has truly finished."""
+        if thread in self._live_threads:
+            self._live_threads.remove(thread)
+        if thread is self._loader:
+            self._loader = None
+        if thread is self._rdb_worker:
+            self._rdb_worker = None
+        thread.deleteLater()
 
     def _on_rdb_timeout(self):
         self._cancel_rdb_worker()
@@ -725,16 +778,16 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
     def _fetch_latest(self):
         worker = self._start_rdb_worker(
-            get_max_iri_shot_and_ids,
+            get_max_iri_shot_and_ids, self._flavor_combo.currentText(),
             status_msg='Querying D3DRDB for latest shot…',
         )
-        worker.finished.connect(self._on_latest_found)
+        worker.result.connect(self._on_latest_found)
         worker.error.connect(self._on_rdb_error)
         worker.start()
 
     def _on_latest_found(self, result):
         self._cancel_rdb_worker()
-        shot, prof_id, eq_id, _comment = result
+        shot, prof_id, eq_id = result
         # Block reset-triggering signals while populating fields programmatically
         for w in (self._shot_spin, self._efit_combo, self._prof_combo):
             w.blockSignals(True)
@@ -766,7 +819,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             get_iri_upload_ids, shot, flavor,
             status_msg=f'Querying D3DRDB for shot {shot}…',
         )
-        worker.finished.connect(self._on_ids_found)
+        worker.result.connect(self._on_ids_found)
         worker.error.connect(self._on_rdb_error)
         worker.start()
 
@@ -787,8 +840,15 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
     def _start_load(self, shot, efit_tree, efit_run_id, profiles_tree, profiles_run_id):
         if self._loader is not None and self._loader.isRunning():
-            self._loader.terminate()
-            self._loader.wait()
+            # Detach the in-flight loader instead of terminate()-ing it:
+            # killing a thread mid IMAS/MDSplus call corrupts state and crashes.
+            # It stays in _live_threads and self-reaps when run() returns.
+            for sig in (self._loader.loaded, self._loader.error, self._loader.status):
+                try:
+                    sig.disconnect()
+                except RuntimeError:
+                    pass
+            self._loader = None
 
         self._set_buttons_enabled(False)
         self._status_label.setStyleSheet('color: grey; font-style: italic;')
@@ -803,8 +863,10 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             ax.set_visible(True)
 
         self._loader = DataLoader(shot, efit_tree, efit_run_id, profiles_tree, profiles_run_id)
+        self._live_threads.append(self._loader)
+        self._loader.finished.connect(lambda t=self._loader: self._reap_thread(t))
         self._loader.status.connect(self._status_label.setText)
-        self._loader.finished.connect(self._on_load_finished)
+        self._loader.loaded.connect(self._on_load_finished)
         self._loader.error.connect(self._on_load_error)
         self._loader.start()
 
@@ -860,6 +922,15 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._fetch_btn.setEnabled(enabled)
         self._latest_btn.setEnabled(enabled)
 
+    def closeEvent(self, event):
+        """Wait for in-flight threads so none is destroyed while still running."""
+        for thread in list(self._live_threads):
+            try:
+                thread.wait(5000)
+            except RuntimeError:
+                pass
+        super().closeEvent(event)
+
     # ------------------------------------------------------------------
     # Plotting
     # ------------------------------------------------------------------
@@ -897,12 +968,8 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         t = self._time_slider.value()
         d = self._data
 
-        # Equilibrium time for core-profiles time-matching
+        # equilibrium and core_profiles share a time base (enforced on load)
         times_eq = d.get('equilibrium.time')
-        times_cp = d.get('core_profiles.time')
-        cp_t = 0
-        if times_eq is not None and times_cp is not None and t < len(times_eq):
-            cp_t = _nearest_time_index(np.asarray(times_cp), float(times_eq[t]))
 
         try:
             plot_equilibrium_cx(self._ax_cx, d, t)
@@ -914,17 +981,17 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         cp = 'core_profiles.profiles_1d'
         for fn, ax in [
             (lambda ax: plot_profile_quantity(
-                ax, d, cp_t, f'{cp}.electrons.density', f'{cp}.electrons.density_fit',
+                ax, d, t, f'{cp}.electrons.density', f'{cp}.electrons.density_fit',
                 'tab:orange', r'$n_e$ [$10^{19}$ m$^{-3}$]', 1e-19), self._ax_ne),
-            (lambda ax: plot_ion_density(self._ax_ni, self._ax_ni2, d, cp_t), self._ax_ni),
+            (lambda ax: plot_ion_density(self._ax_ni, self._ax_ni2, d, t), self._ax_ni),
             (lambda ax: plot_profile_quantity(
-                ax, d, cp_t, f'{cp}.electrons.temperature', f'{cp}.electrons.temperature_fit',
+                ax, d, t, f'{cp}.electrons.temperature', f'{cp}.electrons.temperature_fit',
                 'tab:orange', r'$T_e$ [keV]', 1e-3), self._ax_te),
             (lambda ax: plot_ion_quantity(
-                ax, d, cp_t, f'{cp}.ion.temperature', f'{cp}.ion.temperature_fit',
+                ax, d, t, f'{cp}.ion.temperature', f'{cp}.ion.temperature_fit',
                 r'$T_i$ [keV]', 1e-3), self._ax_ti),
             (lambda ax: plot_ion_quantity(
-                ax, d, cp_t, f'{cp}.ion.velocity.toroidal', f'{cp}.ion.velocity.toroidal_fit',
+                ax, d, t, f'{cp}.ion.velocity.toroidal', f'{cp}.ion.velocity.toroidal_fit',
                 r'$v_\mathrm{tor}$ [km/s]', 1e-3), self._ax_vtor),
             (lambda ax: plot_j_tor(ax, d, t),                 self._ax_jtor),
             (lambda ax: plot_convergence_error(ax, d, t),     self._ax_conv),
@@ -954,7 +1021,7 @@ def main():
     parser = argparse.ArgumentParser(description='IRI CAKE Viewer')
     parser.add_argument('--shot', type=int, default=-1,
                         help='Shot number (-1 = latest)')
-    parser.add_argument('--flavor', type=str, default='CAKE_FDP',
+    parser.add_argument('--flavor', type=str, default='CAKE01',
                         help='IRI CAKE tag/flavor')
     args = parser.parse_args()
 

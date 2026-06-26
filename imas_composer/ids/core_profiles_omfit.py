@@ -1389,7 +1389,16 @@ class CoreProfilesOmfitMapper(IDSMapper):
                 mask = rho_2d[i_time, :] <= 1.0
                 result.append(error_raw[i_time, mask])
 
-        return np.array(result)
+            return np.array(result)
+        else:
+            # No error written for this field — return one empty array per time
+            # slice. rho shares the values' time base, so rho_2d.shape[0] gives
+            # the right length; this stacks cleanly against a species that does
+            # have errors (_stack_ions only needs a matching outer n_time).
+            for _ in range(rho_2d.shape[0]):
+                result.append([])
+            return ak.Array(result)
+
 
     def _compose_density_error(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose electrons.density_thermal_error_upper for OMFIT_PROFS."""
