@@ -66,6 +66,14 @@ fields:
   - profiles_1d.ion.temperature_fit.rho_tor_norm
   - profiles_1d.ion.temperature_fit.measured_error_upper
 
+  # Ion toroidal velocity (D and C share V_TOR_C; fit fields are C-only)
+  - profiles_1d.ion.velocity.toroidal
+  - profiles_1d.ion.velocity.toroidal_error_upper
+  - profiles_1d.ion.velocity.toroidal_fit.measured
+  - profiles_1d.ion.velocity.toroidal_fit.psi_norm
+  - profiles_1d.ion.velocity.toroidal_fit.rho_tor_norm
+  - profiles_1d.ion.velocity.toroidal_fit.measured_error_upper
+
   # E-field
   - profiles_1d.e_field.radial
 

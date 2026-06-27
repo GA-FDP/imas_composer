@@ -83,6 +83,16 @@ omas_path_map:
   core_profiles.profiles_1d.ion.temperature_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.:.temperature_fit.rho_tor_norm
   core_profiles.profiles_1d.ion.temperature_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.:.temperature_fit.measured_error_upper
 
+  # Ion toroidal velocity (OMFIT_PROFS only) — same two-level ':' pattern
+  # OMAS populates both ion[0] (D, copied) and ion[1] (C) for the main velocity;
+  # fit fields are C-only (D empty)
+  core_profiles.profiles_1d.ion.velocity.toroidal: core_profiles.profiles_1d.:.ion.:.velocity.toroidal
+  core_profiles.profiles_1d.ion.velocity.toroidal_error_upper: core_profiles.profiles_1d.:.ion.:.velocity.toroidal_error_upper
+  core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured: core_profiles.profiles_1d.:.ion.:.velocity.toroidal_fit.measured
+  core_profiles.profiles_1d.ion.velocity.toroidal_fit.psi_norm: core_profiles.profiles_1d.:.ion.:.velocity.toroidal_fit.psi_norm
+  core_profiles.profiles_1d.ion.velocity.toroidal_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.:.velocity.toroidal_fit.rho_tor_norm
+  core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.:.velocity.toroidal_fit.measured_error_upper
+
   # E-field (OMFIT_PROFS only)
   core_profiles.profiles_1d.e_field.radial: core_profiles.profiles_1d.:.e_field.radial
 
