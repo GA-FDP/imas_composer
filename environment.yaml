@@ -25,6 +25,7 @@ dependencies:
   # For pip install
   - pip *
   - setuptools
+  - contourpy
   - pyqtgraph
   - pyodbc
   - pyqt
