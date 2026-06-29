@@ -28,26 +28,31 @@ import numpy as np
 import awkward as ak
 
 # ---------------------------------------------------------------------------
-# Qt (via pyqtgraph's compatibility layer — uses PySide6 on this system)
+# pyqtgraph (and its Qt compatibility layer — uses PySide6 on this system)
 # ---------------------------------------------------------------------------
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 
-# ---------------------------------------------------------------------------
-# Matplotlib embedded in Qt
-# ---------------------------------------------------------------------------
-import matplotlib
-matplotlib.use('QtAgg')
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-import matplotlib.gridspec as gridspec
-import matplotlib.patches as mpatches
-import matplotlib.path as mpath
 import scipy.ndimage
 
 from imas_composer.composer import ImasComposer
 from imas_composer.fetchers import simple_load
 from d3drdb import get_iri_upload_ids, get_max_iri_shot_and_ids
+
+pg.setConfigOptions(antialias=True, background='w', foreground='k')
+
+# Translation of the matplotlib "tab:*" / named colours used below to hex,
+# so pens/brushes render the same as the original matplotlib version.
+COLORS = {
+    'tab:blue':   '#1f77b4',
+    'tab:orange': '#ff7f0e',
+    'tab:green':  '#2ca02c',
+    'tab:red':    '#d62728',
+    'tab:purple': '#9467bd',
+    'tab:brown':  '#8c564b',
+    'black':      'k',
+    'red':        'r',
+}
 
 
 # ---------------------------------------------------------------------------
@@ -235,27 +240,38 @@ def _safe(data: Dict, key: str, t: int = 0):
     return None
 
 
-def plot_equilibrium_cx(ax, data: Dict, t: int):
+def _mkcolor(color, alpha: float):
+    """A QColor for *color* with the given 0–1 alpha."""
+    c = pg.mkColor(color)
+    c.setAlphaF(alpha)
+    return c
+
+
+def _add_band(p, x, y_lo, y_hi, color, alpha: float = 0.25):
+    """Shaded band between y_lo and y_hi (matplotlib fill_between equivalent)."""
+    lo = pg.PlotDataItem(x, y_lo, pen=None)
+    hi = pg.PlotDataItem(x, y_hi, pen=None)
+    p.addItem(lo)
+    p.addItem(hi)
+    p.addItem(pg.FillBetweenItem(hi, lo, brush=pg.mkBrush(_mkcolor(color, alpha))))
+
+
+def plot_equilibrium_cx(p, data: Dict, t: int):
     """Plot equilibrium cross-section: psi contours, LCFS, wall, X-points."""
-    ax.clear()
-    ax.set_aspect('equal')
-    ax.set_frame_on(False)
+    p.clear()
+    p.setAspectLocked(True)
+
+    blue = COLORS['tab:blue']
 
     # --- wall ---
     wall_r = data.get('wall.description_2d.limiter.unit.outline.r')
     wall_z = data.get('wall.description_2d.limiter.unit.outline.z')
-    wall_patch = None
     if wall_r is not None and wall_z is not None:
         wr = np.asarray(wall_r).ravel()
         wz = np.asarray(wall_z).ravel()
-        ax.plot(wr, wz, 'k', linewidth=1.5)
-        ax.set_xlim(wr.min(), wr.max())
-        ax.set_ylim(wz.min(), wz.max())
-        # clip mask for contours
-        verts = np.column_stack([wr, wz])
-        wall_path = mpath.Path(verts)
-        wall_patch = mpatches.PathPatch(wall_path, facecolor='none', edgecolor='none')
-        ax.add_patch(wall_patch)
+        p.plot(wr, wz, pen=pg.mkPen('k', width=1.5))
+        p.setXRange(wr.min(), wr.max(), padding=0)
+        p.setYRange(wz.min(), wz.max(), padding=0)
 
     # --- psi contours ---
     dim1 = data.get('equilibrium.time_slice.profiles_2d.grid.dim1')
@@ -278,14 +294,19 @@ def plot_equilibrium_cx(ax, data: Dict, t: int):
 
         # smooth for nicer contours
         psi_smooth = scipy.ndimage.zoom(psi_n_plot, 3, order=3)
-        R_sm = np.linspace(R[0], R[-1], psi_smooth.shape[0])
-        Z_sm = np.linspace(Z[0], Z[-1], psi_smooth.shape[1])
+        n_r, n_z = psi_smooth.shape
+
+        # Map array index space (i, j) -> (R, Z) data coordinates.
+        tr = QtGui.QTransform()
+        tr.translate(R[0], Z[0])
+        tr.scale((R[-1] - R[0]) / (n_r - 1), (Z[-1] - Z[0]) / (n_z - 1))
 
         levels = np.linspace(0, 1, 12)[1:-1]
-        Rg, Zg = np.meshgrid(R_sm, Z_sm, indexing='ij')
-        cs = ax.contour(Rg, Zg, psi_smooth, levels=levels, linewidths=0.7, colors='tab:blue', alpha=0.7)
-        if wall_patch is not None:
-            cs.set_clip_path(wall_patch)
+        pen = pg.mkPen(_mkcolor(blue, 0.7), width=0.7)
+        for lvl in levels:
+            iso = pg.IsocurveItem(data=psi_smooth, level=float(lvl), pen=pen)
+            iso.setTransform(tr)
+            p.addItem(iso)
 
     # --- LCFS ---
     bdy_r = data.get('equilibrium.time_slice.boundary.outline.r')
@@ -293,28 +314,28 @@ def plot_equilibrium_cx(ax, data: Dict, t: int):
     if bdy_r is not None and bdy_z is not None:
         br = np.asarray(bdy_r[t])
         bz = np.asarray(bdy_z[t])
-        ax.plot(br, bz, 'tab:blue', linewidth=2)
+        p.plot(br, bz, pen=pg.mkPen(blue, width=2))
 
     # --- X-points ---
     xpt_r = data.get('equilibrium.time_slice.boundary.x_point.r')
     xpt_z = data.get('equilibrium.time_slice.boundary.x_point.z')
     if xpt_r is not None and xpt_z is not None:
-        xr = np.asarray(xpt_r[t])
-        xz = np.asarray(xpt_z[t])
-        for r, z in zip(xr.ravel(), xz.ravel()):
-            if r > 0:
-                ax.plot(r, z, 'x', color='tab:blue', markersize=8, markeredgewidth=2)
+        xr = np.asarray(xpt_r[t]).ravel()
+        xz = np.asarray(xpt_z[t]).ravel()
+        keep = xr > 0
+        if keep.any():
+            p.plot(xr[keep], xz[keep], pen=None, symbol='x',
+                   symbolPen=pg.mkPen(blue, width=2), symbolBrush=blue, symbolSize=10)
 
     # --- magnetic axis ---
     mag_r = data.get('equilibrium.time_slice.global_quantities.magnetic_axis.r')
     mag_z = data.get('equilibrium.time_slice.global_quantities.magnetic_axis.z')
     if mag_r is not None and mag_z is not None:
-        ax.plot(float(mag_r[t]), float(mag_z[t]), '+', color='tab:blue', markersize=8, markeredgewidth=2)
+        p.plot([float(mag_r[t])], [float(mag_z[t])], pen=None, symbol='+',
+               symbolPen=pg.mkPen(blue, width=2), symbolBrush=blue, symbolSize=10)
 
-    ax.set_xlabel('R [m]')
-    ax.set_ylabel('Z [m]')
-    ax.xaxis.set_ticks_position('bottom')
-    ax.yaxis.set_ticks_position('left')
+    p.setLabel('bottom', 'R [m]')
+    p.setLabel('left', 'Z [m]')
 
 
 def _psi_norm(psi, psi_ax, psi_bdy):
@@ -323,16 +344,19 @@ def _psi_norm(psi, psi_ax, psi_bdy):
 
 # Kinetic pressures mapped from core_profiles (OMFIT_PROFS), in (base, colour, label) form
 CP_PRESSURES = [
-    ('core_profiles.profiles_1d.electrons.pressure',      'tab:orange', r'$p_e$'),
-    ('core_profiles.profiles_1d.pressure_ion_total',      'tab:green',  r'$p_i$'),
-    ('core_profiles.profiles_1d.pressure_ion_non_thermal', 'tab:purple', r'$p_\mathrm{fast}$'),
-    ('core_profiles.profiles_1d.pressure_total',          'black',      r'$p_\mathrm{tot}$'),
+    ('core_profiles.profiles_1d.electrons.pressure',       '#ff7f0e', 'p<sub>e</sub>'),
+    ('core_profiles.profiles_1d.pressure_ion_total',       '#2ca02c', 'p<sub>i</sub>'),
+    ('core_profiles.profiles_1d.pressure_ion_non_thermal', '#9467bd', 'p<sub>fast</sub>'),
+    ('core_profiles.profiles_1d.pressure_total',           'k',       'p<sub>tot</sub>'),
 ]
 
 
-def plot_pressure(ax, data: Dict, t: int):
+PSI_LABEL = 'Ψ<sub>n</sub>'
+
+
+def plot_pressure(p, data: Dict, t: int):
     """Equilibrium fitted pressure + constraints, overlaid with kinetic pressures."""
-    ax.clear()
+    p.clear()
 
     psi_ax  = float(data['equilibrium.time_slice.global_quantities.psi_axis'][t])
     psi_bdy = float(data['equilibrium.time_slice.global_quantities.psi_boundary'][t])
@@ -341,7 +365,7 @@ def plot_pressure(ax, data: Dict, t: int):
     pres  = data.get('equilibrium.time_slice.profiles_1d.pressure')
     if psi1d is not None and pres is not None:
         x = _psi_norm(psi1d[t], psi_ax, psi_bdy)
-        ax.plot(x, pres[t] * 1e-3, color='tab:blue', linewidth=1.5, label='EFIT')
+        p.plot(x, pres[t] * 1e-3, pen=pg.mkPen(COLORS['tab:blue'], width=1.5), name='EFIT')
 
     # constraint points
     c_psi = data.get('equilibrium.time_slice.constraints.pressure.position.psi')
@@ -352,9 +376,11 @@ def plot_pressure(ax, data: Dict, t: int):
         cy = np.asarray(c_meas[t]) * 1e-3
         if c_err is not None:
             ce = np.asarray(c_err[t]) * 1e-3
-            ax.errorbar(cx, cy, yerr=ce, fmt='', color='red', alpha=0.3, linewidth=0.8)
+            p.addItem(pg.ErrorBarItem(x=np.asarray(cx), y=cy, top=ce, bottom=ce,
+                                      pen=pg.mkPen(_mkcolor('r', 0.3), width=0.8), beam=0.0))
         else:
-            ax.plot(cx, cy, '.', color='red', alpha=0.3)
+            p.plot(cx, cy, pen=None, symbol='o', symbolSize=4,
+                   symbolBrush=_mkcolor('r', 0.3), symbolPen=None)
 
     # kinetic pressures from core_profiles (OMFIT_PROFS only)
     xk = _cp_psin(data, t)
@@ -362,29 +388,24 @@ def plot_pressure(ax, data: Dict, t: int):
         for base, color, label in CP_PRESSURES:
             y = _slice(data.get(base), t)
             if y is not None:
-                ax.plot(xk, y * 1e-3, color=color, linewidth=1.0, label=label)
+                p.plot(xk, y * 1e-3, pen=pg.mkPen(color, width=1.0), name=label)
 
-    handles, labels = ax.get_legend_handles_labels()
-    if handles:
-        ax.legend(handles, labels, fontsize=7, loc='best')
-
-    ax.set_title(r'Pressure [kPa]', y=0.9, va='top', fontsize=9)
-    ax.set_xlabel(r'$\Psi_\mathrm{n}$', fontsize=8)
-    ax.tick_params(labelsize=7)
+    p.setTitle('Pressure [kPa]', size='9pt')
+    p.setLabel('bottom', PSI_LABEL)
 
 
 # Current-density components from core_profiles (OMFIT_PROFS), in (base, colour, label) form
 CP_CURRENTS = [
-    ('core_profiles.profiles_1d.j_tor',       'black',      r'$j_\mathrm{tor}$'),
-    ('core_profiles.profiles_1d.j_ohmic',     'tab:orange', r'$j_\mathrm{ohm}$'),
-    ('core_profiles.profiles_1d.j_bootstrap', 'tab:green',  r'$j_\mathrm{BS}$'),
+    ('core_profiles.profiles_1d.j_tor',       'k',       'j<sub>tor</sub>'),
+    ('core_profiles.profiles_1d.j_ohmic',     '#ff7f0e', 'j<sub>ohm</sub>'),
+    ('core_profiles.profiles_1d.j_bootstrap', '#2ca02c', 'j<sub>BS</sub>'),
 ]
 
 
-def plot_j_tor(ax, data: Dict, t: int):
+def plot_j_tor(p, data: Dict, t: int):
     """EFIT toroidal current density + constraints, overlaid with the
     core_profiles current-density components (total, ohmic, bootstrap)."""
-    ax.clear()
+    p.clear()
 
     psi_ax  = float(data['equilibrium.time_slice.global_quantities.psi_axis'][t])
     psi_bdy = float(data['equilibrium.time_slice.global_quantities.psi_boundary'][t])
@@ -393,7 +414,8 @@ def plot_j_tor(ax, data: Dict, t: int):
     jtor  = data.get('equilibrium.time_slice.profiles_1d.j_tor')
     if psi1d is not None and jtor is not None:
         x = _psi_norm(psi1d[t], psi_ax, psi_bdy)
-        ax.plot(x, jtor[t] / 1e6, color='tab:blue', linewidth=1.5, label=r'EFIT $j_\mathrm{tor}$')
+        p.plot(x, jtor[t] / 1e6, pen=pg.mkPen(COLORS['tab:blue'], width=1.5),
+               name='EFIT j<sub>tor</sub>')
 
     # constraint scatter
     c_psi  = data.get('equilibrium.time_slice.constraints.j_tor.position.psi')
@@ -401,7 +423,8 @@ def plot_j_tor(ax, data: Dict, t: int):
     if c_psi is not None and c_meas is not None:
         cx = _psi_norm(c_psi[t], psi_ax, psi_bdy)
         cy = np.asarray(c_meas[t]) / 1e6
-        ax.plot(cx, cy, 'o', color='red', alpha=0.4, markersize=3)
+        p.plot(cx, cy, pen=None, symbol='o', symbolSize=6,
+               symbolBrush=_mkcolor('r', 0.4), symbolPen=None)
 
     # current-density components from core_profiles (OMFIT_PROFS only)
     # eq and core_profiles share a time base (enforced on load) -> same index t
@@ -410,20 +433,15 @@ def plot_j_tor(ax, data: Dict, t: int):
         for base, color, label in CP_CURRENTS:
             y = _slice(data.get(base), t)
             if y is not None:
-                ax.plot(xk, y / 1e6, color=color, linewidth=1.0, label=label)
+                p.plot(xk, y / 1e6, pen=pg.mkPen(color, width=1.0), name=label)
 
-    handles, labels = ax.get_legend_handles_labels()
-    if handles:
-        ax.legend(handles, labels, fontsize=7, loc='best')
-
-    ax.set_title(r'$j$ [MA m$^{-2}$]', y=0.9, va='top', fontsize=9)
-    ax.set_xlabel(r'$\Psi_\mathrm{n}$', fontsize=8)
-    ax.tick_params(labelsize=7)
+    p.setTitle('j [MA m<sup>-2</sup>]', size='9pt')
+    p.setLabel('bottom', PSI_LABEL)
 
 
-def plot_convergence_error(ax, data: Dict, t: int):
+def plot_convergence_error(p, data: Dict, t: int):
     """Convergence error vs. time (all slices), vertical line at current time."""
-    ax.clear()
+    p.clear()
 
     times = data.get('equilibrium.time')
     cerr  = data.get('equilibrium.time_slice.convergence.grad_shafranov_deviation_value')
@@ -431,16 +449,16 @@ def plot_convergence_error(ax, data: Dict, t: int):
         tt = np.asarray(times) * 1e3
         cc = np.asarray(cerr).ravel()
         mask = np.isfinite(cc) & (cc > 0)   # log axis drops non-positive values
-        ax.plot(tt[mask], cc[mask], color='tab:blue', linewidth=1)
-        ax.axvline(float(times[t]) * 1e3, color='k', linewidth=1, linestyle='--')
-        ax.set_yscale('log')
+        p.setLogMode(y=True)
+        p.plot(tt[mask], cc[mask], pen=pg.mkPen(COLORS['tab:blue'], width=1))
+        p.addItem(pg.InfiniteLine(pos=float(times[t]) * 1e3, angle=90,
+                                  pen=pg.mkPen('k', width=1, style=QtCore.Qt.PenStyle.DashLine)))
 
-    ax.set_title('Convergence error', y=0.9, va='top', fontsize=9)
-    ax.set_xlabel('Time [ms]', fontsize=8)
-    ax.tick_params(labelsize=7)
+    p.setTitle('Convergence error', size='9pt')
+    p.setLabel('bottom', 'Time [ms]')
 
 
-ION_COLORS = ['tab:green', 'tab:purple', 'tab:red', 'tab:blue', 'tab:orange', 'tab:brown']
+ION_COLORS = ['#2ca02c', '#9467bd', '#d62728', '#1f77b4', '#ff7f0e', '#8c564b']
 
 
 def _slice(arr, cp_t: int, ion_index: Optional[int] = None):
@@ -465,18 +483,21 @@ def _ion_label(data: Dict, cp_t: int, ion_index: int) -> Optional[str]:
         return None
 
 
-def plot_profile_quantity(ax, data: Dict, cp_t: int, base: str, fit: Optional[str],
+def plot_profile_quantity(p, data: Dict, cp_t: int, base: str, fit: Optional[str],
                           color: str, title: str, scale: float = 1.0, *,
                           ion_index: Optional[int] = None, clear_ax: bool = True,
                           label: Optional[str] = None):
     """Plot one quantity of one species: smooth profile + band + raw fit points.
 
-    Only the smooth profile line carries *label*, so a single legend entry per
-    species covers both the profile and its fit points (they share *color*).
+    *p* is a pyqtgraph ``PlotItem`` or a twin ``ViewBox``. Only the smooth
+    profile line carries *label*, so a single legend entry per species covers
+    both the profile and its fit points (they share *color*). Returns the
+    profile line item so a twin-axis caller can register it in the legend.
     """
     if clear_ax:
-        ax.clear()
+        p.clear()
 
+    line = None
     x = _cp_psin(data, cp_t)
     y = _slice(data.get(base), cp_t, ion_index)
     if x is not None and y is not None:
@@ -484,8 +505,9 @@ def plot_profile_quantity(ax, data: Dict, cp_t: int, base: str, fit: Optional[st
         yerr = _slice(data.get(base + '_error_upper'), cp_t, ion_index)
         if yerr is not None and len(yerr) > 0:
             ye_s = yerr * scale
-            ax.fill_between(x, y_s - ye_s, y_s + ye_s, alpha=0.25, color=color)
-        ax.plot(x, y_s, color=color, linewidth=1.5, label=label)
+            _add_band(p, x, y_s - ye_s, y_s + ye_s, color)
+        line = pg.PlotDataItem(x, y_s, pen=pg.mkPen(color, width=1.5), name=label)
+        p.addItem(line)
 
     if fit is not None:
         fx = _slice(data.get(fit + '.psi_norm'), cp_t, ion_index)
@@ -500,20 +522,25 @@ def plot_profile_quantity(ax, data: Dict, cp_t: int, base: str, fit: Optional[st
                 mask &= np.isfinite(fe)
                 mask[mask] &= np.abs(fe[mask]) < np.abs(fy[mask])
             if mask.any():
+                brush = _mkcolor(color, 0.5)
                 if fe is not None:
-                    ax.errorbar(fx[mask], fy[mask], fe[mask],
-                                fmt='.', color=color, alpha=0.5, markersize=3,
-                                linewidth=0.5, zorder=-1)
-                else:
-                    ax.plot(fx[mask], fy[mask], '.', color=color, alpha=0.5,
-                            markersize=3, zorder=-1)
+                    err = pg.ErrorBarItem(x=fx[mask], y=fy[mask], top=fe[mask],
+                                          bottom=fe[mask], beam=0.0,
+                                          pen=pg.mkPen(brush, width=0.5))
+                    err.setZValue(-1)
+                    p.addItem(err)
+                pts = pg.ScatterPlotItem(x=fx[mask], y=fy[mask], size=4,
+                                         brush=brush, pen=None)
+                pts.setZValue(-1)
+                p.addItem(pts)
 
-    ax.set_title(title, y=0.9, va='top', fontsize=9)
-    ax.set_xlabel(r'$\Psi_\mathrm{n}$', fontsize=8)
-    ax.tick_params(labelsize=7)
+    if not isinstance(p, pg.ViewBox):
+        p.setTitle(title, size='9pt')
+        p.setLabel('bottom', PSI_LABEL)
+    return line
 
 
-def plot_ion_quantity(ax, data: Dict, cp_t: int, base: str, fit: Optional[str],
+def plot_ion_quantity(p, data: Dict, cp_t: int, base: str, fit: Optional[str],
                       title: str, scale: float = 1.0):
     """Plot one ion quantity for every species, one colour per species."""
     y = data.get(base)
@@ -521,50 +548,43 @@ def plot_ion_quantity(ax, data: Dict, cp_t: int, base: str, fit: Optional[str],
         return
     for i in range(len(y[cp_t])):
         plot_profile_quantity(
-            ax, data, cp_t, base, fit,
+            p, data, cp_t, base, fit,
             ION_COLORS[i], title, scale,
             ion_index=i, clear_ax=not i,
             label=_ion_label(data, cp_t, i),
         )
-    handles, labels = ax.get_legend_handles_labels()
-    if handles:
-        ax.legend(handles, labels, fontsize=7, loc='best')
 
 
-def plot_ion_density(ax, ax2, data: Dict, cp_t: int):
+def plot_ion_density(p, vb2, data: Dict, cp_t: int):
     """Ion density: main ion on the left axis, minorities (×100) on the twin axis."""
     base = 'core_profiles.profiles_1d.ion.density_thermal'
     fit  = 'core_profiles.profiles_1d.ion.density_fit'
     y = data.get(base)
     if y is None:
         return
-    ax.clear()
-    ax2.clear()
-    # .clear() resets a twinned axis to the left and re-shows its patch
-    ax2.yaxis.set_ticks_position('right')
-    ax2.yaxis.set_label_position('right')
-    ax2.patch.set_visible(False)
+    p.clear()
+    vb2.clear()
+    if p.legend is not None:
+        p.legend.clear()
     for i in range(len(y[cp_t])):
         if i == 0:
             plot_profile_quantity(
-                ax, data, cp_t, base, fit, ION_COLORS[0],
-                r'$n_i$ [$10^{19}$ m$^{-3}$]', 1e-19,
+                p, data, cp_t, base, fit, ION_COLORS[0],
+                'n<sub>i</sub> [10<sup>19</sup> m<sup>-3</sup>]', 1e-19,
                 ion_index=0, clear_ax=False,
                 label=_ion_label(data, cp_t, 0),
             )
         else:
-            plot_profile_quantity(
-                ax2, data, cp_t, base, fit, ION_COLORS[i],
+            line = plot_profile_quantity(
+                vb2, data, cp_t, base, fit, ION_COLORS[i],
                 '', 1e-17, ion_index=i, clear_ax=False,
                 label=_ion_label(data, cp_t, i),
             )
-    ax2.set_ylabel(r'$n_C\times100$ [$10^{19}$ m$^{-3}$]', fontsize=8, color=ION_COLORS[1])
-    ax2.tick_params(axis='y', labelsize=7, labelcolor=ION_COLORS[1])
-
-    handles = ax.get_legend_handles_labels()[0] + ax2.get_legend_handles_labels()[0]
-    labels  = ax.get_legend_handles_labels()[1] + ax2.get_legend_handles_labels()[1]
-    if handles:
-        ax2.legend(handles, labels, fontsize=7, loc='best')
+            # twin-axis curves are not in p's ViewBox, so register them by hand
+            if line is not None and p.legend is not None:
+                p.legend.addItem(line, _ion_label(data, cp_t, i))
+    p.getAxis('right').setLabel('n<sub>C</sub>×100 [10<sup>19</sup> m<sup>-3</sup>]',
+                                color=ION_COLORS[1])
 
 
 def _cp_psin(data: Dict, cp_t: int):
@@ -697,38 +717,51 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         row2.addWidget(self._scalar_label)
         root.addLayout(row2)
 
-        # ---- matplotlib canvas ----
-        self._fig = Figure(figsize=(17, 8), tight_layout=True)
-        self._canvas = FigureCanvas(self._fig)
-        root.addWidget(self._canvas, stretch=1)
+        # ---- pyqtgraph plotting surface ----
+        self._glw = pg.GraphicsLayoutWidget()
+        root.addWidget(self._glw, stretch=1)
 
         self._build_axes()
 
     def _build_axes(self):
-        """Create the 3×4 subplot grid (Eq. CX spans all rows of column 0)."""
-        self._fig.clf()
-        gs = gridspec.GridSpec(
-            3, 4,
-            figure=self._fig,
-            left=0.05, right=0.98,
-            top=0.93, bottom=0.07,
-            wspace=0.35, hspace=0.40,
-        )
-        # Eq. CX spans all three rows in column 0
-        self._ax_cx     = self._fig.add_subplot(gs[:, 0])
-        self._ax_ne     = self._fig.add_subplot(gs[0, 1])
-        self._ax_te     = self._fig.add_subplot(gs[0, 2])
-        self._ax_jtor   = self._fig.add_subplot(gs[0, 3])
-        self._ax_ni     = self._fig.add_subplot(gs[1, 1])
-        self._ax_ni2    = self._ax_ni.twinx()  # minority ion density (×100)
-        self._ax_ti     = self._fig.add_subplot(gs[1, 2])
-        self._ax_conv   = self._fig.add_subplot(gs[1, 3])
-        self._ax_vtor   = self._fig.add_subplot(gs[2, 1])
-        self._ax_pres   = self._fig.add_subplot(gs[2, 2])
-        self._ax_efield = self._fig.add_subplot(gs[2, 3])
+        """Create the 3×4 plot grid (Eq. CX spans all rows of column 0)."""
+        self._glw.clear()
 
-        self._title_text = self._fig.text(0.5, 0.97, '', ha='center', va='top', fontsize=11)
-        self._canvas.draw_idle()
+        # Row 0: figure-level title spanning all four columns.
+        self._title_label = self._glw.addLabel('', row=0, col=0, colspan=4, size='11pt')
+
+        # Eq. CX spans all three rows in column 0.
+        self._ax_cx     = self._glw.addPlot(row=1, col=0, rowspan=3)
+        self._ax_ne     = self._glw.addPlot(row=1, col=1)
+        self._ax_te     = self._glw.addPlot(row=1, col=2)
+        self._ax_jtor   = self._glw.addPlot(row=1, col=3)
+        self._ax_ni     = self._glw.addPlot(row=2, col=1)
+        self._ax_ti     = self._glw.addPlot(row=2, col=2)
+        self._ax_conv   = self._glw.addPlot(row=2, col=3)
+        self._ax_vtor   = self._glw.addPlot(row=3, col=1)
+        self._ax_pres   = self._glw.addPlot(row=3, col=2)
+        self._ax_efield = self._glw.addPlot(row=3, col=3)
+
+        self._ax_cx.hideButtons()
+
+        # Legends for the panels that overlay several named series.
+        for ax in (self._ax_jtor, self._ax_ni, self._ax_ti, self._ax_vtor, self._ax_pres):
+            ax.addLegend(offset=(-5, 5), labelTextSize='7pt')
+
+        # Minority-ion density (×100) on a twin y-axis linked to the ni panel.
+        self._ax_ni2 = pg.ViewBox()
+        self._ax_ni.showAxis('right')
+        self._ax_ni.scene().addItem(self._ax_ni2)
+        self._ax_ni.getAxis('right').linkToView(self._ax_ni2)
+        self._ax_ni2.setXLink(self._ax_ni)
+        self._ax_ni.getViewBox().sigResized.connect(
+            lambda vb: self._ax_ni2.setGeometry(vb.sceneBoundingRect()))
+        self._ax_ni2.setGeometry(self._ax_ni.getViewBox().sceneBoundingRect())
+
+        self._plots = [
+            self._ax_cx, self._ax_ne, self._ax_te, self._ax_jtor, self._ax_ni,
+            self._ax_ti, self._ax_conv, self._ax_vtor, self._ax_pres, self._ax_efield,
+        ]
 
     # ------------------------------------------------------------------
     # Fetch logic
@@ -884,11 +917,9 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             f'Loading shot {shot}  EFIT={efit_tree}{efit_run_id}  '
             f'PROFS={profiles_tree}{profiles_run_id}…'
         )
-        # Restore axes visibility in case a previous fetch showed an error
-        for ax in (self._ax_cx, self._ax_ne, self._ax_ni, self._ax_ni2,
-                   self._ax_te, self._ax_ti, self._ax_jtor, self._ax_conv,
-                   self._ax_vtor, self._ax_pres, self._ax_efield):
-            ax.set_visible(True)
+        # Restore panel visibility in case a previous fetch showed an error
+        for ax in self._plots:
+            ax.setVisible(True)
 
         self._loader = DataLoader(shot, efit_tree, efit_run_id, profiles_tree, profiles_run_id)
         self._live_threads.append(self._loader)
@@ -924,21 +955,16 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._show_fetch_error(msg)
 
     def _show_fetch_error(self, msg: str):
-        """Clear all plot axes and show a concise error in the status bar."""
-        last_line = msg.strip().splitlines()[-1]
+        """Clear all plots and show a concise error in the status bar."""
         self._status_label.setStyleSheet('color: red; font-style: italic;')
         self._status_label.setText('Load error - see console')
 
-        for ax in (self._ax_cx, self._ax_ne, self._ax_ni, self._ax_ni2,
-                   self._ax_te, self._ax_ti, self._ax_jtor, self._ax_conv,
-                   self._ax_vtor, self._ax_pres, self._ax_efield):
+        self._ax_ni2.clear()
+        for ax in self._plots:
             ax.clear()
-            ax.set_visible(False)
+            ax.setVisible(False)
 
-        self._title_text.set_text('Load error - see console')
-        # Remove any stale figure-level text left from a previous error
-        self._fig.texts = [t for t in self._fig.texts if t is self._title_text]
-        self._canvas.draw_idle()
+        self._title_label.setText('Load error - see console')
 
     def _reset_run_ids(self, *, efit: bool, prof: bool):
         if efit:
@@ -999,49 +1025,41 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         # equilibrium and core_profiles share a time base (enforced on load)
         times_eq = d.get('equilibrium.time')
 
-        try:
-            plot_equilibrium_cx(self._ax_cx, d, t)
-        except Exception as e:
-            self._ax_cx.clear()
-            self._ax_cx.text(0.5, 0.5, str(e), transform=self._ax_cx.transAxes,
-                             ha='center', va='center', fontsize=7, wrap=True)
-
+        orange, blue = COLORS['tab:orange'], COLORS['tab:blue']
         cp = 'core_profiles.profiles_1d'
         for fn, ax in [
+            (lambda ax: plot_equilibrium_cx(ax, d, t),        self._ax_cx),
             (lambda ax: plot_profile_quantity(
                 ax, d, t, f'{cp}.electrons.density', f'{cp}.electrons.density_fit',
-                'tab:orange', r'$n_e$ [$10^{19}$ m$^{-3}$]', 1e-19), self._ax_ne),
+                orange, 'n<sub>e</sub> [10<sup>19</sup> m<sup>-3</sup>]', 1e-19), self._ax_ne),
             (lambda ax: plot_ion_density(self._ax_ni, self._ax_ni2, d, t), self._ax_ni),
             (lambda ax: plot_profile_quantity(
                 ax, d, t, f'{cp}.electrons.temperature', f'{cp}.electrons.temperature_fit',
-                'tab:orange', r'$T_e$ [keV]', 1e-3), self._ax_te),
+                orange, 'T<sub>e</sub> [keV]', 1e-3), self._ax_te),
             (lambda ax: plot_ion_quantity(
                 ax, d, t, f'{cp}.ion.temperature', f'{cp}.ion.temperature_fit',
-                r'$T_i$ [keV]', 1e-3), self._ax_ti),
+                'T<sub>i</sub> [keV]', 1e-3), self._ax_ti),
             (lambda ax: plot_ion_quantity(
                 ax, d, t, f'{cp}.ion.velocity.toroidal', f'{cp}.ion.velocity.toroidal_fit',
-                r'$v_\mathrm{tor}$ [km/s]', 1e-3), self._ax_vtor),
+                'v<sub>tor</sub> [km/s]', 1e-3), self._ax_vtor),
             (lambda ax: plot_j_tor(ax, d, t),                 self._ax_jtor),
             (lambda ax: plot_convergence_error(ax, d, t),     self._ax_conv),
             (lambda ax: plot_pressure(ax, d, t),              self._ax_pres),
             (lambda ax: plot_profile_quantity(
                 ax, d, t, f'{cp}.e_field.radial', None,
-                'tab:blue', r'$E_r$ [kV/m]', 1e-3), self._ax_efield),
+                blue, 'E<sub>r</sub> [kV/m]', 1e-3), self._ax_efield),
         ]:
             try:
                 fn(ax)
             except Exception as e:
                 ax.clear()
-                ax.text(0.5, 0.5, str(e), transform=ax.transAxes,
-                        ha='center', va='center', fontsize=7, wrap=True)
+                ax.setTitle(str(e), color='r', size='7pt')
 
         # Title
         if times_eq is not None and t < len(times_eq):
             shot = self._shot_spin.value()
             t_s = float(times_eq[t])
-            self._title_text.set_text(f'DIII-D #{shot}  @  {t_s*1e3:.1f} ms')
-
-        self._canvas.draw_idle()
+            self._title_label.setText(f'DIII-D #{shot}  @  {t_s*1e3:.1f} ms')
 
 
 # ---------------------------------------------------------------------------
