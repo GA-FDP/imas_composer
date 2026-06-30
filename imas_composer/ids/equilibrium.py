@@ -2469,6 +2469,10 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.VZEROJ')
         Transform: ensure_2d (convert to 2D array)
+
+        VZEROJ is stored as a magnitude without the plasma-current direction, so it is
+        multiplied by sign(Ip) (a single per-shot sign from mean GEQDSK.CPASMA, matching
+        the sign of global_quantities.ip) before the COCOS transform.
         """
         vzeroj_key = Requirement(f'{self.measurements_node}.VZEROJ', self.resolve_shot(shot), self.efit_tree).as_key()
         j_tor_all_times = raw_data[vzeroj_key]
@@ -2481,6 +2485,11 @@ class EquilibriumMapper(IDSMapper):
             j_tor_2d = np.atleast_2d(j_tor).T
         else:
             j_tor_2d = j_tor
+
+        # Restore the plasma-current direction onto the unsigned VZEROJ magnitude
+        cpasma_key = Requirement(f'{self.geqdsk_node}.CPASMA', self.resolve_shot(shot), self.efit_tree).as_key()
+        ip_sign = np.sign(np.mean(raw_data[cpasma_key]))
+        j_tor_2d = j_tor_2d * ip_sign
 
         return self._apply_cocos_transform(
             j_tor_2d, shot, raw_data,
