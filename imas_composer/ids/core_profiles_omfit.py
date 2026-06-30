@@ -1108,10 +1108,12 @@ class CoreProfilesOmfitMapper(IDSMapper):
         rho_2d = raw_data[rho_key]
 
         result = []
-        for i_time in range(data_raw.shape[0]):
-            mask = self._rho_mask(rho_2d[i_time, :])
-            result.append(data_raw[i_time, mask])
-
+        for i_time in range(rho_2d.shape[0]):
+            if len(data_raw) > 0:
+                mask = self._rho_mask(rho_2d[i_time, :])
+                result.append(data_raw[i_time, mask])
+            else:
+                result.append([])
         return np.array(result)
 
     def _compose_all_ion_temperature(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
