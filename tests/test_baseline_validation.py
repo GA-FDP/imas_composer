@@ -188,7 +188,7 @@ def get_composer_for_ids(ids_key):
     if ids_key.endswith('_ZIPFIT'):
         return ImasComposer(profiles_tree='ZIPFIT01')
     elif ids_key.endswith('_OMFIT_PROFS'):
-        return ImasComposer(profiles_tree='OMFIT_PROFS', profiles_run_id='001')
+        return ImasComposer(profiles_tree='OMFIT_PROFS', profiles_run_id='001', crop_core_profiles=True)
     else:
         return ImasComposer()
 
