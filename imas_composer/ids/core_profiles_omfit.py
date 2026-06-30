@@ -1152,7 +1152,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         Both D and C use error_of(V_TOR_C).
         """
-        v_err = self._compose_omfit_error_field(
+        v_err = self._compose_omfit_data_field(
             shot, raw_data, "core_profiles.profiles_1d._velocity_toroidal_error")
         return self._stack_ions({ion['label']: v_err for ion in self.ions})
 
@@ -1324,57 +1324,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         return v_loop
 
-    def _compose_omfit_error_field(self, shot: int, raw_data: Dict[str, Any],
-                                   error_key_name: str) -> np.ndarray:
-        """
-        Generic helper to compose OMFIT_PROFS error fields.
-
-        All OMFIT_PROFS error fields follow the same pattern:
-        1. Get error data from error_of(\\TOP.FIELD) (already in raw_data)
-        2. Apply rho masking per time slice (no unit conversion needed)
-
-        Args:
-            shot: Shot number
-            raw_data: Dictionary of raw data
-            error_key_name: Internal dependency key (e.g., 'core_profiles.profiles_1d._density_error')
-
-        Returns:
-            2D array of shape (n_time, n_rho) with error values
-        """
-        # Extract the actual key from the dependency name
-        spec = self.specs.get(error_key_name)
-        if spec and spec.derive_requirements:
-            reqs = spec.derive_requirements(shot, raw_data)
-            if reqs:
-                error_data_key = reqs[0].as_key()
-                error_raw = raw_data[error_data_key]
-            else:
-                raise ValueError(f"No requirements for {error_key_name}")
-        else:
-            raise ValueError(f"Cannot find spec or requirements for {error_key_name}")
-
-        # Get rho for masking
-        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
-
-        # Apply rho masking per time slice (no unit conversion needed)
-        result = []
-        if hasattr(error_raw, 'shape'):
-            for i_time in range(error_raw.shape[0]):
-                mask = rho_2d[i_time, :] <= 1.0
-                result.append(error_raw[i_time, mask])
-
-            return np.array(result)
-        else:
-            # No error written for this field — return one empty array per time
-            # slice. rho shares the values' time base, so rho_2d.shape[0] gives
-            # the right length; this stacks cleanly against a species that does
-            # have errors (_stack_ions only needs a matching outer n_time).
-            for _ in range(rho_2d.shape[0]):
-                result.append([])
-            return ak.Array(result)
-
-
     def _compose_density_error(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose electrons.density_thermal_error_upper for OMFIT_PROFS."""
         return self._compose_omfit_data_field(
@@ -1430,21 +1379,9 @@ class CoreProfilesOmfitMapper(IDSMapper):
         Returns:
             2D array of shape (n_time, n_rho) with radial electric field in V/m
         """
-        # Get e-field data
-        e_field_key = Requirement('\\TOP.ER_C', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        e_field_raw = raw_data[e_field_key]
-
-        # Get rho for masking
-        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
-
-        # Apply rho masking per time slice (no unit conversion needed)
-        result = []
-        for i_time in range(e_field_raw.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
-            result.append(e_field_raw[i_time, mask])
-
-        return np.array(result)
+        return self._compose_omfit_data_field(
+            shot, raw_data,
+            "core_profiles.profiles_1d._e_field_radial_data")
 
     def _compose_pressure_ion_non_thermal(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose pressure_ion_non_thermal for OMFIT_PROFS (from \\TOP.P_FAST_D)."""
