@@ -1144,7 +1144,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         Both D and C use error_of(V_TOR_C).
         """
-        v_err = self._compose_omfit_error_field(
+        v_err = self._compose_omfit_data_field(
             shot, raw_data, "core_profiles.profiles_1d._velocity_toroidal_error")
         return self._stack_ions({ion['label']: v_err for ion in self.ions})
 
