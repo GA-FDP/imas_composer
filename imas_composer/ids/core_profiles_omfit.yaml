@@ -77,7 +77,6 @@ fields:
   # E-field
   - profiles_1d.e_field.radial
 
-
   # Pressures
   - profiles_1d.pressure_ion_non_thermal
   - profiles_1d.pressure_ion_total

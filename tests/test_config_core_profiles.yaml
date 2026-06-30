@@ -96,7 +96,6 @@ omas_path_map:
   # E-field (OMFIT_PROFS only)
   core_profiles.profiles_1d.e_field.radial: core_profiles.profiles_1d.:.e_field.radial
 
-
   # Pressures (OMFIT_PROFS only)
   core_profiles.profiles_1d.pressure_ion_non_thermal: core_profiles.profiles_1d.:.pressure_ion_non_thermal
   core_profiles.profiles_1d.pressure_ion_total: core_profiles.profiles_1d.:.pressure_ion_total

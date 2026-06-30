@@ -74,7 +74,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
             'deuterium_density': '\\TOP.N_D',
             'carbon_density': '\\TOP.N_C',
             'velocity_toroidal': '\\TOP.V_TOR_C',
-
             'pressure_ion_non_thermal': '\\TOP.P_FAST_D',
             'pressure_electron': '\\TOP.P_E',
             'pressure_deuterium': '\\TOP.P_D',
@@ -141,6 +140,16 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # Carbon toroidal velocity - data only (both D and C use V_TOR_C)
         self.specs["core_profiles.profiles_1d._velocity_toroidal_data"] = self._create_profile_field_spec(
             '_velocity_toroidal_data', 'velocity_toroidal')
+        # Pressures - data only
+        self.specs["core_profiles.profiles_1d._pressure_ion_non_thermal_data"] = self._create_profile_field_spec(
+            '_pressure_ion_non_thermal_data', 'pressure_ion_non_thermal')
+        self.specs["core_profiles.profiles_1d._pressure_electron_data"] = self._create_profile_field_spec(
+            '_pressure_electron_data', 'pressure_electron')
+        self.specs["core_profiles.profiles_1d._pressure_deuterium_data"] = self._create_profile_field_spec(
+            '_pressure_deuterium_data', 'pressure_deuterium')
+        self.specs["core_profiles.profiles_1d._pressure_carbon_data"] = self._create_profile_field_spec(
+            '_pressure_carbon_data', 'pressure_carbon')
+
         # Pressures - data only
         self.specs["core_profiles.profiles_1d._pressure_ion_non_thermal_data"] = self._create_profile_field_spec(
             '_pressure_ion_non_thermal_data', 'pressure_ion_non_thermal')
@@ -644,8 +653,10 @@ class CoreProfilesOmfitMapper(IDSMapper):
             ],
             compose=self._compose_pressure_total,
             ids_path="core_profiles.profiles_1d.pressure_total",
-            docs_file=self.DOCS_PATH)
+            docs_file=self.DOCS_PATH
+        )
 
+        # ============================================================
         # Current densities (OMFIT_PROFS only)
         # ============================================================
 
@@ -673,7 +684,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         )
 
         # ============================================================
-        # Fit fields (raw measurements) - OMFIT_PROFS only
+        # Fit fields - raw measurements (OMFIT_PROFS only)
         # ============================================================
 
         # Electron density_fit.* fields
@@ -1636,6 +1647,84 @@ class CoreProfilesOmfitMapper(IDSMapper):
             result.append(data_raw[i_time, mask])
 
         return np.array(result)
+
+    def _compose_pressure_ion_non_thermal(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Compose pressure_ion_non_thermal from P_FAST_D.
+
+        Returns:
+            2D array of shape (n_time, n_rho) with non-thermal ion pressure in Pa
+        """
+        data_key = Requirement('\\TOP.P_FAST_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        pressure_raw = raw_data[data_key]
+
+        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        rho_2d = raw_data[rho_key]
+
+        result = []
+        for i_time in range(pressure_raw.shape[0]):
+            mask = rho_2d[i_time, :] <= 1.0
+            result.append(pressure_raw[i_time, mask])
+
+        return np.array(result)
+
+    def _compose_pressure_electron(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Compose electrons.pressure from P_E.
+
+        Returns:
+            2D array of shape (n_time, n_rho) with electron pressure in Pa
+        """
+        data_key = Requirement('\\TOP.P_E', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        pressure_raw = raw_data[data_key]
+
+        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        rho_2d = raw_data[rho_key]
+
+        result = []
+        for i_time in range(pressure_raw.shape[0]):
+            mask = rho_2d[i_time, :] <= 1.0
+            result.append(pressure_raw[i_time, mask])
+
+        return np.array(result)
+
+    def _compose_pressure_ion_total(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Compose pressure_ion_total as the sum of P_D and P_C.
+
+        Returns:
+            2D array of shape (n_time, n_rho) with total ion pressure in Pa
+        """
+        d_key = Requirement('\\TOP.P_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        c_key = Requirement('\\TOP.P_C', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        pressure_sum = raw_data[d_key] + raw_data[c_key]
+
+        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        rho_2d = raw_data[rho_key]
+
+        result = []
+        for i_time in range(pressure_sum.shape[0]):
+            mask = rho_2d[i_time, :] <= 1.0
+            result.append(pressure_sum[i_time, mask])
+
+        return np.array(result)
+
+    def _compose_pressure_total(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Compose pressure_total as the sum of the composed IMAS pressure fields.
+
+        Uses the already-composed (rho-masked) pressure_ion_non_thermal,
+        pressure_ion_total and pressure_electron rather than the raw MDSplus data.
+
+        Returns:
+            2D array of shape (n_time, n_rho) with total pressure in Pa
+        """
+        p_non_thermal = self.specs["core_profiles.profiles_1d.pressure_ion_non_thermal"].compose(shot, raw_data)
+        p_ion_total = self.specs["core_profiles.profiles_1d.pressure_ion_total"].compose(shot, raw_data)
+        p_electron = self.specs["core_profiles.profiles_1d.electrons.pressure"].compose(shot, raw_data)
+
+        return p_non_thermal + p_ion_total + p_electron
+
     def _compose_j_ohmic(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose j_ohmic for OMFIT_PROFS (from \\TOP.J_OHM)."""
         return self._compose_omfit_data_field(
