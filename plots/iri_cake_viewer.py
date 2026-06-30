@@ -38,7 +38,7 @@ from contourpy import contour_generator
 
 from imas_composer.composer import ImasComposer
 from imas_composer.fetchers import simple_load
-from d3drdb import get_iri_upload_ids, get_max_iri_shot_and_ids
+from d3drdb import get_iri_upload_ids, list_shots_for_tag
 
 pg.setConfigOptions(antialias=True, background='w', foreground='k')
 
@@ -665,13 +665,13 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._pending_load_params: Optional[tuple] = None
         self._shot = shot
         self._flavor = flavor
+        # A CLI --shot N is the one auto-load path: fetch it once the shot list
+        # has been queried (so the two D3DRDB calls never overlap).
+        self._pending_autofetch = shot > 0
 
         self._build_ui()
 
-        if shot > 0:
-            QtCore.QTimer.singleShot(200, self._trigger_fetch_shot)
-        elif shot == -1:
-            QtCore.QTimer.singleShot(200, self._fetch_latest)
+        QtCore.QTimer.singleShot(200, self._populate_shots)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -686,13 +686,6 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         # ---- control row 1 ----
         row1 = QtWidgets.QHBoxLayout()
-        row1.addWidget(QtWidgets.QLabel('Shot:'))
-        self._shot_spin = QtWidgets.QSpinBox()
-        self._shot_spin.setRange(-1, 999999)
-        self._shot_spin.setValue(self._shot if self._shot > 0 else 205055)
-        self._shot_spin.setFixedWidth(80)
-        row1.addWidget(self._shot_spin)
-
         row1.addWidget(QtWidgets.QLabel('Tag:'))
         self._flavor_combo = QtWidgets.QComboBox()
         self._flavor_combo.addItems(['CAKE01', 'CAKE02', 'CAKE_FDP_ida_lite', 'CAKE_FDP', 'cake_nersc_testing', 'cake_nersc_testing_2'])
@@ -700,6 +693,14 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._flavor_combo.setEditable(True)
         self._flavor_combo.setFixedWidth(180)
         row1.addWidget(self._flavor_combo)
+
+        row1.addWidget(QtWidgets.QLabel('Shot:'))
+        self._shot_combo = QtWidgets.QComboBox()
+        self._shot_combo.setEditable(True)
+        self._shot_combo.setFixedWidth(100)
+        if self._shot > 0:
+            self._shot_combo.setCurrentText(str(self._shot))
+        row1.addWidget(self._shot_combo)
 
         row1.addWidget(QtWidgets.QLabel('EFIT tree:'))
         self._efit_combo = QtWidgets.QComboBox()
@@ -727,11 +728,6 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._prof_id_edit.setFixedWidth(50)
         row1.addWidget(self._prof_id_edit)
 
-        self._latest_btn = QtWidgets.QPushButton('Latest Shot')
-        self._latest_btn.setFixedWidth(90)
-        self._latest_btn.clicked.connect(self._fetch_latest)
-        row1.addWidget(self._latest_btn)
-
         self._fetch_btn = QtWidgets.QPushButton('Fetch Shot')
         self._fetch_btn.setFixedWidth(90)
         self._fetch_btn.clicked.connect(self._trigger_fetch_shot)
@@ -741,8 +737,10 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         root.addLayout(row1)
 
         # Reset run IDs when the context that determined them changes
-        self._shot_spin.valueChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=True))
+        self._shot_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=True))
         self._flavor_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=True))
+        # The available shots depend on the tag, so repopulate the shot list when it changes.
+        self._flavor_combo.currentTextChanged.connect(lambda _: self._populate_shots())
         self._efit_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=False))
         self._prof_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=False, prof=True))
 
@@ -922,32 +920,47 @@ class IriCakeViewer(QtWidgets.QMainWindow):
     # Fetch actions
     # ------------------------------------------------------------------
 
-    def _fetch_latest(self):
+    def _selected_shot(self) -> Optional[int]:
+        """Parse the shot combo's current text, or flag a bad entry and return None."""
+        text = self._shot_combo.currentText().strip()
+        try:
+            return int(text)
+        except ValueError:
+            self._status_label.setStyleSheet('color: red; font-style: italic;')
+            self._status_label.setText(f'Invalid shot: {text!r}')
+            return None
+
+    def _populate_shots(self):
+        """Query D3DRDB for the shots available under the current tag."""
         worker = self._start_rdb_worker(
-            get_max_iri_shot_and_ids, self._flavor_combo.currentText(),
-            status_msg='Querying D3DRDB for latest shot…',
+            list_shots_for_tag, self._flavor_combo.currentText(),
+            status_msg='Querying D3DRDB for shots…',
         )
-        worker.result.connect(self._on_latest_found)
+        worker.result.connect(self._on_shots_found)
         worker.error.connect(self._on_rdb_error)
         worker.start()
 
-    def _on_latest_found(self, result):
+    def _on_shots_found(self, shots):
         self._cancel_rdb_worker()
-        shot, prof_id, eq_id = result
-        # Block reset-triggering signals while populating fields programmatically
-        for w in (self._shot_spin, self._efit_combo, self._prof_combo):
-            w.blockSignals(True)
-        self._shot_spin.setValue(shot)
-        self._efit_combo.setCurrentText('EFIT')
-        self._prof_combo.setCurrentText('OMFIT_PROFS')
-        self._efit_id_edit.setText(eq_id)
-        self._prof_id_edit.setText(prof_id)
-        for w in (self._shot_spin, self._efit_combo, self._prof_combo):
-            w.blockSignals(False)
-        self._start_load(shot, 'EFIT', eq_id, 'OMFIT_PROFS', prof_id)
+        self._set_buttons_enabled(True)
+        # Repopulate without firing the run-id reset for each programmatic change.
+        self._shot_combo.blockSignals(True)
+        self._shot_combo.clear()
+        self._shot_combo.addItems([str(s) for s in shots])   # most-recent first
+        self._shot_combo.blockSignals(False)
+        self._status_label.setStyleSheet('color: grey; font-style: italic;')
+        self._status_label.setText(f'{len(shots)} shots for tag {self._flavor_combo.currentText()}')
+
+        # A CLI --shot N auto-loads once, after the list is available.
+        if self._pending_autofetch:
+            self._pending_autofetch = False
+            self._shot_combo.setCurrentText(str(self._shot))
+            self._trigger_fetch_shot()
 
     def _trigger_fetch_shot(self):
-        shot      = self._shot_spin.value()
+        shot = self._selected_shot()
+        if shot is None:
+            return
         flavor    = self._flavor_combo.currentText()
         eq_id     = self._efit_id_edit.text().strip()
         prof_id   = self._prof_id_edit.text().strip()
@@ -1029,7 +1042,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         self._status_label.setStyleSheet('color: grey; font-style: italic;')
         self._status_label.setText(
-            f'Loaded shot {self._shot_spin.value()}  —  '
+            f'Loaded shot {self._shot_combo.currentText()}  —  '
             f'{len(np.asarray(times)) if times is not None else 0} time slices'
         )
         self._replot()
@@ -1061,7 +1074,6 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
     def _set_buttons_enabled(self, enabled: bool):
         self._fetch_btn.setEnabled(enabled)
-        self._latest_btn.setEnabled(enabled)
 
     def closeEvent(self, event):
         """Wait for in-flight threads so none is destroyed while still running."""
@@ -1156,7 +1168,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         # Title
         if times_eq is not None and t < len(times_eq):
-            shot = self._shot_spin.value()
+            shot = self._shot_combo.currentText()
             t_s = float(times_eq[t])
             self._title_label.setText(f'DIII-D #{shot}  @  {t_s*1e3:.1f} ms')
 
