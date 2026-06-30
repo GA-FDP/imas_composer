@@ -20,7 +20,8 @@ class CoreProfilesOmfitMapper(IDSMapper):
     DOCS_PATH = "core_profiles_omfit.yaml"
     CONFIG_PATH = "core_profiles_omfit.yaml"
 
-    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', profiles_run_id: str = '001', **kwargs):
+    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', profiles_run_id: str = '001',
+                 crop_core_profiles: bool = False, **kwargs):
         """
         Initialize CoreProfilesOMFITMapper.
 
@@ -30,6 +31,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         """
         self.omfit_tree = omfit_tree
         self.run_id = profiles_run_id
+        self.crop_core_profiles = crop_core_profiles
 
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
@@ -1014,6 +1016,16 @@ class CoreProfilesOmfitMapper(IDSMapper):
         unified_time = raw_data[time_key] * 1e-3  # Convert ms to s
         return unified_time
 
+    def _rho_mask(self, rho_row: np.ndarray) -> np.ndarray:
+        """
+        Boolean mask selecting points inside the separatrix (rho <= 1) for one time slice.
+
+        When crop_core_profiles is False (default), keep all points (retain the scrape-off layer).
+        """
+        if self.crop_core_profiles:
+            return rho_row <= 1.0
+        return np.ones(rho_row.shape, dtype=bool)
+
     def _apply_rho_mask(self, shot: int, raw_data: Dict[str, Any],
                         data_2d: np.ndarray) -> list:
         """
@@ -1031,7 +1043,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         rho_2d = raw_data[rho_key]
         result = []
         for i_time in range(data_2d.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
+            mask = self._rho_mask(rho_2d[i_time, :])
             result.append(data_2d[i_time, mask])
         return result
 
@@ -1097,7 +1109,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         result = []
         for i_time in range(data_raw.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
+            mask = self._rho_mask(rho_2d[i_time, :])
             result.append(data_raw[i_time, mask])
 
         return np.array(result)
@@ -1211,7 +1223,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         n_time = rho_2d.shape[0]
         result = []
         for i_time in range(n_time):
-            mask = rho_2d[i_time, :] <= 1.0
+            mask = self._rho_mask(rho_2d[i_time, :])
             result.append(rho_2d[i_time, mask])
 
         return result
@@ -1245,7 +1257,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # Apply rho masking per time slice (same as other OMFIT_PROFS fields)
         result = []
         for i_time in range(n_time):
-            mask = rho_2d[i_time, :] <= 1.0
+            mask = self._rho_mask(rho_2d[i_time, :])
             result.append(rho_pol_norm_full[i_time, mask])
 
         return np.array(result)
@@ -1577,7 +1589,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         result = []
         for i_time in range(pressure_sum.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
+            mask = self._rho_mask(rho_2d[i_time, :])
             result.append(pressure_sum[i_time, mask])
 
         return np.array(result)

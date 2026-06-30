@@ -530,7 +530,8 @@ def pytest_generate_tests(metafunc):
                 for field in omfit_fields:
                     param_list.append((
                         {'profiles_tree': 'OMFIT_PROFS',
-                         'profiles_run_id': "001"},
+                         'profiles_run_id': "001",
+                         'crop_core_profiles': True},
                         field
                     ))
                     ids_list.append(f"OMFIT_PROFS-{field}")
@@ -541,7 +542,7 @@ def pytest_generate_tests(metafunc):
                 # No ids_path, just parametrize composer
                 metafunc.parametrize('composer_params', [
                     {'profiles_tree': 'ZIPFIT01'},
-                    {'profiles_tree': 'OMFIT_PROFS'}
+                    {'profiles_tree': 'OMFIT_PROFS', 'crop_core_profiles': True}
                 ], ids=['ZIPFIT', 'OMFIT_PROFS'], indirect=True)
 
         # Check if this is an interferometer test
