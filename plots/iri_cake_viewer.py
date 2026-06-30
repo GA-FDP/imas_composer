@@ -690,7 +690,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         row1.addWidget(QtWidgets.QLabel('Tag:'))
         self._flavor_combo = QtWidgets.QComboBox()
-        self._flavor_combo.addItems(['CAKE01', 'CAKE02', 'CAKE_FDP', 'cake_nersc_testing', 'cake_nersc_testing_2'])
+        self._flavor_combo.addItems(['CAKE01', 'CAKE02', 'CAKE_FDP_ida_lite', 'CAKE_FDP', 'cake_nersc_testing', 'cake_nersc_testing_2'])
         self._flavor_combo.setCurrentText(self._flavor)
         self._flavor_combo.setEditable(True)
         self._flavor_combo.setFixedWidth(180)
