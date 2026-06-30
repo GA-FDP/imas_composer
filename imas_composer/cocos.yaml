@@ -28,6 +28,9 @@ equilibrium:
   time_slice.constraints.flux_loop.measured_error_upper: PSI
   time_slice.constraints.flux_loop.reconstructed: PSI
 
+  # Constraints - Toroidal current density
+  time_slice.constraints.j_tor.measured: TOR
+
   # Constraints - Flux positions
   time_slice.constraints.pressure.position.psi: PSI
   time_slice.constraints.j_tor.position.psi: PSI

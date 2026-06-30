@@ -1232,7 +1232,7 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.j_tor.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._vzeroj", "equilibrium._constraint_time_indices"],
+            depends_on=["equilibrium._vzeroj", "equilibrium._bcentr", "equilibrium._cpasma_cocos", "equilibrium._constraint_time_indices"],
             compose=self._compose_j_tor_measured,
             ids_path="equilibrium.time_slice.constraints.j_tor.measured",
             docs_file=self.DOCS_PATH
@@ -2482,7 +2482,10 @@ class EquilibriumMapper(IDSMapper):
         else:
             j_tor_2d = j_tor
 
-        return j_tor_2d
+        return self._apply_cocos_transform(
+            j_tor_2d, shot, raw_data,
+            "equilibrium.time_slice.constraints.j_tor.measured",
+        )
 
     # Simple constraint compose functions with time filtering (converted from lambdas)
 
