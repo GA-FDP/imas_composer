@@ -1544,9 +1544,12 @@ class CoreProfilesOmfitMapper(IDSMapper):
         rho_2d = raw_data[rho_key]
 
         result = []
-        for i_time in range(data_raw.shape[0]):
+        for i_time in range(rho_2d.shape[0]):
             mask = rho_2d[i_time, :] <= 1.0
-            result.append(data_raw[i_time, mask])
+            if len(data_raw) !=0:
+                result.append(data_raw[i_time, mask])
+            else:
+                result.append([])
 
         return np.array(result)
 
