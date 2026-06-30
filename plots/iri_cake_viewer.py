@@ -263,9 +263,14 @@ def _cached(p, key: str, factory):
 
 
 def _band(p, key: str, x, y_lo, y_hi, color, alpha: float = 0.25):
-    """Update (creating once) a shaded band between y_lo and y_hi."""
-    lo = _cached(p, key + ':lo', lambda: pg.PlotDataItem(pen=None))
-    hi = _cached(p, key + ':hi', lambda: pg.PlotDataItem(pen=None))
+    """Update (creating once) a shaded band between y_lo and y_hi.
+
+    The boundaries are PlotCurveItems (not PlotDataItems): FillBetweenItem reads
+    their path directly via getPath(), whereas a PlotDataItem with pen=None never
+    populates its internal curve, leaving the fill empty.
+    """
+    lo = _cached(p, key + ':lo', lambda: pg.PlotCurveItem(pen=None))
+    hi = _cached(p, key + ':hi', lambda: pg.PlotCurveItem(pen=None))
     _cached(p, key + ':fill',
             lambda: pg.FillBetweenItem(hi, lo, brush=pg.mkBrush(_mkcolor(color, alpha))))
     lo.setData(x, y_lo)
