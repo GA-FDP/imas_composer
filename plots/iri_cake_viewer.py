@@ -120,6 +120,9 @@ PROF_FIELDS = [
     'core_profiles.profiles_1d.pressure_ion_total',
     'core_profiles.profiles_1d.pressure_ion_non_thermal',
     'core_profiles.profiles_1d.pressure_total',
+    'core_profiles.profiles_1d.j_tor',
+    'core_profiles.profiles_1d.j_ohmic',
+    'core_profiles.profiles_1d.j_bootstrap',
 ]
 
 
@@ -175,8 +178,8 @@ class DataLoader(QtCore.QThread):
                 f"equilibrium has {len(eq_time)} time slices but "
                 f"core_profiles has {len(cp_time)}"
             )
-            assert np.max(np.abs(eq_time - cp_time)) <= 1e-3, (
-                "equilibrium and core_profiles time bases differ by more than 1 ms"
+            assert np.max(np.abs(eq_time - cp_time)) <= 1e-4, (
+                "equilibrium and core_profiles time bases differ by more than 0.1 ms"
             )
 
             self.loaded.emit({**eq_data, **wall_data, **prof_data})
@@ -365,8 +368,17 @@ def plot_pressure(ax, data: Dict, t: int):
     ax.tick_params(labelsize=7)
 
 
+# Current-density components from core_profiles (OMFIT_PROFS), in (base, colour, label) form
+CP_CURRENTS = [
+    ('core_profiles.profiles_1d.j_tor',       'black',      r'$j_\mathrm{tor}$'),
+    ('core_profiles.profiles_1d.j_ohmic',     'tab:orange', r'$j_\mathrm{ohm}$'),
+    ('core_profiles.profiles_1d.j_bootstrap', 'tab:green',  r'$j_\mathrm{BS}$'),
+]
+
+
 def plot_j_tor(ax, data: Dict, t: int):
-    """Toroidal current density profile + constraint scatter."""
+    """EFIT toroidal current density + constraints, overlaid with the
+    core_profiles current-density components (total, ohmic, bootstrap)."""
     ax.clear()
 
     psi_ax  = float(data['equilibrium.time_slice.global_quantities.psi_axis'][t])
@@ -376,7 +388,7 @@ def plot_j_tor(ax, data: Dict, t: int):
     jtor  = data.get('equilibrium.time_slice.profiles_1d.j_tor')
     if psi1d is not None and jtor is not None:
         x = _psi_norm(psi1d[t], psi_ax, psi_bdy)
-        ax.plot(x, jtor[t] / 1e6, color='tab:blue', linewidth=1.5)
+        ax.plot(x, jtor[t] / 1e6, color='tab:blue', linewidth=1.5, label=r'EFIT $j_\mathrm{tor}$')
 
     # constraint scatter
     c_psi  = data.get('equilibrium.time_slice.constraints.j_tor.position.psi')
@@ -386,7 +398,20 @@ def plot_j_tor(ax, data: Dict, t: int):
         cy = np.asarray(c_meas[t]) / 1e6
         ax.plot(cx, cy, 'o', color='red', alpha=0.4, markersize=3)
 
-    ax.set_title(r'$j_\mathrm{tor}$ [MA m$^{-2}$]', y=0.9, va='top', fontsize=9)
+    # current-density components from core_profiles (OMFIT_PROFS only)
+    # eq and core_profiles share a time base (enforced on load) -> same index t
+    xk = _cp_psin(data, t)
+    if xk is not None:
+        for base, color, label in CP_CURRENTS:
+            y = _slice(data.get(base), t)
+            if y is not None:
+                ax.plot(xk, y / 1e6, color=color, linewidth=1.0, label=label)
+
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(handles, labels, fontsize=7, loc='best')
+
+    ax.set_title(r'$j$ [MA m$^{-2}$]', y=0.9, va='top', fontsize=9)
     ax.set_xlabel(r'$\Psi_\mathrm{n}$', fontsize=8)
     ax.tick_params(labelsize=7)
 
