@@ -20,7 +20,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
     DOCS_PATH = "core_profiles_omfit.yaml"
     CONFIG_PATH = "core_profiles_omfit.yaml"
 
-    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', run_id: str = '001',
+    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', profiles_run_id: str = '001',
                  crop_core_profiles: bool = False, **kwargs):
         """
         Initialize CoreProfilesOMFITMapper.
@@ -32,7 +32,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
                 Defaults to False, keeping scrape-off layer data.
         """
         self.omfit_tree = omfit_tree
-        self.run_id = run_id
+        self.run_id = profiles_run_id
         self.crop_core_profiles = crop_core_profiles
 
         # Initialize base class (loads config, static_values, supported_fields)
