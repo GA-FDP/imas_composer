@@ -2841,8 +2841,9 @@ class EquilibriumMapper(IDSMapper):
         for i in range(fluxfun_psi.shape[0]):
             # Use constant extrapolation: first and last values for out-of-bounds
             fill_value = (fluxfun_jeff[i][0], fluxfun_jeff[i][-1])
-            j_tor[i] = interp1d(fluxfun_psi_norm[i], fluxfun_jeff[i], kind='cubic',
-                                bounds_error=False, fill_value=fill_value)(psin)
+            if np.all(np.unique(fluxfun_psi_norm[i], return_counts=True)[1] == 1):
+                j_tor[i] = interp1d(fluxfun_psi_norm[i], fluxfun_jeff[i], kind='cubic',
+                                    bounds_error=False, fill_value=fill_value)(psin)
         return j_tor
 
     def _compose_profiles_1d_j_parallel(self, shot: int, raw_data: dict) -> np.ndarray:

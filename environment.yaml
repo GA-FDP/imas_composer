@@ -25,3 +25,6 @@ dependencies:
   # For pip install
   - pip *
   - setuptools
+  - pyqtgraph
+  - pyodbc
+  - pyqt
