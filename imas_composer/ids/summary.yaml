@@ -1,0 +1,13 @@
+# Summary IDS Configuration for DIII-D
+#
+# The IMAS summary IDS collects global scalar quantities derived from
+# other diagnostics and analysis codes.  On DIII-D these quantities
+# are stored in the TRANSPORT MDSplus tree under the GLOBAL subtree.
+#
+# MDSplus tree: TRANSPORT
+# Subtree:      TRANSPORT.GLOBAL
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  - global_quantities.tau_energy.value
+  - global_quantities.tau_energy.time
