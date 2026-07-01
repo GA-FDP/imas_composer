@@ -1018,7 +1018,7 @@ def main():
     parser = argparse.ArgumentParser(description='IRI CAKE Viewer')
     parser.add_argument('--shot', type=int, default=-1,
                         help='Shot number (-1 = latest)')
-    parser.add_argument('--flavor', type=str, default='CAKE01',
+    parser.add_argument('--flavor', type=str, default='IRI_CAKE01',
                         help='IRI CAKE tag/flavor')
     args = parser.parse_args()
 
