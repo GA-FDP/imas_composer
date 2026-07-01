@@ -551,7 +551,7 @@ def _cp_psin(data: Dict, cp_t: int):
 
 class IriCakeViewer(QtWidgets.QMainWindow):
 
-    def __init__(self, shot: int = -1, flavor: str = 'CAKE01'):
+    def __init__(self, shot: int = -1, flavor: str = 'IRI_CAKE01'):
         super().__init__()
         self.setWindowTitle('IRI CAKE Viewer')
         self.resize(1700, 700)
