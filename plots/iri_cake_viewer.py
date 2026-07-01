@@ -94,6 +94,10 @@ WALL_FIELDS = [
     'wall.description_2d.limiter.unit.outline.z',
 ]
 
+SUMMARY_FIELDS = [
+    'summary.description',
+]
+
 PROF_FIELDS = [
     'core_profiles.time',
     'core_profiles.profiles_1d.grid.rho_pol_norm',
@@ -180,6 +184,13 @@ class DataLoader(QtCore.QThread):
             self.status.emit("Fetching core profiles…")
             prof_data = simple_load(PROF_FIELDS, self.shot, composer=composer)
 
+            # Shot comment is cosmetic (appended to the plot title); a missing
+            # \D3D::TOP.COMMENTS:BRIEF node must not block the science panels.
+            try:
+                summary_data = simple_load(SUMMARY_FIELDS, self.shot, composer=composer)
+            except Exception:
+                summary_data = {'summary.description': None}
+
             eq_time = np.asarray(eq_data['equilibrium.time'])
             cp_time = np.asarray(prof_data['core_profiles.time'])
             assert len(eq_time) == len(cp_time), (
@@ -190,7 +201,7 @@ class DataLoader(QtCore.QThread):
                 "equilibrium and core_profiles time bases differ by more than 0.1 ms"
             )
 
-            self.loaded.emit({**eq_data, **wall_data, **prof_data})
+            self.loaded.emit({**eq_data, **wall_data, **prof_data, **summary_data})
 
         except Exception:
             self.error.emit(traceback.format_exc())
@@ -1167,7 +1178,11 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         if times_eq is not None and t < len(times_eq):
             shot = self._shot_combo.currentText()
             t_s = float(times_eq[t])
-            self._title_label.setText(f'DIII-D #{shot}  @  {t_s*1e3:.1f} ms')
+            title = f'DIII-D #{shot}  @  {t_s*1e3:.1f} ms'
+            desc = str(d.get('summary.description') or '').strip()
+            if desc:
+                title += f'  —  {desc}'
+            self._title_label.setText(title)
 
 
 # ---------------------------------------------------------------------------
