@@ -199,7 +199,6 @@ def get_iri_upload_ids(shot: int, tag: str = 'CAKE_FDP') -> Tuple[str, str]:
     Raises ValueError with a helpful message if nothing is found.
     """
     iri_runs = available_iri_results(shot, tag)
-
     if not iri_runs:
         all_runs = available_iri_results(shot, tag=None)
         available_tags = sorted({r['TAG'] for r in all_runs.values()})
@@ -218,35 +217,22 @@ def get_iri_upload_ids(shot: int, tag: str = 'CAKE_FDP') -> Tuple[str, str]:
     return prof_id, eq_id
 
 
-def get_max_iri_shot_and_ids() -> Tuple[int, str, str, str]:
+def get_max_iri_shot_and_ids(tag: str = 'IRI_CAKE01') -> Tuple[int, str, str]:
     """
-    Return (shot, prof_id, eq_id, comment) for the most recent IRI run
-    that has an OMFIT_PROFS upload.
+    Return (shot, prof_id, eq_id) for the largest shot with a valid IRI CAKE
+    run tagged *tag*. Both IDs come from the same iri_id, so the equilibrium
+    and profile uploads are guaranteed to be consistent.
     """
     with D3DRDB() as db:
         rows = db.query(
-            "SELECT max(iri_id) as iri_id FROM iri_upload_log "
-            "WHERE upload_tree='OMFIT_PROFS'"
+            f"SELECT max(shot) as shot FROM iri_run_log "
+            f"WHERE experiment='DIII-D' AND tag='{tag}' AND ignore='False'"
         )
-        max_iri_id = rows[0]['IRI_ID']
-
-        shot = db.query(
-            f"SELECT shot FROM iri_run_log WHERE iri_id={max_iri_id}"
-        )[0]['SHOT']
-
-        prof_id = str(db.query(
-            f"SELECT upload_id FROM iri_upload_log "
-            f"WHERE upload_tree='OMFIT_PROFS' AND iri_id={max_iri_id}"
-        )[0]['UPLOAD_ID'])[-3:]
-
-        eq_row = db.query(
-            f"SELECT upload_id, comments FROM iri_upload_log "
-            f"WHERE upload_tree='EFIT' AND iri_id={max_iri_id}"
-        )[0]
-        eq_id   = str(eq_row['UPLOAD_ID'])[-2:]
-        comment = eq_row.get('COMMENTS', '') or ''
-
-    return shot, prof_id, eq_id, comment
+    shot = rows[0]['SHOT']
+    if shot is None:
+        raise ValueError(f"No IRI CAKE runs found with tag '{tag}'")
+    prof_id, eq_id = get_iri_upload_ids(shot, tag)
+    return shot, prof_id, eq_id
 
 
 def list_available_tags(shot: int) -> List[str]:
