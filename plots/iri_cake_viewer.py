@@ -191,7 +191,6 @@ RDB_TIMEOUT_MS = 10_000
 class D3DrdbWorker(QtCore.QThread):
     """Runs a single D3DRDB callable in a background thread."""
 
-    # NB: not named "finished" — see DataLoader for why.
     result = QtCore.Signal(object)  # emits the return value on success
     error  = QtCore.Signal(str)     # emits formatted traceback on failure
 
