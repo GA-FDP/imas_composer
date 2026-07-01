@@ -224,11 +224,14 @@ def list_available_tags(shot: int) -> List[str]:
 
 
 def list_shots_for_tag(tag: str = 'IRI_CAKE01') -> List[int]:
-    """Shots with a valid IRI CAKE run for *tag*, most recent run_date first."""
+    """Shots with a valid IRI CAKE run for *tag* that has uploaded results,
+    most recent run_date first."""
     with D3DRDB() as db:
         rows = db.query(
             f"SELECT shot, max(run_date) AS rd FROM iri_run_log "
             f"WHERE experiment='DIII-D' AND tag='{tag}' AND ignore='False' "
+            f"AND EXISTS (SELECT 1 FROM iri_upload_log "
+            f"WHERE iri_upload_log.iri_id = iri_run_log.iri_id) "
             f"GROUP BY shot ORDER BY rd DESC"
         )
     return [int(r['SHOT']) for r in rows if r['SHOT'] is not None]
