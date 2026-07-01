@@ -121,6 +121,7 @@ def simple_load(
     profiles_run_id: str = "",
     fast_ece: bool = False,
     include_rip: bool = False,
+    crop_core_profiles: bool = False,
     max_iterations: int = 10
 ) -> Dict[str, Any]:
     """
@@ -138,6 +139,9 @@ def simple_load(
         profiles_tree: Profiles tree (default: 'ZIPFIT01', ignored if composer provided)
         profiles_run_id: Run ID appended to pulse for OMFIT_PROFS tree (default: '')
         fast_ece: Whether to load fast_ece data (default: False)
+        include_rip: Whether to include RIP data for interferometer IDS (default: False)
+        crop_core_profiles: Whether to crop core_profiles to inside the separatrix (rho <= 1)
+            (default: False, keeps scrape-off layer data)
         max_iterations: Maximum resolve-fetch iterations (default: 10)
 
     Returns:
@@ -157,7 +161,8 @@ def simple_load(
             profiles_tree=profiles_tree,
             profiles_run_id=profiles_run_id,
             fast_ece=fast_ece,
-            include_rip=include_rip
+            include_rip=include_rip,
+            crop_core_profiles=crop_core_profiles
         )
 
     raw_data = {}

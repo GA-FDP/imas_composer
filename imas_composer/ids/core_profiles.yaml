@@ -121,5 +121,23 @@ fields:
   - field: profiles_1d.e_field.radial
     trees: [OMFIT_PROFS]
 
+  # Pressures - OMFIT_PROFS only
+  - field: profiles_1d.pressure_ion_non_thermal
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.pressure_ion_total
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.electrons.pressure
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.pressure_total
+    trees: [OMFIT_PROFS]
+
+  # Currents - OMFIT_PROFS only
+  - field: profiles_1d.j_ohmic
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.j_tor
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.j_bootstrap
+    trees: [OMFIT_PROFS]
+
   # Global quantities - all trees
   - global_quantities.v_loop

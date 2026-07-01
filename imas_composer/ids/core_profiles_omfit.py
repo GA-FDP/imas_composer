@@ -20,16 +20,20 @@ class CoreProfilesOmfitMapper(IDSMapper):
     DOCS_PATH = "core_profiles_omfit.yaml"
     CONFIG_PATH = "core_profiles_omfit.yaml"
 
-    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', profiles_run_id: str = '001', **kwargs):
+    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', run_id: str = '001',
+                 crop_core_profiles: bool = False, **kwargs):
         """
         Initialize CoreProfilesOMFITMapper.
 
         Args:
             omfit_tree: OMFIT tree to use (default: 'OMFIT_PROFS')
-            profiles_run_id: Run ID to append to pulse for OMFIT_PROFS tree (default: '001')
+            run_id: Run ID to append to pulse for OMFIT_PROFS tree (default: '001')
+            crop_core_profiles: Whether to crop profiles to inside the separatrix (rho <= 1).
+                Defaults to False, keeping scrape-off layer data.
         """
         self.omfit_tree = omfit_tree
-        self.run_id = profiles_run_id
+        self.run_id = run_id
+        self.crop_core_profiles = crop_core_profiles
 
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
@@ -74,6 +78,10 @@ class CoreProfilesOmfitMapper(IDSMapper):
             'deuterium_density': '\\TOP.N_D',
             'carbon_density': '\\TOP.N_C',
             'velocity_toroidal': '\\TOP.V_TOR_C',
+            'pressure_ion_non_thermal': '\\TOP.P_FAST_D',
+            'pressure_electron': '\\TOP.P_E',
+            'pressure_deuterium': '\\TOP.P_D',
+            'pressure_carbon': '\\TOP.P_C',
         }
 
         if field_type not in path_map:
@@ -136,6 +144,16 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # Carbon toroidal velocity - data only (both D and C use V_TOR_C)
         self.specs["core_profiles.profiles_1d._velocity_toroidal_data"] = self._create_profile_field_spec(
             '_velocity_toroidal_data', 'velocity_toroidal')
+
+        # Pressures - data only
+        self.specs["core_profiles.profiles_1d._pressure_ion_non_thermal_data"] = self._create_profile_field_spec(
+            '_pressure_ion_non_thermal_data', 'pressure_ion_non_thermal')
+        self.specs["core_profiles.profiles_1d._pressure_electron_data"] = self._create_profile_field_spec(
+            '_pressure_electron_data', 'pressure_electron')
+        self.specs["core_profiles.profiles_1d._pressure_deuterium_data"] = self._create_profile_field_spec(
+            '_pressure_deuterium_data', 'pressure_deuterium')
+        self.specs["core_profiles.profiles_1d._pressure_carbon_data"] = self._create_profile_field_spec(
+            '_pressure_carbon_data', 'pressure_carbon')
 
         # ============================================================
         # Uncertainty fields - OMFIT_PROFS only
@@ -218,6 +236,32 @@ class CoreProfilesOmfitMapper(IDSMapper):
                 Requirement('\\TOP.ER_C', self._get_pulse_id(shot), self.omfit_tree)
             ],
             ids_path="core_profiles.profiles_1d._e_field_radial_data",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Current densities (j_tor sourced from J_TOT)
+        self.specs["core_profiles.profiles_1d._j_ohmic_data"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('\\TOP.J_OHM', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._j_ohmic_data",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d._j_tor_data"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('\\TOP.J_TOT', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._j_tor_data",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d._j_bootstrap_data"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('\\TOP.J_BS', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._j_bootstrap_data",
             docs_file=self.DOCS_PATH
         )
 
@@ -554,7 +598,87 @@ class CoreProfilesOmfitMapper(IDSMapper):
         )
 
         # ============================================================
-        # Fit fields (raw measurements) - OMFIT_PROFS only
+        # Pressures (OMFIT_PROFS only)
+        # ============================================================
+
+        # pressure_ion_non_thermal: from P_FAST_D
+        self.specs["core_profiles.profiles_1d.pressure_ion_non_thermal"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._pressure_ion_non_thermal_data",
+                "core_profiles.profiles_1d._omfit_rho"
+            ],
+            compose=self._compose_pressure_ion_non_thermal,
+            ids_path="core_profiles.profiles_1d.pressure_ion_non_thermal",
+            docs_file=self.DOCS_PATH
+        )
+
+        # electrons.pressure: from P_E
+        self.specs["core_profiles.profiles_1d.electrons.pressure"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._pressure_electron_data",
+                "core_profiles.profiles_1d._omfit_rho"
+            ],
+            compose=self._compose_pressure_electron,
+            ids_path="core_profiles.profiles_1d.electrons.pressure",
+            docs_file=self.DOCS_PATH
+        )
+
+        # pressure_ion_total: P_D + P_C
+        self.specs["core_profiles.profiles_1d.pressure_ion_total"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._pressure_deuterium_data",
+                "core_profiles.profiles_1d._pressure_carbon_data",
+                "core_profiles.profiles_1d._omfit_rho"
+            ],
+            compose=self._compose_pressure_ion_total,
+            ids_path="core_profiles.profiles_1d.pressure_ion_total",
+            docs_file=self.DOCS_PATH
+        )
+
+        # pressure_total: sum of the IMAS pressure fields above
+        self.specs["core_profiles.profiles_1d.pressure_total"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d.pressure_ion_non_thermal",
+                "core_profiles.profiles_1d.pressure_ion_total",
+                "core_profiles.profiles_1d.electrons.pressure"
+            ],
+            compose=self._compose_pressure_total,
+            ids_path="core_profiles.profiles_1d.pressure_total",
+            docs_file=self.DOCS_PATH
+        )
+
+        # ============================================================
+        # Current densities (OMFIT_PROFS only)
+        # ============================================================
+
+        self.specs["core_profiles.profiles_1d.j_ohmic"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["core_profiles.profiles_1d._j_ohmic_data", "core_profiles.profiles_1d._omfit_rho"],
+            compose=self._compose_j_ohmic,
+            ids_path="core_profiles.profiles_1d.j_ohmic",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d.j_tor"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["core_profiles.profiles_1d._j_tor_data", "core_profiles.profiles_1d._omfit_rho"],
+            compose=self._compose_j_tor,
+            ids_path="core_profiles.profiles_1d.j_tor",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles.profiles_1d.j_bootstrap"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["core_profiles.profiles_1d._j_bootstrap_data", "core_profiles.profiles_1d._omfit_rho"],
+            compose=self._compose_j_bootstrap,
+            ids_path="core_profiles.profiles_1d.j_bootstrap",
+            docs_file=self.DOCS_PATH
+        )
+
+        # ============================================================
+        # Fit fields - raw measurements (OMFIT_PROFS only)
         # ============================================================
 
         # Electron density_fit.* fields
@@ -867,6 +991,33 @@ class CoreProfilesOmfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+
+    def _get_unified_time(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Get unified time array from OMFIT_PROFS.
+
+        For OMFIT_PROFS (d3d.py:1589):
+            data['time'] = dim_info.dim_of(1) * 1.e-3
+            # All data on common time grid
+
+        Returns:
+            1D array of time points in seconds
+        """
+        # For OMFIT_PROFS, time comes from dim_of(\TOP.N_E, 1)
+        time_key = Requirement('dim_of(\\TOP.N_E,1)', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        unified_time = raw_data[time_key] * 1e-3  # Convert ms to s
+        return unified_time
+
+    def _rho_mask(self, rho_row: np.ndarray) -> np.ndarray:
+        """
+        Boolean mask selecting points inside the separatrix (rho <= 1) for one time slice.
+
+        When crop_core_profiles is False (default), keep all points (retain the scrape-off layer).
+        """
+        if self.crop_core_profiles:
+            return rho_row <= 1.0
+        return np.ones(rho_row.shape, dtype=bool)
+
     def _apply_rho_mask(self, shot: int, raw_data: Dict[str, Any],
                         data_2d: np.ndarray) -> list:
         """
@@ -884,7 +1035,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         rho_2d = raw_data[rho_key]
         result = []
         for i_time in range(data_2d.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
+            mask = self._rho_mask(rho_2d[i_time, :])
             result.append(data_2d[i_time, mask])
         return result
 
@@ -915,6 +1066,45 @@ class CoreProfilesOmfitMapper(IDSMapper):
             for i_time in range(n_time)
         ]
         return ak.Array(result)
+
+    def _compose_omfit_data_field(self, shot: int, raw_data: Dict[str, Any],
+                                  data_key_name: str) -> np.ndarray:
+        """
+        Generic helper to compose rho-masked OMFIT_PROFS profile fields.
+
+        For plain profile data (no uncertainty) already on the common
+        [time, rho] grid:
+        1. Get data from the DERIVED dependency (already in raw_data)
+        2. Apply rho masking per time slice (no unit conversion needed)
+
+        Args:
+            shot: Shot number
+            raw_data: Dictionary of raw data
+            data_key_name: Internal dependency key (e.g., 'core_profiles.profiles_1d._j_ohmic_data')
+
+        Returns:
+            2D array of shape (n_time, n_rho) with masked values
+        """
+        spec = self.specs.get(data_key_name)
+        if spec and spec.derive_requirements:
+            reqs = spec.derive_requirements(shot, raw_data)
+            if reqs:
+                data_key = reqs[0].as_key()
+                data_raw = raw_data[data_key]
+            else:
+                raise ValueError(f"No requirements for {data_key_name}")
+        else:
+            raise ValueError(f"Cannot find spec or requirements for {data_key_name}")
+
+        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        rho_2d = raw_data[rho_key]
+
+        result = []
+        for i_time in range(data_raw.shape[0]):
+            mask = self._rho_mask(rho_2d[i_time, :])
+            result.append(data_raw[i_time, mask])
+
+        return np.array(result)
 
     def _compose_all_ion_temperature(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
@@ -954,7 +1144,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         Both D and C use error_of(V_TOR_C).
         """
-        v_err = self._compose_omfit_error_field(
+        v_err = self._compose_omfit_data_field(
             shot, raw_data, "core_profiles.profiles_1d._velocity_toroidal_error")
         return self._stack_ions({ion['label']: v_err for ion in self.ions})
 
@@ -964,9 +1154,9 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         D from error_of(T_D), C from error_of(T_C).
         """
-        d_err = self._compose_omfit_error_field(
+        d_err = self._compose_omfit_data_field(
             shot, raw_data, "core_profiles.profiles_1d._ion_temperature_error")
-        c_err = self._compose_omfit_error_field(
+        c_err = self._compose_omfit_data_field(
             shot, raw_data, "core_profiles.profiles_1d._carbon_temperature_error")
         return self._stack_ions({'D': d_err, 'C': c_err})
 
@@ -976,33 +1166,11 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         D from error_of(N_D), C from error_of(N_C).
         """
-        d_err = self._compose_omfit_error_field(
+        d_err = self._compose_omfit_data_field(
             shot, raw_data, "core_profiles.profiles_1d._deuterium_density_error")
-        c_err = self._compose_omfit_error_field(
+        c_err = self._compose_omfit_data_field(
             shot, raw_data, "core_profiles.profiles_1d._carbon_density_error")
         return self._stack_ions({'D': d_err, 'C': c_err})
-
-    def _compose_all_fit_field(self, shot: int, raw_data: Dict[str, Any],
-                               carbon_compose_fn) -> ak.Array:
-        """
-        Build a unified (n_time, n_ion, var_measurements) fit-field ak.Array.
-
-        D has no fit measurements → empty arrays per time slice.
-        C gets data from carbon_compose_fn(shot, raw_data).
-
-        Args:
-            shot: Shot number
-            raw_data: Raw data dict
-            carbon_compose_fn: Callable returning ak.Array (n_time, var) for carbon
-
-        Returns:
-            ak.Array of shape (n_time, n_ion, var_measurements)
-        """
-        c_data = carbon_compose_fn(shot, raw_data)  # ak.Array (n_time, var)
-        n_time = len(c_data)
-        d_slices = [np.array([], dtype=np.float64) for _ in range(n_time)]
-        c_slices = [np.asarray(c_data[i]) for i in range(n_time)]
-        return self._stack_ions({'D': d_slices, 'C': c_slices})
 
     def _compose_all_ion_label(self, shot: int, raw_data: Dict[str, Any]) -> list:
         """Compose array of ion labels in YAML order (n_time, n_ion)."""
@@ -1047,7 +1215,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         n_time = rho_2d.shape[0]
         result = []
         for i_time in range(n_time):
-            mask = rho_2d[i_time, :] <= 1.0
+            mask = self._rho_mask(rho_2d[i_time, :])
             result.append(rho_2d[i_time, mask])
 
         return result
@@ -1081,163 +1249,30 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # Apply rho masking per time slice (same as other OMFIT_PROFS fields)
         result = []
         for i_time in range(n_time):
-            mask = rho_2d[i_time, :] <= 1.0
+            mask = self._rho_mask(rho_2d[i_time, :])
             result.append(rho_pol_norm_full[i_time, mask])
 
         return np.array(result)
 
     def _compose_density(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """
-        Compose electrons.density_thermal.
-
-        For OMFIT_PROFS (d3d.py:1570):
-            query["electrons.density_thermal"] = "n_e"  # -> \\TOP.N_E
-            # Data already on common [time, rho] grid, no unit conversion needed
-            # Apply rho masking per time slice: mask = data["grid.rho_tor_norm"] <= 1.0
-
-        Returns:
-            2D array of shape (n_time, n_rho) with electron density in m^-3
-        """
-        # Get raw data
-        data_key = Requirement('\\TOP.N_E', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        density_raw = raw_data[data_key]
-
-        # Get rho for masking
-        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
-
-        # Apply rho masking per time slice (no unit conversion needed for OMFIT_PROFS)
-        result = []
-        for i_time in range(density_raw.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
-            result.append(density_raw[i_time, mask])
-
-        return np.array(result)
+        """Compose electrons.density_thermal for OMFIT_PROFS (from \\TOP.N_E)."""
+        return self._compose_omfit_data_field(shot, raw_data, "core_profiles.profiles_1d._density_data")
 
     def _compose_temperature(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """
-        Compose electrons.temperature.
-
-        For OMFIT_PROFS (d3d.py:1570):
-            query["electrons.temperature"] = "t_e"  # -> \\TOP.T_E
-            # Data already on common [time, rho] grid, no unit conversion needed
-
-        Returns:
-            2D array of shape (n_time, n_rho) with electron temperature in eV
-        """
-        # Get raw data
-        data_key = Requirement('\\TOP.T_E', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        temperature_raw = raw_data[data_key]
-
-        # Get rho for masking
-        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
-
-        # Apply rho masking per time slice (no unit conversion needed)
-        result = []
-        for i_time in range(temperature_raw.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
-            result.append(temperature_raw[i_time, mask])
-
-        return np.array(result)
-
-    def _get_unified_time(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """
-        Get unified time array from OMFIT_PROFS.
-
-        For OMFIT_PROFS (d3d.py:1589):
-            data['time'] = dim_info.dim_of(1) * 1.e-3
-            # All data on common time grid
-
-        Returns:
-            1D array of time points in seconds
-        """
-        # For OMFIT_PROFS, time comes from dim_of(\TOP.N_E, 1)
-        time_key = Requirement('dim_of(\\TOP.N_E,1)', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        unified_time = raw_data[time_key] * 1e-3  # Convert ms to s
-        return unified_time
+        """Compose electrons.temperature for OMFIT_PROFS (from \\TOP.T_E)."""
+        return self._compose_omfit_data_field(shot, raw_data, "core_profiles.profiles_1d._temperature_data")
 
     def _compose_ion_temperature(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """
-        Compose ion temperature (both D and C use same T_D data).
-
-        For OMFIT_PROFS (d3d.py:1570):
-            query["ion[0].temperature"] = "t_d"  # -> \\TOP.T_D
-            query["ion[1].temperature"] = "t_d"  # -> \\TOP.T_D
-            # Data already on common grid
-
-        Returns:
-            2D array of shape (n_time, n_rho) with ion temperature in eV
-        """
-        # Get raw data
-        data_key = Requirement('\\TOP.T_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        ion_temp_raw = raw_data[data_key]
-
-        # Get rho for masking
-        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
-
-        # Apply rho masking per time slice (no unit conversion needed)
-        result = []
-        for i_time in range(ion_temp_raw.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
-            result.append(ion_temp_raw[i_time, mask])
-
-        return np.array(result)
+        """Compose ion temperature for OMFIT_PROFS (from \\TOP.T_D)."""
+        return self._compose_omfit_data_field(shot, raw_data, "core_profiles.profiles_1d._ion_temperature_data")
 
     def _compose_carbon_density(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """
-        Compose carbon density.
-
-        For OMFIT_PROFS (d3d.py:1570):
-            query["ion[1].density_thermal"] = "n_c"  # -> \\TOP.N_C
-            # Data already on common grid
-
-        Returns:
-            2D array of shape (n_time, n_rho) with carbon density in m^-3
-        """
-        # Get raw data
-        data_key = Requirement('\\TOP.N_C', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        carbon_density_raw = raw_data[data_key]
-
-        # Get rho for masking
-        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
-
-        # Apply rho masking per time slice (no unit conversion needed)
-        result = []
-        for i_time in range(carbon_density_raw.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
-            result.append(carbon_density_raw[i_time, mask])
-
-        return np.array(result)
+        """Compose carbon density for OMFIT_PROFS (from \\TOP.N_C)."""
+        return self._compose_omfit_data_field(shot, raw_data, "core_profiles.profiles_1d._carbon_density_data")
 
     def _compose_deuterium_density(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """
-        Compose deuterium density.
-
-        For OMFIT_PROFS (d3d.py:1554):
-            query["ion[0].density_thermal"] = "N_D"  # -> \\TOP.N_D
-            # Direct from MDSplus, no quasineutrality
-
-        Returns:
-            2D array of shape (n_time, n_rho) with deuterium density in m^-3
-        """
-        # For OMFIT_PROFS, deuterium density comes directly from \TOP.N_D
-        data_key = Requirement('\\TOP.N_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        deuterium_raw = raw_data[data_key]
-
-        # Get rho for masking
-        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
-
-        # Apply rho masking per time slice (no unit conversion needed)
-        result = []
-        for i_time in range(deuterium_raw.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
-            result.append(deuterium_raw[i_time, mask])
-
-        return np.array(result)
+        """Compose deuterium density for OMFIT_PROFS (from \\TOP.N_D)."""
+        return self._compose_omfit_data_field(shot, raw_data, "core_profiles.profiles_1d._deuterium_density_data")
 
     def _derive_vloop_data_requirements(self, shot: int, _raw_data: Dict[str, Any]) -> list:
         """Derive requirements for v_loop data (needs shot number in TDI expression)."""
@@ -1281,121 +1316,137 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         return v_loop
 
-    def _compose_omfit_error_field(self, shot: int, raw_data: Dict[str, Any],
-                                   error_key_name: str) -> np.ndarray:
-        """
-        Generic helper to compose OMFIT_PROFS error fields.
-
-        All OMFIT_PROFS error fields follow the same pattern:
-        1. Get error data from error_of(\\TOP.FIELD) (already in raw_data)
-        2. Apply rho masking per time slice (no unit conversion needed)
-
-        Args:
-            shot: Shot number
-            raw_data: Dictionary of raw data
-            error_key_name: Internal dependency key (e.g., 'core_profiles.profiles_1d._density_error')
-
-        Returns:
-            2D array of shape (n_time, n_rho) with error values
-        """
-        # Extract the actual key from the dependency name
-        spec = self.specs.get(error_key_name)
-        if spec and spec.derive_requirements:
-            reqs = spec.derive_requirements(shot, raw_data)
-            if reqs:
-                error_data_key = reqs[0].as_key()
-                error_raw = raw_data[error_data_key]
-            else:
-                raise ValueError(f"No requirements for {error_key_name}")
-        else:
-            raise ValueError(f"Cannot find spec or requirements for {error_key_name}")
-
-        # Get rho for masking
-        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
-
-        # Apply rho masking per time slice (no unit conversion needed)
-        result = []
-        if hasattr(error_raw, 'shape'):
-            for i_time in range(error_raw.shape[0]):
-                mask = rho_2d[i_time, :] <= 1.0
-                result.append(error_raw[i_time, mask])
-
-        return np.array(result)
-
     def _compose_density_error(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose electrons.density_thermal_error_upper for OMFIT_PROFS."""
-        return self._compose_omfit_error_field(
+        return self._compose_omfit_data_field(
             shot, raw_data,
             "core_profiles.profiles_1d._density_error"
         )
 
     def _compose_temperature_error(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose electrons.temperature_error_upper for OMFIT_PROFS."""
-        return self._compose_omfit_error_field(
+        return self._compose_omfit_data_field(
             shot, raw_data,
             "core_profiles.profiles_1d._temperature_error"
         )
 
     def _compose_ion_temperature_error(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose ion[0] and ion[1] temperature_error_upper for OMFIT_PROFS."""
-        return self._compose_omfit_error_field(
+        return self._compose_omfit_data_field(
             shot, raw_data,
             "core_profiles.profiles_1d._ion_temperature_error"
         )
 
     def _compose_deuterium_density_error(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose ion[0].density_thermal_error_upper for OMFIT_PROFS."""
-        return self._compose_omfit_error_field(
+        return self._compose_omfit_data_field(
             shot, raw_data,
             "core_profiles.profiles_1d._deuterium_density_error"
         )
 
     def _compose_carbon_density_error(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose ion[1].density_thermal_error_upper for OMFIT_PROFS."""
-        return self._compose_omfit_error_field(
+        return self._compose_omfit_data_field(
             shot, raw_data,
             "core_profiles.profiles_1d._carbon_density_error"
         )
 
     def _compose_carbon_temperature_error(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose ion[1].temperature_error_upper for OMFIT_PROFS."""
-        return self._compose_omfit_error_field(
+        return self._compose_omfit_data_field(
             shot, raw_data,
             "core_profiles.profiles_1d._carbon_temperature_error"
         )
 
     def _compose_e_field_radial(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """
-        Compose e_field.radial for OMFIT_PROFS.
+        """Compose e_field.radial for OMFIT_PROFS (from \\TOP.ER_C)."""
+        return self._compose_omfit_data_field(shot, raw_data, "core_profiles.profiles_1d._e_field_radial_data")
 
-        OMAS d3d.py line 1569, 1645:
-            query["e_field.radial"] = "ER_C"  # -> \\TOP.ER_C
-            # No unit conversion, already in V/m
-            ods[f"{sh}[{i_time}].e_field.radial"] = data[entry][i_time][mask[i_time]]
+    def _compose_pressure_ion_non_thermal(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Compose pressure_ion_non_thermal for OMFIT_PROFS (from \\TOP.P_FAST_D)."""
+        return self._compose_omfit_data_field(shot, raw_data, "core_profiles.profiles_1d._pressure_ion_non_thermal_data")
+
+    def _compose_pressure_electron(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Compose electrons.pressure for OMFIT_PROFS (from \\TOP.P_E)."""
+        return self._compose_omfit_data_field(shot, raw_data, "core_profiles.profiles_1d._pressure_electron_data")
+
+    def _compose_pressure_ion_total(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Compose pressure_ion_total as the sum of P_D and P_C.
 
         Returns:
-            2D array of shape (n_time, n_rho) with radial electric field in V/m
+            2D array of shape (n_time, n_rho) with total ion pressure in Pa
         """
-        # Get e-field data
-        e_field_key = Requirement('\\TOP.ER_C', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        e_field_raw = raw_data[e_field_key]
+        d_key = Requirement('\\TOP.P_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        c_key = Requirement('\\TOP.P_C', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        pressure_sum = raw_data[d_key] + raw_data[c_key]
 
-        # Get rho for masking
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
         rho_2d = raw_data[rho_key]
 
-        # Apply rho masking per time slice (no unit conversion needed)
         result = []
-        for i_time in range(e_field_raw.shape[0]):
-            mask = rho_2d[i_time, :] <= 1.0
-            result.append(e_field_raw[i_time, mask])
+        for i_time in range(pressure_sum.shape[0]):
+            mask = self._rho_mask(rho_2d[i_time, :])
+            result.append(pressure_sum[i_time, mask])
 
         return np.array(result)
+
+    def _compose_pressure_total(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Compose pressure_total as the sum of the composed IMAS pressure fields.
+
+        Uses the already-composed (rho-masked) pressure_ion_non_thermal,
+        pressure_ion_total and pressure_electron rather than the raw MDSplus data.
+
+        Returns:
+            2D array of shape (n_time, n_rho) with total pressure in Pa
+        """
+        p_non_thermal = self.specs["core_profiles.profiles_1d.pressure_ion_non_thermal"].compose(shot, raw_data)
+        p_ion_total = self.specs["core_profiles.profiles_1d.pressure_ion_total"].compose(shot, raw_data)
+        p_electron = self.specs["core_profiles.profiles_1d.electrons.pressure"].compose(shot, raw_data)
+
+        return p_non_thermal + p_ion_total + p_electron
+
+    def _compose_j_ohmic(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Compose j_ohmic for OMFIT_PROFS (from \\TOP.J_OHM)."""
+        return self._compose_omfit_data_field(
+            shot, raw_data, "core_profiles.profiles_1d._j_ohmic_data")
+
+    def _compose_j_tor(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Compose j_tor for OMFIT_PROFS (from \\TOP.J_TOT)."""
+        return self._compose_omfit_data_field(
+            shot, raw_data, "core_profiles.profiles_1d._j_tor_data")
+
+    def _compose_j_bootstrap(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Compose j_bootstrap for OMFIT_PROFS (from \\TOP.J_BS)."""
+        return self._compose_omfit_data_field(
+            shot, raw_data, "core_profiles.profiles_1d._j_bootstrap_data")
 
     # ============================================================
     # Fit field compose methods (OMFIT_PROFS only)
     # ============================================================
+
+    def _compose_all_fit_field(self, shot: int, raw_data: Dict[str, Any],
+                               carbon_compose_fn) -> ak.Array:
+        """
+        Build a unified (n_time, n_ion, var_measurements) fit-field ak.Array.
+
+        D has no fit measurements → empty arrays per time slice.
+        C gets data from carbon_compose_fn(shot, raw_data).
+
+        Args:
+            shot: Shot number
+            raw_data: Raw data dict
+            carbon_compose_fn: Callable returning ak.Array (n_time, var) for carbon
+
+        Returns:
+            ak.Array of shape (n_time, n_ion, var_measurements)
+        """
+        c_data = carbon_compose_fn(shot, raw_data)  # ak.Array (n_time, var)
+        n_time = len(c_data)
+        d_slices = [np.array([], dtype=np.float64) for _ in range(n_time)]
+        c_slices = [np.asarray(c_data[i]) for i in range(n_time)]
+        return self._stack_ions({'D': d_slices, 'C': c_slices})
 
     def _compose_fit_measured(self, shot: int, raw_data: Dict[str, Any],
                              measured_key_name: str) -> ak.Array:
