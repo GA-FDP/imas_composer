@@ -239,3 +239,15 @@ def list_available_tags(shot: int) -> List[str]:
     """Return all TAG values found for *shot* (ignoring the ignore flag)."""
     runs = available_iri_results(shot, tag=None, ignore_ignore=True)
     return sorted({r['TAG'] for r in runs.values()})
+
+
+def list_shots_for_tag(tag: str = 'IRI_CAKE01') -> List[int]:
+    """Shots with a valid IRI CAKE run for *tag*, most recent run_date first."""
+    prefix = resolve_prefix(tag)
+    with D3DRDB() as db:
+        rows = db.query(
+            f"SELECT shot, max(run_date) AS rd FROM iri_run_log "
+            f"WHERE experiment='DIII-D' AND tag='{prefix}{tag}' AND ignore='False' "
+            f"GROUP BY shot ORDER BY rd DESC"
+        )
+    return [int(r['SHOT']) for r in rows if r['SHOT'] is not None]
