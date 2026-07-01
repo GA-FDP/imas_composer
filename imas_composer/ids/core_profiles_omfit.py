@@ -144,15 +144,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # Carbon toroidal velocity - data only (both D and C use V_TOR_C)
         self.specs["core_profiles.profiles_1d._velocity_toroidal_data"] = self._create_profile_field_spec(
             '_velocity_toroidal_data', 'velocity_toroidal')
-        # Pressures - data only
-        self.specs["core_profiles.profiles_1d._pressure_ion_non_thermal_data"] = self._create_profile_field_spec(
-            '_pressure_ion_non_thermal_data', 'pressure_ion_non_thermal')
-        self.specs["core_profiles.profiles_1d._pressure_electron_data"] = self._create_profile_field_spec(
-            '_pressure_electron_data', 'pressure_electron')
-        self.specs["core_profiles.profiles_1d._pressure_deuterium_data"] = self._create_profile_field_spec(
-            '_pressure_deuterium_data', 'pressure_deuterium')
-        self.specs["core_profiles.profiles_1d._pressure_carbon_data"] = self._create_profile_field_spec(
-            '_pressure_carbon_data', 'pressure_carbon')
 
         # Pressures - data only
         self.specs["core_profiles.profiles_1d._pressure_ion_non_thermal_data"] = self._create_profile_field_spec(
