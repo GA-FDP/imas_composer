@@ -68,7 +68,8 @@ class ImasComposer:
                  profiles_tree: str = "ZIPFIT01",
                  profiles_run_id: str = "",
                  fast_ece: bool = False,
-                 include_rip: bool = False):
+                 include_rip: bool = False,
+                 crop_core_profiles: bool = False):
         """
         Initialize ImasComposer.
 
@@ -80,6 +81,8 @@ class ImasComposer:
             profiles_run_id: Run ID to append to pulse for OMFIT_PROFS tree.
             fast_ece: Whether to load fast_ece data, defaults to false.
             include_rip: Whether to include RIP (Radial Interferometer Polarimeter) data for interferometer IDS.
+            crop_core_profiles: Whether to crop core_profiles to inside the separatrix (rho <= 1).
+                Defaults to false, keeping scrape-off layer data.
         """
         self.efit_tree = efit_tree
         self.efit_run_id = efit_run_id
@@ -87,6 +90,7 @@ class ImasComposer:
         self.profiles_run_id = profiles_run_id
         self.fast_ece = fast_ece
         self.include_rip = include_rip
+        self.crop_core_profiles = crop_core_profiles
         self.ids_factory = IDSFactory()
         self._mappers = {}
         for ids_name in self.ids_factory.list_ids():
@@ -96,7 +100,8 @@ class ImasComposer:
                                                              profiles_tree=self.profiles_tree,
                                                              profiles_run_id=self.profiles_run_id,
                                                              fast_ece=self.fast_ece,
-                                                             include_rip=self.include_rip))
+                                                             include_rip=self.include_rip,
+                                                             crop_core_profiles=self.crop_core_profiles))
             
     def _register_mapper(self, ids_name: str, mapper):
         """Register an IDS mapper."""
