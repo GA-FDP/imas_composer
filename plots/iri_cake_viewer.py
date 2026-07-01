@@ -133,8 +133,6 @@ PROF_FIELDS = [
 class DataLoader(QtCore.QThread):
     """Fetches IDS data in a background thread."""
 
-    # NB: not named "finished" — that would shadow QThread's built-in finished
-    # signal, which the window relies on to know when a thread may be deleted.
     loaded = QtCore.Signal(dict)   # emits the data dict on success
     error  = QtCore.Signal(str)    # emits error message on failure
     status = QtCore.Signal(str)    # progress messages
@@ -196,7 +194,6 @@ RDB_TIMEOUT_MS = 10_000
 class D3DrdbWorker(QtCore.QThread):
     """Runs a single D3DRDB callable in a background thread."""
 
-    # NB: not named "finished" — see DataLoader for why.
     result = QtCore.Signal(object)  # emits the return value on success
     error  = QtCore.Signal(str)     # emits formatted traceback on failure
 
@@ -579,7 +576,7 @@ def _cp_psin(data: Dict, cp_t: int):
 
 class IriCakeViewer(QtWidgets.QMainWindow):
 
-    def __init__(self, shot: int = -1, flavor: str = 'CAKE01'):
+    def __init__(self, shot: int = -1, flavor: str = 'IRI_CAKE01'):
         super().__init__()
         self.setWindowTitle('IRI CAKE Viewer')
         self.resize(1700, 700)
@@ -624,7 +621,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         row1.addWidget(QtWidgets.QLabel('Tag:'))
         self._flavor_combo = QtWidgets.QComboBox()
-        self._flavor_combo.addItems(['CAKE01', 'CAKE02', 'CAKE_FDP', 'cake_nersc_testing', 'cake_nersc_testing_2'])
+        self._flavor_combo.addItems(['IRI_CAKE01', 'IRI_CAKE02', 'CAKE_FDP', 'cake_nersc_testing', 'cake_nersc_testing_2'])
         self._flavor_combo.setCurrentText(self._flavor)
         self._flavor_combo.setEditable(True)
         self._flavor_combo.setFixedWidth(180)
@@ -632,7 +629,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         row1.addWidget(QtWidgets.QLabel('EFIT tree:'))
         self._efit_combo = QtWidgets.QComboBox()
-        self._efit_combo.addItems(['EFIT']) #'EFIT01', 'EFIT02', 'EFIT02er', 'EFIT03', 'EFIT_CAKE01', 'EFIT_CAKE02'
+        self._efit_combo.addItems(['EFIT'])
         self._efit_combo.setEditable(True)
         self._efit_combo.setFixedWidth(100)
         row1.addWidget(self._efit_combo)
@@ -1046,7 +1043,7 @@ def main():
     parser = argparse.ArgumentParser(description='IRI CAKE Viewer')
     parser.add_argument('--shot', type=int, default=-1,
                         help='Shot number (-1 = latest)')
-    parser.add_argument('--flavor', type=str, default='CAKE01',
+    parser.add_argument('--flavor', type=str, default='IRI_CAKE01',
                         help='IRI CAKE tag/flavor')
     args = parser.parse_args()
 

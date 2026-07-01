@@ -121,7 +121,6 @@ fields:
   - field: profiles_1d.e_field.radial
     trees: [OMFIT_PROFS]
 
-
   # Pressures - OMFIT_PROFS only
   - field: profiles_1d.pressure_ion_non_thermal
     trees: [OMFIT_PROFS]
@@ -130,6 +129,7 @@ fields:
   - field: profiles_1d.electrons.pressure
     trees: [OMFIT_PROFS]
   - field: profiles_1d.pressure_total
+    trees: [OMFIT_PROFS]
 
   # Currents - OMFIT_PROFS only
   - field: profiles_1d.j_ohmic

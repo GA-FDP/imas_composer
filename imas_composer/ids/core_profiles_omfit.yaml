@@ -77,7 +77,6 @@ fields:
   # E-field
   - profiles_1d.e_field.radial
 
-
   # Pressures
   - profiles_1d.pressure_ion_non_thermal
   - profiles_1d.pressure_ion_total
@@ -88,7 +87,6 @@ fields:
   - profiles_1d.j_ohmic
   - profiles_1d.j_tor
   - profiles_1d.j_bootstrap
-
 
   # Global quantities
   - global_quantities.v_loop
