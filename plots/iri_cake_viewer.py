@@ -130,8 +130,6 @@ PROF_FIELDS = [
 class DataLoader(QtCore.QThread):
     """Fetches IDS data in a background thread."""
 
-    # NB: not named "finished" — that would shadow QThread's built-in finished
-    # signal, which the window relies on to know when a thread may be deleted.
     loaded = QtCore.Signal(dict)   # emits the data dict on success
     error  = QtCore.Signal(str)    # emits error message on failure
     status = QtCore.Signal(str)    # progress messages
