@@ -599,7 +599,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         row1.addWidget(QtWidgets.QLabel('Tag:'))
         self._flavor_combo = QtWidgets.QComboBox()
-        self._flavor_combo.addItems(['CAKE01', 'CAKE02', 'CAKE_FDP', 'cake_nersc_testing', 'cake_nersc_testing_2'])
+        self._flavor_combo.addItems(['IRI_CAKE01', 'IRI_CAKE02', 'CAKE_FDP', 'cake_nersc_testing', 'cake_nersc_testing_2'])
         self._flavor_combo.setCurrentText(self._flavor)
         self._flavor_combo.setEditable(True)
         self._flavor_combo.setFixedWidth(180)
@@ -607,7 +607,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         row1.addWidget(QtWidgets.QLabel('EFIT tree:'))
         self._efit_combo = QtWidgets.QComboBox()
-        self._efit_combo.addItems(['EFIT']) #'EFIT01', 'EFIT02', 'EFIT02er', 'EFIT03', 'EFIT_CAKE01', 'EFIT_CAKE02'
+        self._efit_combo.addItems(['EFIT'])
         self._efit_combo.setEditable(True)
         self._efit_combo.setFixedWidth(100)
         row1.addWidget(self._efit_combo)
