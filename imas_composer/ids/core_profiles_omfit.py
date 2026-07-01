@@ -1360,21 +1360,8 @@ class CoreProfilesOmfitMapper(IDSMapper):
         )
 
     def _compose_e_field_radial(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-
-        """
-        Compose e_field.radial for OMFIT_PROFS.
-
-        OMAS d3d.py line 1569, 1645:
-            query["e_field.radial"] = "ER_C"  # -> \\TOP.ER_C
-            # No unit conversion, already in V/m
-            ods[f"{sh}[{i_time}].e_field.radial"] = data[entry][i_time][mask[i_time]]
-
-        Returns:
-            2D array of shape (n_time, n_rho) with radial electric field in V/m
-        """
-        return self._compose_omfit_data_field(
-            shot, raw_data,
-            "core_profiles.profiles_1d._e_field_radial_data")
+        """Compose e_field.radial for OMFIT_PROFS (from \\TOP.ER_C)."""
+        return self._compose_omfit_data_field(shot, raw_data, "core_profiles.profiles_1d._e_field_radial_data")
 
     def _compose_pressure_ion_non_thermal(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose pressure_ion_non_thermal for OMFIT_PROFS (from \\TOP.P_FAST_D)."""
