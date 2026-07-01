@@ -20,7 +20,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
     DOCS_PATH = "core_profiles_omfit.yaml"
     CONFIG_PATH = "core_profiles_omfit.yaml"
 
-    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', run_id: str = '001',
+    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', profiles_run_id: str = '001',
                  crop_core_profiles: bool = False, **kwargs):
         """
         Initialize CoreProfilesOMFITMapper.
@@ -32,7 +32,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
                 Defaults to False, keeping scrape-off layer data.
         """
         self.omfit_tree = omfit_tree
-        self.run_id = run_id
+        self.run_id = profiles_run_id
         self.crop_core_profiles = crop_core_profiles
 
         # Initialize base class (loads config, static_values, supported_fields)
@@ -1099,10 +1099,12 @@ class CoreProfilesOmfitMapper(IDSMapper):
         rho_2d = raw_data[rho_key]
 
         result = []
-        for i_time in range(data_raw.shape[0]):
-            mask = self._rho_mask(rho_2d[i_time, :])
-            result.append(data_raw[i_time, mask])
-
+        for i_time in range(rho_2d.shape[0]):
+            if len(data_raw) > 0:
+                mask = self._rho_mask(rho_2d[i_time, :])
+                result.append(data_raw[i_time, mask])
+            else:
+                result.append([])
         return np.array(result)
 
     def _compose_all_ion_temperature(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
