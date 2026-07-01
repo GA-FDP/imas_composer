@@ -20,17 +20,19 @@ class CoreProfilesOmfitMapper(IDSMapper):
     DOCS_PATH = "core_profiles_omfit.yaml"
     CONFIG_PATH = "core_profiles_omfit.yaml"
 
-    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', profiles_run_id: str = '001',
+    def __init__(self, omfit_tree: str = 'OMFIT_PROFS', run_id: str = '001',
                  crop_core_profiles: bool = False, **kwargs):
         """
         Initialize CoreProfilesOMFITMapper.
 
         Args:
             omfit_tree: OMFIT tree to use (default: 'OMFIT_PROFS')
-            profiles_run_id: Run ID to append to pulse for OMFIT_PROFS tree (default: '001')
+            run_id: Run ID to append to pulse for OMFIT_PROFS tree (default: '001')
+            crop_core_profiles: Whether to crop profiles to inside the separatrix (rho <= 1).
+                Defaults to False, keeping scrape-off layer data.
         """
         self.omfit_tree = omfit_tree
-        self.run_id = profiles_run_id
+        self.run_id = run_id
         self.crop_core_profiles = crop_core_profiles
 
         # Initialize base class (loads config, static_values, supported_fields)
@@ -142,15 +144,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # Carbon toroidal velocity - data only (both D and C use V_TOR_C)
         self.specs["core_profiles.profiles_1d._velocity_toroidal_data"] = self._create_profile_field_spec(
             '_velocity_toroidal_data', 'velocity_toroidal')
-        # Pressures - data only
-        self.specs["core_profiles.profiles_1d._pressure_ion_non_thermal_data"] = self._create_profile_field_spec(
-            '_pressure_ion_non_thermal_data', 'pressure_ion_non_thermal')
-        self.specs["core_profiles.profiles_1d._pressure_electron_data"] = self._create_profile_field_spec(
-            '_pressure_electron_data', 'pressure_electron')
-        self.specs["core_profiles.profiles_1d._pressure_deuterium_data"] = self._create_profile_field_spec(
-            '_pressure_deuterium_data', 'pressure_deuterium')
-        self.specs["core_profiles.profiles_1d._pressure_carbon_data"] = self._create_profile_field_spec(
-            '_pressure_carbon_data', 'pressure_carbon')
 
         # Pressures - data only
         self.specs["core_profiles.profiles_1d._pressure_ion_non_thermal_data"] = self._create_profile_field_spec(
@@ -681,7 +674,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
             depends_on=["core_profiles.profiles_1d._j_bootstrap_data", "core_profiles.profiles_1d._omfit_rho"],
             compose=self._compose_j_bootstrap,
             ids_path="core_profiles.profiles_1d.j_bootstrap",
-
             docs_file=self.DOCS_PATH
         )
 
@@ -998,7 +990,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
             ids_path="core_profiles.global_quantities.v_loop",
             docs_file=self.DOCS_PATH
         )
-
 
     def _get_unified_time(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """

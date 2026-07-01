@@ -137,12 +137,6 @@ class D3DRDB:
 # Public helpers (mirrors of the OMFIT fetch_IRI_CAKE.py functions)
 # ---------------------------------------------------------------------------
 
-def resolve_prefix(tag):
-    if tag in ["CAKE01", "CAKE02"]:
-        return "IRI_"
-    else:
-        return ""
-
 def available_iri_results(
     shot: int,
     tag: Optional[str] = 'CAKE_FDP',
@@ -158,12 +152,8 @@ def available_iri_results(
     """
     with D3DRDB() as db:
         sql = f"SELECT * FROM iri_run_log WHERE experiment='DIII-D' AND shot={shot}"
-        if tag in ["CAKE01", "CAKE02"]:
-            prefix = "IRI_"
-        else:
-            prefix = ""
         if tag is not None:
-            sql += f" AND tag='{prefix}{tag}'"
+            sql += f" AND tag='{tag}'"
         if not ignore_ignore:
             sql += " AND ignore='False'"
 
@@ -211,7 +201,7 @@ def get_iri_upload_ids(shot: int, tag: str = 'CAKE_FDP') -> Tuple[str, str]:
     iri_runs = available_iri_results(shot, tag)
     if not iri_runs:
         all_runs = available_iri_results(shot, tag=None)
-        available_tags = sorted({r['TAG'].replace("IRI_","") for r in all_runs.values()})
+        available_tags = sorted({r['TAG'] for r in all_runs.values()})
         raise ValueError(
             f"No IRI CAKE data for shot {shot} with tag '{tag}'.\n"
             f"Available tags: {available_tags or ['(none found)']}"
@@ -227,17 +217,16 @@ def get_iri_upload_ids(shot: int, tag: str = 'CAKE_FDP') -> Tuple[str, str]:
     return prof_id, eq_id
 
 
-def get_max_iri_shot_and_ids(tag: str = 'CAKE01') -> Tuple[int, str, str]:
+def get_max_iri_shot_and_ids(tag: str = 'IRI_CAKE01') -> Tuple[int, str, str]:
     """
     Return (shot, prof_id, eq_id) for the largest shot with a valid IRI CAKE
     run tagged *tag*. Both IDs come from the same iri_id, so the equilibrium
     and profile uploads are guaranteed to be consistent.
     """
-    prefix = resolve_prefix(tag)
     with D3DRDB() as db:
         rows = db.query(
             f"SELECT max(shot) as shot FROM iri_run_log "
-            f"WHERE experiment='DIII-D' AND tag='{prefix}{tag}' AND ignore='False'"
+            f"WHERE experiment='DIII-D' AND tag='{tag}' AND ignore='False'"
         )
     shot = rows[0]['SHOT']
     if shot is None:
@@ -249,16 +238,4 @@ def get_max_iri_shot_and_ids(tag: str = 'CAKE01') -> Tuple[int, str, str]:
 def list_available_tags(shot: int) -> List[str]:
     """Return all TAG values found for *shot* (ignoring the ignore flag)."""
     runs = available_iri_results(shot, tag=None, ignore_ignore=True)
-    return sorted({r['TAG'].replace("IRI_","") for r in runs.values()})
-
-
-def list_shots_for_tag(tag: str = 'CAKE01') -> List[int]:
-    """Shots with a valid IRI CAKE run for *tag*, most recent run_date first."""
-    prefix = resolve_prefix(tag)
-    with D3DRDB() as db:
-        rows = db.query(
-            f"SELECT shot, max(run_date) AS rd FROM iri_run_log "
-            f"WHERE experiment='DIII-D' AND tag='{prefix}{tag}' AND ignore='False' "
-            f"GROUP BY shot ORDER BY rd DESC"
-        )
-    return [int(r['SHOT']) for r in rows if r['SHOT'] is not None]
+    return sorted({r['TAG'] for r in runs.values()})

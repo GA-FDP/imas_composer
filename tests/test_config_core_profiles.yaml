@@ -107,6 +107,5 @@ omas_path_map:
   core_profiles.profiles_1d.j_tor: core_profiles.profiles_1d.:.j_tor
   core_profiles.profiles_1d.j_bootstrap: core_profiles.profiles_1d.:.j_bootstrap
 
-
   # Global quantities
   core_profiles.global_quantities.v_loop: core_profiles.global_quantities.v_loop
