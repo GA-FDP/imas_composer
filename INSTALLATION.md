@@ -19,7 +19,7 @@ mamba env create -f environment.yaml
 mamba activate imas_composer
 
 # Install in editable mode
-pip install -e .
+pip install --no-deps --no-build-isolation -e .
 ```
 
 The [environment.yaml](environment.yaml) file includes all dependencies for development and testing, including OMAS and MDSplus.
