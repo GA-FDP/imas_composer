@@ -1,0 +1,18 @@
+# Test configuration for Summary IDS
+
+# Fields to skip OMAS comparison for.
+# All summary fields are skipped because the summary IDS is a derived
+# quantity in OMAS (computed from stored energy and power balance) rather
+# than read directly from MDSplus.  The composition tests in
+# test_summary_composition.py verify the values directly instead.
+skip_fields:
+  global_quantities.tau_energy.value: "summary IDS is derived in OMAS, not read from MDSplus"
+  global_quantities.tau_energy.time: "summary IDS is derived in OMAS, not read from MDSplus"
+
+# Requirement validation settings
+requirement_validation:
+  # The TRANSPORT tree is queried with the actual shot number (not shot 0)
+  allow_different_shot: []
+
+# OMAS path mapping (unused — all fields skipped above)
+omas_path_map: {}
