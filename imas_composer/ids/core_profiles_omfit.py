@@ -991,7 +991,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-
     def _get_unified_time(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
         Get unified time array from OMFIT_PROFS.

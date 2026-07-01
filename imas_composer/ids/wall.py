@@ -31,7 +31,7 @@ class WallMapper(IDSMapper):
         self.efit_run_id = efit_run_id
 
         if efit_run_id is not None:
-            if len(efit_run_id) is not 0:
+            if len(efit_run_id) != 0:
                 assert efit_tree == 'EFIT', (
                     f"efit_tree must be 'EFIT' when efit_run_id is set, got '{efit_tree}'"
                 )
