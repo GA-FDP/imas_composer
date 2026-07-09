@@ -1,0 +1,5 @@
+# Summary IDS Configuration for DIII-D
+
+# Supported fields (complete list of implemented IDS paths)
+fields:
+  - description

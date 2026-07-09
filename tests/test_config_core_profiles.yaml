@@ -85,8 +85,29 @@ omas_path_map:
   core_profiles.profiles_1d.ion.temperature_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.:.temperature_fit.rho_tor_norm
   core_profiles.profiles_1d.ion.temperature_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.:.temperature_fit.measured_error_upper
 
+  # Ion toroidal velocity (OMFIT_PROFS only) — same two-level ':' pattern
+  # OMAS populates both ion[0] (D, copied) and ion[1] (C) for the main velocity;
+  # fit fields are C-only (D empty)
+  core_profiles.profiles_1d.ion.velocity.toroidal: core_profiles.profiles_1d.:.ion.:.velocity.toroidal
+  core_profiles.profiles_1d.ion.velocity.toroidal_error_upper: core_profiles.profiles_1d.:.ion.:.velocity.toroidal_error_upper
+  core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured: core_profiles.profiles_1d.:.ion.:.velocity.toroidal_fit.measured
+  core_profiles.profiles_1d.ion.velocity.toroidal_fit.psi_norm: core_profiles.profiles_1d.:.ion.:.velocity.toroidal_fit.psi_norm
+  core_profiles.profiles_1d.ion.velocity.toroidal_fit.rho_tor_norm: core_profiles.profiles_1d.:.ion.:.velocity.toroidal_fit.rho_tor_norm
+  core_profiles.profiles_1d.ion.velocity.toroidal_fit.measured_error_upper: core_profiles.profiles_1d.:.ion.:.velocity.toroidal_fit.measured_error_upper
+
   # E-field (OMFIT_PROFS only)
   core_profiles.profiles_1d.e_field.radial: core_profiles.profiles_1d.:.e_field.radial
+
+  # Pressures (OMFIT_PROFS only)
+  core_profiles.profiles_1d.pressure_ion_non_thermal: core_profiles.profiles_1d.:.pressure_ion_non_thermal
+  core_profiles.profiles_1d.pressure_ion_total: core_profiles.profiles_1d.:.pressure_ion_total
+  core_profiles.profiles_1d.electrons.pressure: core_profiles.profiles_1d.:.electrons.pressure
+  core_profiles.profiles_1d.pressure_total: core_profiles.profiles_1d.:.pressure_total
+
+  # Current densities (OMFIT_PROFS only)
+  core_profiles.profiles_1d.j_ohmic: core_profiles.profiles_1d.:.j_ohmic
+  core_profiles.profiles_1d.j_tor: core_profiles.profiles_1d.:.j_tor
+  core_profiles.profiles_1d.j_bootstrap: core_profiles.profiles_1d.:.j_bootstrap
 
   # Global quantities
   core_profiles.global_quantities.v_loop: core_profiles.global_quantities.v_loop

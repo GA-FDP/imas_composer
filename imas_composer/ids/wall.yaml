@@ -16,5 +16,6 @@ fields:
   - description_2d.limiter.unit.outline.r
   - description_2d.limiter.unit.outline.z
   - description_2d.limiter.type.index
+  - description_2d.limiter.type.name
   - time
   - ids_properties.homogeneous_time

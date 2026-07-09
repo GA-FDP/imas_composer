@@ -1232,7 +1232,7 @@ class EquilibriumMapper(IDSMapper):
         )
         self.specs["equilibrium.time_slice.constraints.j_tor.measured"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._vzeroj", "equilibrium._constraint_time_indices"],
+            depends_on=["equilibrium._vzeroj", "equilibrium._bcentr", "equilibrium._cpasma_cocos", "equilibrium._constraint_time_indices"],
             compose=self._compose_j_tor_measured,
             ids_path="equilibrium.time_slice.constraints.j_tor.measured",
             docs_file=self.DOCS_PATH
@@ -2469,6 +2469,10 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(ensure_2d,'\\EFIT::TOP.MEASUREMENTS.VZEROJ')
         Transform: ensure_2d (convert to 2D array)
+
+        VZEROJ is stored as a magnitude without the plasma-current direction, so it is
+        multiplied by sign(Ip) (a single per-shot sign from mean GEQDSK.CPASMA, matching
+        the sign of global_quantities.ip) before the COCOS transform.
         """
         vzeroj_key = Requirement(f'{self.measurements_node}.VZEROJ', self.resolve_shot(shot), self.efit_tree).as_key()
         j_tor_all_times = raw_data[vzeroj_key]
@@ -2482,7 +2486,15 @@ class EquilibriumMapper(IDSMapper):
         else:
             j_tor_2d = j_tor
 
-        return j_tor_2d
+        # Restore the plasma-current direction onto the unsigned VZEROJ magnitude
+        cpasma_key = Requirement(f'{self.geqdsk_node}.CPASMA', self.resolve_shot(shot), self.efit_tree).as_key()
+        ip_sign = np.sign(np.mean(raw_data[cpasma_key]))
+        j_tor_2d = j_tor_2d * ip_sign
+
+        return self._apply_cocos_transform(
+            j_tor_2d, shot, raw_data,
+            "equilibrium.time_slice.constraints.j_tor.measured",
+        )
 
     # Simple constraint compose functions with time filtering (converted from lambdas)
 
@@ -2829,8 +2841,9 @@ class EquilibriumMapper(IDSMapper):
         for i in range(fluxfun_psi.shape[0]):
             # Use constant extrapolation: first and last values for out-of-bounds
             fill_value = (fluxfun_jeff[i][0], fluxfun_jeff[i][-1])
-            j_tor[i] = interp1d(fluxfun_psi_norm[i], fluxfun_jeff[i], kind='cubic',
-                                bounds_error=False, fill_value=fill_value)(psin)
+            if np.all(np.unique(fluxfun_psi_norm[i], return_counts=True)[1] == 1):
+                j_tor[i] = interp1d(fluxfun_psi_norm[i], fluxfun_jeff[i], kind='cubic',
+                                    bounds_error=False, fill_value=fill_value)(psin)
         return j_tor
 
     def _compose_profiles_1d_j_parallel(self, shot: int, raw_data: dict) -> np.ndarray:
