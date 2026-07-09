@@ -223,6 +223,17 @@ def list_available_tags(shot: int) -> List[str]:
     return sorted({r['TAG'] for r in runs.values()})
 
 
+def list_all_tags() -> List[str]:
+    """Return all IRI CAKE tags present in the run log, alphabetically."""
+    with D3DRDB() as db:
+        rows = db.query(
+            "SELECT DISTINCT tag FROM iri_run_log "
+            "WHERE experiment='DIII-D' AND ignore='False' "
+            "ORDER BY tag"
+        )
+    return [r['TAG'] for r in rows if r['TAG'] is not None]
+
+
 def list_shots_for_tag(tag: str = 'IRI_CAKE01') -> List[int]:
     """Shots with a valid IRI CAKE run for *tag* that has uploaded results,
     most recent run_date first."""
