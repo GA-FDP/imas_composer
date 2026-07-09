@@ -38,7 +38,7 @@ from contourpy import contour_generator
 
 from imas_composer.composer import ImasComposer
 from imas_composer.fetchers import simple_load
-from d3drdb import get_iri_upload_ids, list_shots_for_tag
+from d3drdb import get_iri_upload_ids, list_shots_for_tag, list_all_tags
 
 pg.setConfigOptions(antialias=True, background='w', foreground='k')
 
@@ -679,7 +679,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         self._build_ui()
 
-        QtCore.QTimer.singleShot(200, self._populate_shots)
+        QtCore.QTimer.singleShot(200, self._populate_tags)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -696,7 +696,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         row1 = QtWidgets.QHBoxLayout()
         row1.addWidget(QtWidgets.QLabel('Tag:'))
         self._flavor_combo = QtWidgets.QComboBox()
-        self._flavor_combo.addItems(['IRI_CAKE01', 'IRI_CAKE02', 'CAKE_FDP', 'CAKE_FDP_ida_lite', 'cake_nersc_testing', 'cake_nersc_testing_2'])
+        # Items are populated from D3DRDB by _populate_tags() so the list stays up to date.
         self._flavor_combo.setCurrentText(self._flavor)
         self._flavor_combo.setEditable(True)
         self._flavor_combo.setFixedWidth(180)
@@ -937,6 +937,29 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             self._status_label.setStyleSheet('color: red; font-style: italic;')
             self._status_label.setText(f'Invalid shot: {text!r}')
             return None
+
+    def _populate_tags(self):
+        """Query D3DRDB for the available tags to populate the tag combo."""
+        worker = self._start_rdb_worker(
+            list_all_tags,
+            status_msg='Querying D3DRDB for tags…',
+        )
+        worker.result.connect(self._on_tags_found)
+        worker.error.connect(self._on_rdb_error)
+        worker.start()
+
+    def _on_tags_found(self, tags):
+        self._cancel_rdb_worker()
+        self._set_buttons_enabled(True)
+        # Repopulate without firing the tag-changed handlers for each programmatic change.
+        current = self._flavor_combo.currentText()
+        self._flavor_combo.blockSignals(True)
+        self._flavor_combo.clear()
+        self._flavor_combo.addItems(tags)
+        self._flavor_combo.setCurrentText(current)
+        self._flavor_combo.blockSignals(False)
+        # Only one D3DRDB call runs at a time, so fetch shots now that tags are ready.
+        self._populate_shots()
 
     def _populate_shots(self):
         """Query D3DRDB for the shots available under the current tag."""
