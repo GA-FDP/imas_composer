@@ -83,6 +83,10 @@ fields:
   - profiles_1d.electrons.pressure
   - profiles_1d.pressure_total
 
+  # Effective charge
+  - profiles_1d.zeff
+  - profiles_1d.zeff_error_upper
+
   # Current densities
   - profiles_1d.j_ohmic
   - profiles_1d.j_tor
