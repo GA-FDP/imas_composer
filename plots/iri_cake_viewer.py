@@ -223,10 +223,10 @@ class D3DrdbWorker(QtCore.QThread):
         self._kwargs = kwargs
 
     def run(self):
-        # try:
-        self.result.emit(self._fn(*self._args, **self._kwargs))
-        # except Exception:
-        #     self.error.emit(traceback.format_exc())
+        try:
+            self.result.emit(self._fn(*self._args, **self._kwargs))
+        except Exception:
+            self.error.emit(traceback.format_exc())
 
 
 # ---------------------------------------------------------------------------
