@@ -38,7 +38,7 @@ from contourpy import contour_generator
 
 from imas_composer.composer import ImasComposer
 from imas_composer.fetchers import simple_load
-from .d3drdb import get_iri_upload_ids, list_shots_for_tag, list_all_tags
+from imas_composer.rdb.d3drdb import get_iri_upload_ids, list_shots_for_tag, list_all_tags
 
 pg.setConfigOptions(antialias=True, background='w', foreground='k')
 
