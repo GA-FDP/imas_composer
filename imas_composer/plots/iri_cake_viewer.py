@@ -755,7 +755,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
     def __init__(self, shot: int = -1, flavor: str = 'IRI_CAKE01'):
         super().__init__()
         self.setWindowTitle('IRI CAKE Viewer')
-        self.resize(1700, 1000)
+        self.resize(1920, 700)
 
         self._data: Optional[Dict[str, Any]] = None
         self._loader: Optional[DataLoader] = None
