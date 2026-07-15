@@ -5,10 +5,9 @@ Replicates the functionality of OMFIT-source/scripts/fetch_IRI_CAKE.py without
 any dependency on omas or omfit_classes.  Data is fetched via imas_composer's
 simple_load function; IRI run metadata is queried from D3DRDB via d3drdb.py.
 
-Layout (3 × 4 grid of subplots; Eq. CX spans all three rows of column 0):
-  [        | ne (e)  | Te (e)  | j (current)       ]
-  [ Eq. CX | ni (ion)| Ti (ion)| convergence error ]
-  [ (tall) | v_tor   | Pressure| E_r (radial field)]
+Layout (2 × 6 grid of subplots; Eq. CX spans both rows of column 0):
+  [        | ne (e)  | Te (e)  | j (current)| Pressure | convergence error ]
+  [ Eq. CX | ni (ion)| Ti (ion)| v_tor      | E_r      | Zeff              ]
 
 Usage::
 
@@ -34,6 +33,7 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets
 
 import scipy.ndimage
+from scipy.interpolate import RegularGridInterpolator
 from contourpy import contour_generator
 
 from imas_composer.composer import ImasComposer
@@ -135,6 +135,18 @@ PROF_FIELDS = [
     'core_profiles.profiles_1d.j_ohmic',
     'core_profiles.profiles_1d.j_bootstrap',
     'core_profiles.profiles_1d.e_field.radial',
+    'core_profiles.profiles_1d.zeff',
+    'core_profiles.profiles_1d.zeff_error_upper',
+]
+
+# CER Zeff overlay — fetched separately and optionally (see DataLoader.run)
+CX_ZEFF_FIELDS = [
+    'charge_exchange.channel.zeff.data',
+    'charge_exchange.channel.zeff.time',
+    'charge_exchange.channel.position.r.data',
+    'charge_exchange.channel.position.r.time',
+    'charge_exchange.channel.position.z.data',
+    'charge_exchange.channel.position.z.time',
 ]
 
 
@@ -184,6 +196,15 @@ class DataLoader(QtCore.QThread):
             self.status.emit("Fetching core profiles…")
             prof_data = simple_load(PROF_FIELDS, self.shot, composer=composer)
 
+            # CER Zeff overlay is optional: a failed charge_exchange fetch must
+            # not block the viewer, so its keys are simply absent on failure.
+            self.status.emit("Fetching CER Zeff (optional)…")
+            try:
+                cx_data = simple_load(CX_ZEFF_FIELDS, self.shot, composer=composer)
+            except Exception:
+                print(traceback.format_exc(), file=sys.stderr)
+                cx_data = {}
+
             # Shot comment is cosmetic (appended to the plot title); a missing
             # \D3D::TOP.COMMENTS:BRIEF node must not block the science panels.
             try:
@@ -201,7 +222,7 @@ class DataLoader(QtCore.QThread):
                 "equilibrium and core_profiles time bases differ by more than 0.1 ms"
             )
 
-            self.loaded.emit({**eq_data, **wall_data, **prof_data, **summary_data})
+            self.loaded.emit({**eq_data, **wall_data, **prof_data, **cx_data, **summary_data})
 
         except Exception:
             self.error.emit(traceback.format_exc())
@@ -481,6 +502,79 @@ def plot_j_tor(p, data: Dict, t: int):
             pen=pg.mkPen(c, width=1.0), name=l))
         y = _slice(data.get(base), t) if xk is not None else None
         line.setData(xk, y / 1e6) if y is not None else line.setData(EMPTY, EMPTY)
+
+
+def _cer_zeff_points(data: Dict, t: int):
+    """(psi_n, zeff) CER points nearest to eq time slice *t*, or empty arrays.
+
+    Channel (R, Z) positions are mapped to psi_n via the equilibrium 2D psi map.
+    The charge_exchange fetch is optional, so missing keys (or empty/ragged
+    channels) simply yield no points.
+    """
+    z_data = data.get('charge_exchange.channel.zeff.data')
+    z_time = data.get('charge_exchange.channel.zeff.time')
+    pos_r  = data.get('charge_exchange.channel.position.r.data')
+    pos_rt = data.get('charge_exchange.channel.position.r.time')
+    pos_z  = data.get('charge_exchange.channel.position.z.data')
+    pos_zt = data.get('charge_exchange.channel.position.z.time')
+    times  = data.get('equilibrium.time')
+    dim1   = data.get('equilibrium.time_slice.profiles_2d.grid.dim1')
+    dim2   = data.get('equilibrium.time_slice.profiles_2d.grid.dim2')
+    psi2d  = data.get('equilibrium.time_slice.profiles_2d.psi')
+    if any(v is None for v in (z_data, z_time, pos_r, pos_rt, pos_z, pos_zt,
+                               times, dim1, dim2, psi2d)):
+        return EMPTY, EMPTY
+
+    psi_ax  = float(data['equilibrium.time_slice.global_quantities.psi_axis'][t])
+    psi_bdy = float(data['equilibrium.time_slice.global_quantities.psi_boundary'][t])
+    psi_n = (np.asarray(psi2d[t, 0, :, :]) - psi_ax) / (psi_bdy - psi_ax)
+    interp = RegularGridInterpolator(
+        (np.asarray(dim1[t, 0, :]), np.asarray(dim2[t, 0, :])), psi_n,
+        bounds_error=False, fill_value=np.nan)
+
+    t_now = float(times[t])
+    # A CER sample "belongs" to this slice if it is closer than half a slice.
+    tol = 0.5 * float(np.median(np.diff(np.asarray(times))))
+
+    def nearest(values, time_axis):
+        """Sample of *values* nearest to t_now (a lone sample is time-independent)."""
+        vals = np.asarray(values)
+        if len(vals) == 0:
+            return None
+        if len(vals) == 1:
+            return float(vals[0])
+        return float(vals[np.argmin(np.abs(np.asarray(time_axis) - t_now))])
+
+    xs, ys = [], []
+    for i in range(len(z_data)):
+        zt = np.asarray(z_time[i])
+        zv = np.asarray(z_data[i])
+        if len(zv) == 0 or len(zt) != len(zv):
+            continue
+        j = int(np.argmin(np.abs(zt - t_now)))
+        if abs(zt[j] - t_now) > tol:
+            continue
+        r = nearest(pos_r[i], pos_rt[i])
+        z = nearest(pos_z[i], pos_zt[i])
+        if r is None or z is None:
+            continue
+        x = float(interp((r, z)))
+        if np.isfinite(x) and np.isfinite(zv[j]):
+            xs.append(x)
+            ys.append(float(zv[j]))
+    if not xs:
+        return EMPTY, EMPTY
+    return np.asarray(xs), np.asarray(ys)
+
+
+def plot_zeff(p, data: Dict, t: int):
+    """OMFIT_PROFS Zeff profile + CER (charge_exchange) point measurements."""
+    plot_profile_quantity(p, data, t, 'core_profiles.profiles_1d.zeff', None,
+                          COLORS['tab:blue'], label='OMFIT_PROFS')
+
+    pts = _cached(p, 'cer', lambda: pg.ScatterPlotItem(
+        symbol='o', size=5, brush=_mkcolor('r', 0.6), pen=None, name='CER'))
+    pts.setData(*_cer_zeff_points(data, t))
 
 
 def plot_convergence_error(p, data: Dict, t: int):
@@ -779,28 +873,30 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._build_axes()
 
     def _build_axes(self):
-        """Create the 3×4 plot grid (Eq. CX spans all rows of column 0)."""
+        """Create the 2×6 plot grid (Eq. CX spans both rows of column 0)."""
         self._glw.clear()
 
-        # Row 0: figure-level title spanning all four columns.
-        self._title_label = self._glw.addLabel('', row=0, col=0, colspan=4, size='11pt')
+        # Row 0: figure-level title spanning all six columns.
+        self._title_label = self._glw.addLabel('', row=0, col=0, colspan=6, size='11pt')
 
-        # Eq. CX spans all three rows in column 0.
-        self._ax_cx     = self._glw.addPlot(row=1, col=0, rowspan=3)
+        # Eq. CX spans both rows in column 0.
+        self._ax_cx     = self._glw.addPlot(row=1, col=0, rowspan=2)
         self._ax_ne     = self._glw.addPlot(row=1, col=1)
         self._ax_te     = self._glw.addPlot(row=1, col=2)
         self._ax_jtor   = self._glw.addPlot(row=1, col=3)
+        self._ax_pres   = self._glw.addPlot(row=1, col=4)
+        self._ax_conv   = self._glw.addPlot(row=1, col=5)
         self._ax_ni     = self._glw.addPlot(row=2, col=1)
         self._ax_ti     = self._glw.addPlot(row=2, col=2)
-        self._ax_conv   = self._glw.addPlot(row=2, col=3)
-        self._ax_vtor   = self._glw.addPlot(row=3, col=1)
-        self._ax_pres   = self._glw.addPlot(row=3, col=2)
-        self._ax_efield = self._glw.addPlot(row=3, col=3)
+        self._ax_vtor   = self._glw.addPlot(row=2, col=3)
+        self._ax_efield = self._glw.addPlot(row=2, col=4)
+        self._ax_zeff   = self._glw.addPlot(row=2, col=5)
 
         self._ax_cx.hideButtons()
 
         # Legends for the panels that overlay several named series.
-        for ax in (self._ax_jtor, self._ax_ni, self._ax_ti, self._ax_vtor, self._ax_pres):
+        for ax in (self._ax_jtor, self._ax_ni, self._ax_ti, self._ax_vtor,
+                   self._ax_pres, self._ax_zeff):
             ax.addLegend(offset=(-5, 5), labelTextSize='7pt')
 
         # Minority-ion density (×100) on a twin y-axis linked to the ni panel.
@@ -816,6 +912,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._plots = [
             self._ax_cx, self._ax_ne, self._ax_te, self._ax_jtor, self._ax_ni,
             self._ax_ti, self._ax_conv, self._ax_vtor, self._ax_pres, self._ax_efield,
+            self._ax_zeff,
         ]
 
         # Per-panel item cache: plot items are created once and updated via
@@ -841,6 +938,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             self._ax_vtor:   'v<sub>tor</sub> [km/s]',
             self._ax_pres:   'Pressure [kPa]',
             self._ax_efield: 'E<sub>r</sub> [kV/m]',
+            self._ax_zeff:   'Z<sub>eff</sub>',
         }
         for ax, title in titles.items():
             ax.setTitle(title, size='9pt')
@@ -1188,6 +1286,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             (lambda ax: plot_pressure(ax, d, t),              self._ax_pres),
             (lambda ax: plot_profile_quantity(
                 ax, d, t, f'{cp}.e_field.radial', None, blue, 1e-3), self._ax_efield),
+            (lambda ax: plot_zeff(ax, d, t),                  self._ax_zeff),
         ]:
             try:
                 fn(ax)
