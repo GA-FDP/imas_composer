@@ -104,7 +104,7 @@ class D3DRDB:
             f"UID={self._username};"
             f"PWD={self._password};"
             "TDS_Version=7.0;"
-            "Login Timeout=30;"
+            "Login Timeout=60;"
         )
         self._cnxn = pyodbc.connect(conn_str)
         self._cursor = self._cnxn.cursor()

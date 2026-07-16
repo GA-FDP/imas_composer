@@ -228,7 +228,7 @@ class DataLoader(QtCore.QThread):
             self.error.emit(traceback.format_exc())
 
 
-RDB_TIMEOUT_MS = 10_000
+RDB_TIMEOUT_MS = 20_000
 
 
 class D3DrdbWorker(QtCore.QThread):
