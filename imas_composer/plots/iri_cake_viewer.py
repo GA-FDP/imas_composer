@@ -570,10 +570,10 @@ def _cer_zeff_points(data: Dict, t: int):
 def plot_zeff(p, data: Dict, t: int):
     """OMFIT_PROFS Zeff profile + CER (charge_exchange) point measurements."""
     plot_profile_quantity(p, data, t, 'core_profiles.profiles_1d.zeff', None,
-                          COLORS['tab:blue'], label='OMFIT_PROFS')
+                          COLORS['tab:blue'], label='Inferred profile')
 
     pts = _cached(p, 'cer', lambda: pg.ScatterPlotItem(
-        symbol='o', size=5, brush=_mkcolor('r', 0.6), pen=None, name='CER'))
+        symbol='o', size=5, brush=_mkcolor('r', 0.6), pen=None, name='CER (carbon only)'))
     pts.setData(*_cer_zeff_points(data, t))
 
 
