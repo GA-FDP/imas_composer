@@ -573,7 +573,7 @@ def plot_zeff(p, data: Dict, t: int):
                           COLORS['tab:blue'], label='OMFIT_PROFS')
 
     pts = _cached(p, 'cer', lambda: pg.ScatterPlotItem(
-        symbol='o', size=5, brush=_mkcolor('r', 0.6), pen=None, name='CER'))
+        symbol='o', size=5, brush=_mkcolor('r', 0.6), pen=None, name='CER (carbon only)'))
     pts.setData(*_cer_zeff_points(data, t))
 
 
