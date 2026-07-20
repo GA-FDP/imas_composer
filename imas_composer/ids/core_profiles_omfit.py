@@ -82,6 +82,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
             'pressure_electron': '\\TOP.P_E',
             'pressure_deuterium': '\\TOP.P_D',
             'pressure_carbon': '\\TOP.P_C',
+            'zeff': '\\TOP.ZEFF',
         }
 
         if field_type not in path_map:
@@ -155,6 +156,10 @@ class CoreProfilesOmfitMapper(IDSMapper):
         self.specs["core_profiles.profiles_1d._pressure_carbon_data"] = self._create_profile_field_spec(
             '_pressure_carbon_data', 'pressure_carbon')
 
+        # Effective charge - data only
+        self.specs["core_profiles.profiles_1d._zeff_data"] = self._create_profile_field_spec(
+            '_zeff_data', 'zeff')
+
         # ============================================================
         # Uncertainty fields - OMFIT_PROFS only
         # ============================================================
@@ -226,6 +231,16 @@ class CoreProfilesOmfitMapper(IDSMapper):
                 Requirement('error_of(\\TOP.V_TOR_C)', self._get_pulse_id(shot), self.omfit_tree)
             ],
             ids_path="core_profiles.profiles_1d._velocity_toroidal_error",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Effective charge uncertainty
+        self.specs["core_profiles.profiles_1d._zeff_error"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('error_of(\\TOP.ZEFF)', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._zeff_error",
             docs_file=self.DOCS_PATH
         )
 
@@ -500,6 +515,24 @@ class CoreProfilesOmfitMapper(IDSMapper):
             depends_on=["core_profiles.profiles_1d._temperature_error", "core_profiles.profiles_1d._omfit_rho"],
             compose=self._compose_temperature_error,
             ids_path="core_profiles.profiles_1d.electrons.temperature_error_upper",
+            docs_file=self.DOCS_PATH
+        )
+
+        # zeff
+        self.specs["core_profiles.profiles_1d.zeff"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["core_profiles.profiles_1d._zeff_data", "core_profiles.profiles_1d._omfit_rho"],
+            compose=self._compose_zeff,
+            ids_path="core_profiles.profiles_1d.zeff",
+            docs_file=self.DOCS_PATH
+        )
+
+        # zeff_error_upper
+        self.specs["core_profiles.profiles_1d.zeff_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["core_profiles.profiles_1d._zeff_error", "core_profiles.profiles_1d._omfit_rho"],
+            compose=self._compose_zeff_error,
+            ids_path="core_profiles.profiles_1d.zeff_error_upper",
             docs_file=self.DOCS_PATH
         )
 
@@ -1329,6 +1362,20 @@ class CoreProfilesOmfitMapper(IDSMapper):
         return self._compose_omfit_data_field(
             shot, raw_data,
             "core_profiles.profiles_1d._temperature_error"
+        )
+
+    def _compose_zeff(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Compose zeff for OMFIT_PROFS (from \\TOP.ZEFF)."""
+        return self._compose_omfit_data_field(
+            shot, raw_data,
+            "core_profiles.profiles_1d._zeff_data"
+        )
+
+    def _compose_zeff_error(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """Compose zeff_error_upper for OMFIT_PROFS."""
+        return self._compose_omfit_data_field(
+            shot, raw_data,
+            "core_profiles.profiles_1d._zeff_error"
         )
 
     def _compose_ion_temperature_error(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:

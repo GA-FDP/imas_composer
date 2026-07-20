@@ -105,6 +105,10 @@ omas_path_map:
   core_profiles.profiles_1d.electrons.pressure: core_profiles.profiles_1d.:.electrons.pressure
   core_profiles.profiles_1d.pressure_total: core_profiles.profiles_1d.:.pressure_total
 
+  # Effective charge (OMFIT_PROFS only)
+  core_profiles.profiles_1d.zeff: core_profiles.profiles_1d.:.zeff
+  core_profiles.profiles_1d.zeff_error_upper: core_profiles.profiles_1d.:.zeff_error_upper
+
   # Current densities (OMFIT_PROFS only)
   core_profiles.profiles_1d.j_ohmic: core_profiles.profiles_1d.:.j_ohmic
   core_profiles.profiles_1d.j_tor: core_profiles.profiles_1d.:.j_tor

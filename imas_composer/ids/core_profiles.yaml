@@ -131,6 +131,12 @@ fields:
   - field: profiles_1d.pressure_total
     trees: [OMFIT_PROFS]
 
+  # Effective charge - OMFIT_PROFS only
+  - field: profiles_1d.zeff
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.zeff_error_upper
+    trees: [OMFIT_PROFS]
+
   # Currents - OMFIT_PROFS only
   - field: profiles_1d.j_ohmic
     trees: [OMFIT_PROFS]
