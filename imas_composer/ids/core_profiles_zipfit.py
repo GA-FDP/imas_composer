@@ -20,6 +20,9 @@ class CoreProfilesZipfitMapper(IDSMapper):
     DOCS_PATH = "core_profiles_zipfit.yaml"
     CONFIG_PATH = "core_profiles_zipfit.yaml"
 
+    # Maximum time difference (seconds) to consider a ZIPFIT time as matching a GTIME point
+    _TIME_MATCH_TOL = 1e-3
+
     def __init__(self, zipfit_tree: str = 'ZIPFIT01', **kwargs):
         """
         Initialize CoreProfilesZIPFITMapper.
@@ -132,6 +135,16 @@ class CoreProfilesZipfitMapper(IDSMapper):
         # Internal dependencies - DIRECT stage
         # ============================================================
 
+        # Common time basis from EFIT01 (seconds, already divided by 1000 in TDI)
+        self.specs["core_profiles._gtime"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement('\\EFIT01::TOP.RESULTS.GEQDSK.GTIME/1000.', 0, 'EFIT01')
+            ],
+            ids_path="core_profiles._gtime",
+            docs_file=self.DOCS_PATH
+        )
+
         # Electron density - data, time, and rho dimensions
         self.specs["core_profiles.profiles_1d._density_data"] = self._create_profile_field_spec(
             '_density_data', 'density', dim=None)
@@ -193,69 +206,41 @@ class CoreProfilesZipfitMapper(IDSMapper):
         # User-facing fields - COMPUTED stage
         # ============================================================
 
-        # Grid: rho_tor_norm
-        rho_deps = [
-            "core_profiles.profiles_1d._density_time",
-            "core_profiles.profiles_1d._density_rho",
-            "core_profiles.profiles_1d._temperature_time",
-            "core_profiles.profiles_1d._temperature_rho",
-            "core_profiles.profiles_1d._ion_temperature_time",
-            "core_profiles.profiles_1d._ion_temperature_rho",
-            "core_profiles.profiles_1d._carbon_density_time",
-            "core_profiles.profiles_1d._carbon_density_rho",
-            "core_profiles.profiles_1d._carbon_rotation_time",
-            "core_profiles.profiles_1d._carbon_rotation_rho"
-        ]
-
+        # Grid: rho_tor_norm — density's rho axis is representative for all signals
         self.specs["core_profiles.profiles_1d.grid.rho_tor_norm"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=rho_deps,
+            depends_on=[
+                "core_profiles._gtime",
+                "core_profiles.profiles_1d._density_rho",
+            ],
             compose=self._compose_rho_tor_norm,
             ids_path="core_profiles.profiles_1d.grid.rho_tor_norm",
             docs_file=self.DOCS_PATH
         )
 
         # Electrons: density_thermal
-        density_deps = [
-            "core_profiles.profiles_1d._density_data",
-            "core_profiles.profiles_1d._density_time",
-            "core_profiles.profiles_1d._density_rho",
-            "core_profiles.profiles_1d._temperature_time",
-            "core_profiles.profiles_1d._temperature_rho",
-            "core_profiles.profiles_1d._ion_temperature_time",
-            "core_profiles.profiles_1d._ion_temperature_rho",
-            "core_profiles.profiles_1d._carbon_density_time",
-            "core_profiles.profiles_1d._carbon_density_rho",
-            "core_profiles.profiles_1d._carbon_rotation_time",
-            "core_profiles.profiles_1d._carbon_rotation_rho"
-        ]
-
         self.specs["core_profiles.profiles_1d.electrons.density"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=density_deps,
+            depends_on=[
+                "core_profiles._gtime",
+                "core_profiles.profiles_1d._density_data",
+                "core_profiles.profiles_1d._density_time",
+                "core_profiles.profiles_1d._density_rho",
+            ],
             compose=self._compose_density_thermal,
             ids_path="core_profiles.profiles_1d.electrons.density",
             docs_file=self.DOCS_PATH
         )
 
         # Electrons: temperature
-        temperature_deps = [
-            "core_profiles.profiles_1d._temperature_data",
-            "core_profiles.profiles_1d._temperature_time",
-            "core_profiles.profiles_1d._temperature_rho",
-            "core_profiles.profiles_1d._density_time",
-            "core_profiles.profiles_1d._density_rho",
-            "core_profiles.profiles_1d._ion_temperature_time",
-            "core_profiles.profiles_1d._ion_temperature_rho",
-            "core_profiles.profiles_1d._carbon_density_time",
-            "core_profiles.profiles_1d._carbon_density_rho",
-            "core_profiles.profiles_1d._carbon_rotation_time",
-            "core_profiles.profiles_1d._carbon_rotation_rho"
-        ]
-
         self.specs["core_profiles.profiles_1d.electrons.temperature"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=temperature_deps,
+            depends_on=[
+                "core_profiles._gtime",
+                "core_profiles.profiles_1d._temperature_data",
+                "core_profiles.profiles_1d._temperature_time",
+                "core_profiles.profiles_1d._temperature_rho",
+            ],
             compose=self._compose_temperature,
             ids_path="core_profiles.profiles_1d.electrons.temperature",
             docs_file=self.DOCS_PATH
@@ -266,84 +251,53 @@ class CoreProfilesZipfitMapper(IDSMapper):
         # Ion ordering follows the `ions:` YAML section (D=index 0, C=index 1)
         # ============================================================
 
-        ion_temp_deps = [
-            "core_profiles.profiles_1d._ion_temperature_data",
-            "core_profiles.profiles_1d._ion_temperature_time",
-            "core_profiles.profiles_1d._ion_temperature_rho",
-            "core_profiles.profiles_1d._density_time",
-            "core_profiles.profiles_1d._density_rho",
-            "core_profiles.profiles_1d._temperature_time",
-            "core_profiles.profiles_1d._temperature_rho",
-            "core_profiles.profiles_1d._carbon_density_time",
-            "core_profiles.profiles_1d._carbon_density_rho",
-            "core_profiles.profiles_1d._carbon_rotation_time",
-            "core_profiles.profiles_1d._carbon_rotation_rho"
-        ]
-
         # ion.temperature: both D and C use ITEMPFIT → same data, stacked
         self.specs["core_profiles.profiles_1d.ion.temperature"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=ion_temp_deps,
+            depends_on=[
+                "core_profiles._gtime",
+                "core_profiles.profiles_1d._ion_temperature_data",
+                "core_profiles.profiles_1d._ion_temperature_time",
+                "core_profiles.profiles_1d._ion_temperature_rho",
+            ],
             compose=self._compose_all_ion_temperature,
             ids_path="core_profiles.profiles_1d.ion.temperature",
             docs_file=self.DOCS_PATH
         )
 
         # ion.density_thermal: D from quasineutrality (n_e - 6*n_C), C from ZDENSFIT
-        ion_density_deps = [
-            "core_profiles.profiles_1d._density_data",
-            "core_profiles.profiles_1d._density_time",
-            "core_profiles.profiles_1d._density_rho",
-            "core_profiles.profiles_1d._carbon_density_data",
-            "core_profiles.profiles_1d._carbon_density_time",
-            "core_profiles.profiles_1d._carbon_density_rho",
-            "core_profiles.profiles_1d._temperature_time",
-            "core_profiles.profiles_1d._temperature_rho",
-            "core_profiles.profiles_1d._ion_temperature_time",
-            "core_profiles.profiles_1d._ion_temperature_rho",
-            "core_profiles.profiles_1d._carbon_rotation_time",
-            "core_profiles.profiles_1d._carbon_rotation_rho"
-        ]
-
         self.specs["core_profiles.profiles_1d.ion.density_thermal"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=ion_density_deps,
+            depends_on=[
+                "core_profiles._gtime",
+                "core_profiles.profiles_1d._density_data",
+                "core_profiles.profiles_1d._density_time",
+                "core_profiles.profiles_1d._density_rho",
+                "core_profiles.profiles_1d._carbon_density_data",
+                "core_profiles.profiles_1d._carbon_density_time",
+                "core_profiles.profiles_1d._carbon_density_rho",
+            ],
             compose=self._compose_all_ion_density_thermal,
             ids_path="core_profiles.profiles_1d.ion.density_thermal",
             docs_file=self.DOCS_PATH
         )
 
-        carbon_rotation_deps = [
-            "core_profiles.profiles_1d._carbon_rotation_data",
-            "core_profiles.profiles_1d._carbon_rotation_time",
-            "core_profiles.profiles_1d._carbon_rotation_rho",
-            "core_profiles.profiles_1d._density_time",
-            "core_profiles.profiles_1d._density_rho",
-            "core_profiles.profiles_1d._temperature_time",
-            "core_profiles.profiles_1d._temperature_rho",
-            "core_profiles.profiles_1d._ion_temperature_time",
-            "core_profiles.profiles_1d._ion_temperature_rho",
-            "core_profiles.profiles_1d._carbon_density_time",
-            "core_profiles.profiles_1d._carbon_density_rho"
-        ]
-
         # ion.rotation_frequency_tor: D = empty, C from TROTFIT
         self.specs["core_profiles.profiles_1d.ion.rotation_frequency_tor"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=carbon_rotation_deps,
+            depends_on=[
+                "core_profiles._gtime",
+                "core_profiles.profiles_1d._carbon_rotation_data",
+                "core_profiles.profiles_1d._carbon_rotation_time",
+                "core_profiles.profiles_1d._carbon_rotation_rho",
+            ],
             compose=self._compose_all_ion_rotation,
             ids_path="core_profiles.profiles_1d.ion.rotation_frequency_tor",
             docs_file=self.DOCS_PATH
         )
 
-        # time: unified time array from all profile signals
-        time_deps = [
-            "core_profiles.profiles_1d._density_time",
-            "core_profiles.profiles_1d._temperature_time",
-            "core_profiles.profiles_1d._ion_temperature_time",
-            "core_profiles.profiles_1d._carbon_density_time",
-            "core_profiles.profiles_1d._carbon_rotation_time"
-        ]
+        # time: single time basis from EFIT01 GTIME
+        time_deps = ["core_profiles._gtime"]
 
         # Static metadata: label, z_n, a — 1D arrays indexed by ion (from YAML ions: list)
         self.specs["core_profiles.profiles_1d.ion.label"] = IDSEntrySpec(
@@ -417,50 +371,55 @@ class CoreProfilesZipfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-    def _stack_ions(self, ion_arrays: Dict[str, np.ndarray]) -> ak.Array:
-        """
-        Stack per-ion (n_time, n_rho) arrays into a (n_time, n_ion, n_rho) ak.Array.
-
-        Ion order follows the `ions:` YAML section so callers do not need to
-        know the numeric index — they just pass a label-keyed dict.
-
-        Args:
-            ion_arrays: dict mapping ion label -> (n_time, n_rho) numpy array
-
-        Returns:
-            ak.Array of shape (n_time, n_ion, n_rho)
-        """
-        n_time = ion_arrays[self.ions[0]['label']].shape[0]
-        return ak.Array([[ion_arrays[ion['label']][t] for ion in self.ions] for t in range(n_time)])
-
     def _compose_all_ion_temperature(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
-        Compose ion.temperature for all ions: (n_time, n_ion, n_rho) ak.Array.
+        Compose ion.temperature for all ions: jagged (n_gtime, n_ion, n_rho) ak.Array.
 
-        Both D and C use ITEMPFIT (same underlying data).
+        Both D and C use ITEMPFIT (same underlying data). At GTIME points where
+        ITEMPFIT has no data the slot is empty ([]).
         """
-        t_ion = self._compose_ion_temperature(shot, raw_data)  # (n_time, n_rho)
-        return self._stack_ions({ion['label']: t_ion for ion in self.ions})
+        t_ion_jagged = self._compose_ion_temperature(shot, raw_data)
+        result = []
+        for t_ion in t_ion_jagged:
+            if len(t_ion) > 0:
+                t_arr = np.asarray(t_ion)
+                result.append([t_arr for _ in self.ions])
+            else:
+                result.append([])
+        return ak.Array(result)
 
     def _compose_all_ion_density_thermal(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
-        Compose ion.density_thermal for all ions: (n_time, n_ion, n_rho) ak.Array.
+        Compose ion.density_thermal for all ions: jagged (n_gtime, n_ion, n_rho) ak.Array.
 
-        D from quasineutrality (n_e - 6*n_C), C from ZDENSFIT.
+        D from quasineutrality (n_e - 6*n_C), C from ZDENSFIT. A slot is empty
+        unless both n_e and n_C data are present at that GTIME point.
         """
-        n_D = self._compose_deuterium_density(shot, raw_data)  # (n_time, n_rho)
-        n_C = self._compose_carbon_density(shot, raw_data)     # (n_time, n_rho)
-        return self._stack_ions({'D': n_D, 'C': n_C})
+        n_D_jagged = self._compose_deuterium_density(shot, raw_data)
+        n_C_jagged = self._compose_carbon_density(shot, raw_data)
+        result = []
+        for n_D, n_C in zip(n_D_jagged, n_C_jagged):
+            if len(n_D) > 0 and len(n_C) > 0:
+                result.append([np.asarray(n_D), np.asarray(n_C)])
+            else:
+                result.append([])
+        return ak.Array(result)
 
     def _compose_all_ion_rotation(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
-        Compose ion.rotation_frequency_tor for all ions: (n_time, n_ion, n_rho) ak.Array.
+        Compose ion.rotation_frequency_tor for all ions: jagged (n_gtime, n_ion, n_rho) ak.Array.
 
-        C from TROTFIT, D is empty (no measurement available).
+        C from TROTFIT, D has no measurement (empty inner array). A slot is empty
+        unless TROTFIT has data at that GTIME point.
         """
-        c_rotation = self._compose_carbon_rotation(shot, raw_data)  # (n_time, n_rho)
-        d_rotation = np.array([[]]).reshape(c_rotation.shape[0], 0)
-        return self._stack_ions({'D': d_rotation, 'C': c_rotation})
+        c_rotation_jagged = self._compose_carbon_rotation(shot, raw_data)
+        result = []
+        for c_rot in c_rotation_jagged:
+            if len(c_rot) > 0:
+                result.append([np.array([]), np.asarray(c_rot)])
+            else:
+                result.append([])
+        return ak.Array(result)
 
     def _compose_all_ion_label(self, shot: int, raw_data: Dict[str, Any]) -> list:
         """Compose array of ion labels in YAML order (n_time, n_ion)."""
@@ -504,366 +463,152 @@ class CoreProfilesZipfitMapper(IDSMapper):
         pulse_id = self._get_pulse_id(shot)
         return Requirement(mds_path, pulse_id, self.profiles_tree).as_key()
 
-    def _compose_rho_tor_norm(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+    def _get_signal_indices_for_gtime(
+        self, gtime: np.ndarray, signal_time: np.ndarray
+    ) -> np.ndarray:
         """
-        Compose grid.rho_tor_norm from all profile data dimensions.
+        For each GTIME point return the nearest signal time index, or -1 if
+        the nearest point is farther than _TIME_MATCH_TOL.
 
-        For ZIPFIT (d3d.py:1694-1695):
-            rho_tor_norm = np.unique(np.concatenate([[1.0],np.concatenate([data[entry]
-                for entry in query.keys() if entry.startswith("rho__") ...])]))
-            rho_tor_norm = rho_tor_norm[rho_tor_norm<=1.0]
+        Args:
+            gtime: GTIME array in seconds (n_gtime,)
+            signal_time: Signal native time array in seconds (n_signal,)
 
         Returns:
-            1D array of normalized toroidal flux coordinates (rho_tor_norm)
+            Integer array (n_gtime,); -1 means no match at that GTIME slot.
         """
-        # Collect all rho dimensions
-        rho_arrays = []
+        indices = np.full(len(gtime), -1, dtype=int)
+        for i, t in enumerate(gtime):
+            j = int(np.argmin(np.abs(signal_time - t)))
+            if np.abs(signal_time[j] - t) <= self._TIME_MATCH_TOL:
+                indices[i] = j
+        return indices
 
-        density_rho_key = self._get_requirement_key('density', shot, dim=0)
-        temp_rho_key = self._get_requirement_key('temperature', shot, dim=0)
-        ion_temp_rho_key = self._get_requirement_key('ion_temperature', shot, dim=0)
-        carbon_density_rho_key = self._get_requirement_key('carbon_density', shot, dim=0)
-        carbon_rotation_rho_key = self._get_requirement_key('carbon_rotation', shot, dim=0)
+    def _compose_profile_field(
+        self,
+        shot: int,
+        raw_data: Dict[str, Any],
+        field_type: str,
+        unit_category: str,
+    ) -> ak.Array:
+        """
+        Compose a single profile field as a jagged ak.Array over GTIME.
 
-        rho_arrays.append(raw_data[density_rho_key])
-        rho_arrays.append(raw_data[temp_rho_key])
-        rho_arrays.append(raw_data[ion_temp_rho_key])
-        rho_arrays.append(raw_data[carbon_density_rho_key])
-        rho_arrays.append(raw_data[carbon_rotation_rho_key])
+        At each GTIME point the signal's native time is checked against
+        _TIME_MATCH_TOL. Matching slots receive the signal's rho-filtered data
+        (values at rho <= 1.0); non-matching slots are empty ([]).
 
-        # Concatenate all rho values with [1.0] and get unique values
-        # OMAS concatenates [1.0] with all unique rho values, then filters to <= 1.0
-        rho_tor_norm = np.unique(np.concatenate([[1.0]] + rho_arrays))
-        rho_tor_norm = rho_tor_norm[rho_tor_norm <= 1.0]
+        Args:
+            field_type: Key for _get_mds_path / _get_requirement_key
+            unit_category: Key for _get_unit_conversion
 
-        # Get unified time array (from all signals)
-        unified_time = self._get_unified_time(shot, raw_data)
+        Returns:
+            ak.Array of shape (n_gtime,) where each entry is either a 1-D
+            array of length n_rho or an empty array.
+        """
+        data_key = self._get_requirement_key(field_type, shot, dim=None)
+        time_key = self._get_requirement_key(field_type, shot, dim=1)
+        rho_key  = self._get_requirement_key(field_type, shot, dim=0)
 
-        # Broadcast to match the 2D shape [time, rho]
+        raw         = raw_data[data_key]
+        signal_time = raw_data[time_key] * 1e-3  # ms → s
+        signal_rho  = raw_data[rho_key]
+        unit_factor = self._get_unit_conversion(unit_category)
+
+        rho_mask    = signal_rho <= 1.0
+        gtime       = self._get_unified_time(shot, raw_data)
+        sig_indices = self._get_signal_indices_for_gtime(gtime, signal_time)
+
         result = []
-        for i_time in range(len(unified_time)):
-            result.append(rho_tor_norm)
+        for sig_idx in sig_indices:
+            if sig_idx >= 0:
+                result.append(raw[sig_idx, rho_mask] * unit_factor)
+            else:
+                result.append(np.array([]))
+        return ak.Array(result)
 
-        return result
-
-    def _compose_density_thermal(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+    def _compose_rho_tor_norm(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
-        Compose electrons.density.
+        Compose grid.rho_tor_norm broadcast to all GTIME points.
 
-        For ZIPFIT (d3d.py:1666, 1687, 1693, 1710):
-            query["electrons.density"] = "\\TOP.PROFILES.EDENSFIT"
-            data[entry] *= 1E19  # in [m^-3]
-            # Interpolate to common grid
+        All ZIPFIT signals share the same rho grid; density's rho axis is used
+        as the representative. Values above 1.0 are excluded.
 
         Returns:
-            2D array of shape (n_time, n_rho) with electron density in m^-3
+            ak.Array of shape (n_gtime, n_rho)
         """
-        # Get raw data
-        data_key = self._get_requirement_key('density', shot, dim=None)
-        density_raw = raw_data[data_key]
-
-        # Get unit conversion factor (1e19 for ZIPFIT)
-        unit_factor = self._get_unit_conversion('density')
-
-        # Get time and rho dimensions for this signal
-        time_key = self._get_requirement_key('density', shot, dim=1)
         rho_key = self._get_requirement_key('density', shot, dim=0)
-        signal_time = raw_data[time_key] * 1e-3  # Convert ms to s
-        signal_rho = raw_data[rho_key]
+        rho = raw_data[rho_key]
+        rho = rho[rho <= 1.0]
+        gtime = self._get_unified_time(shot, raw_data)
+        return ak.Array([rho for _ in gtime])
 
-        # Get unified time array (from all signals)
-        unified_time = self._get_unified_time(shot, raw_data)
-
-        # Get common rho_tor_norm grid
-        rho_tor_norm_full = self._compose_rho_tor_norm(shot, raw_data)
-        rho_tor_norm = rho_tor_norm_full[0]
-
-        # Interpolate to common grid
-        # Shape: (n_time, n_rho)
-        result = np.zeros((len(unified_time), len(rho_tor_norm)))
-
-        for i_time, time0 in enumerate(unified_time):
-            # Find nearest time index in this signal's native time array
-            time_index = np.argmin(np.abs(signal_time - time0))
-
-            # Get data at this time and apply unit conversion
-            data_at_time = density_raw[time_index, :] * unit_factor
-
-            # Interpolate from signal's native rho grid to common rho_tor_norm
-            result[i_time, :] = interp1d(
-                signal_rho,
-                data_at_time,
-                bounds_error=False,
-                fill_value=np.nan
-            )(rho_tor_norm)
-
-        return result
-
-    def _compose_temperature(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+    def _compose_density_thermal(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
-        Compose electrons.temperature.
+        Compose electrons.density as a jagged ak.Array (m^-3).
 
-        For ZIPFIT (d3d.py:1667, 1689, 1693, 1710):
-            query["electrons.temperature"] = "\\TOP.PROFILES.ETEMPFIT"
-            data[entry] *= 1E3  # in [eV]
-            # Interpolate to common grid
-
-        Returns:
-            2D array of shape (n_time, n_rho) with electron temperature in eV
+        Slots in GTIME where EDENSFIT has no matching time are empty.
         """
-        # Get raw data
-        data_key = self._get_requirement_key('temperature', shot, dim=None)
-        temperature_raw = raw_data[data_key]
+        return self._compose_profile_field(shot, raw_data, 'density', 'density')
 
-        # Get unit conversion factor (1e3 for ZIPFIT)
-        unit_factor = self._get_unit_conversion('temperature')
+    def _compose_temperature(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose electrons.temperature as a jagged ak.Array (eV).
 
-        # Get time and rho dimensions for this signal
-        time_key = self._get_requirement_key('temperature', shot, dim=1)
-        rho_key = self._get_requirement_key('temperature', shot, dim=0)
-        signal_time = raw_data[time_key] * 1e-3  # Convert ms to s
-        signal_rho = raw_data[rho_key]
-
-        # Get unified time array (from all signals)
-        unified_time = self._get_unified_time(shot, raw_data)
-
-        # Get common rho_tor_norm grid
-        rho_tor_norm_full = self._compose_rho_tor_norm(shot, raw_data)
-        rho_tor_norm = rho_tor_norm_full[0]
-
-        # Interpolate to common grid
-        # Shape: (n_time, n_rho)
-        result = np.zeros((len(unified_time), len(rho_tor_norm)))
-
-        for i_time, time0 in enumerate(unified_time):
-            # Find nearest time index in this signal's native time array
-            time_index = np.argmin(np.abs(signal_time - time0))
-
-            # Get data at this time and apply unit conversion
-            data_at_time = temperature_raw[time_index, :] * unit_factor
-
-            # Interpolate from signal's native rho grid to common rho_tor_norm
-            result[i_time, :] = interp1d(
-                signal_rho,
-                data_at_time,
-                bounds_error=False,
-                fill_value=np.nan
-            )(rho_tor_norm)
-
-        return result
+        Slots in GTIME where ETEMPFIT has no matching time are empty.
+        """
+        return self._compose_profile_field(shot, raw_data, 'temperature', 'temperature')
 
     def _get_unified_time(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
-        Get unified time array from all profile signals.
+        Return the common time basis from EFIT01 GTIME (already in seconds).
 
-        For ZIPFIT (d3d.py:1693):
-            time = np.unique(np.concatenate([data[entry] for entry in query.keys()
-                if entry.startswith("time__") ...]))
-
-        Returns:
-            1D array of unique time points in seconds
+        GTIME is fetched as \\EFIT01::TOP.RESULTS.GEQDSK.GTIME/1000. so no
+        unit conversion is needed here.
         """
-        # Collect time dimensions from all signals
-        time_arrays = []
+        gtime_key = Requirement('\\EFIT01::TOP.RESULTS.GEQDSK.GTIME/1000.', shot, 'EFIT01').as_key()
+        return raw_data[gtime_key]
 
-        # Collect time dimensions from all signals
-        time_keys = [
-            self._get_requirement_key('density', shot, dim=1),
-            self._get_requirement_key('temperature', shot, dim=1),
-            self._get_requirement_key('ion_temperature', shot, dim=1),
-            self._get_requirement_key('carbon_density', shot, dim=1),
-            self._get_requirement_key('carbon_rotation', shot, dim=1),
-        ]
-
-        # Convert from ms to s and collect
-        for key in time_keys:
-            if key in raw_data and len(raw_data[key]) > 0:
-                time_arrays.append(raw_data[key] * 1e-3)
-
-        # Get unique time points
-        unified_time = np.unique(np.concatenate(time_arrays))
-
-        return unified_time
-
-    def _compose_ion_temperature(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+    def _compose_ion_temperature(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
-        Compose ion temperature (both D and C use same ITEMPFIT data).
+        Compose ion temperature as a jagged ak.Array (eV).
 
-        For ZIPFIT (d3d.py:1669-1670, 1689):
-            query["ion[0].temperature"] = "\\TOP.PROFILES.ITEMPFIT"
-            query["ion[1].temperature"] = "\\TOP.PROFILES.ITEMPFIT"
-            data[entry] *= 1E3  # in [eV]
-
-        Returns:
-            2D array of shape (n_time, n_rho) with ion temperature in eV
+        Slots in GTIME where ITEMPFIT has no matching time are empty.
         """
-        # Get raw data
-        data_key = self._get_requirement_key('ion_temperature', shot, dim=None)
-        ion_temp_raw = raw_data[data_key]
+        return self._compose_profile_field(shot, raw_data, 'ion_temperature', 'temperature')
 
-        # Get unit conversion factor (1e3 for ZIPFIT)
-        unit_factor = self._get_unit_conversion('temperature')
-
-        # Get time and rho dimensions for this signal
-        time_key = self._get_requirement_key('ion_temperature', shot, dim=1)
-        rho_key = self._get_requirement_key('ion_temperature', shot, dim=0)
-        signal_time = raw_data[time_key] * 1e-3  # Convert ms to s
-        signal_rho = raw_data[rho_key]
-
-        # Get unified time array (from all signals)
-        unified_time = self._get_unified_time(shot, raw_data)
-
-        # Get common rho_tor_norm grid
-        rho_tor_norm_full = self._compose_rho_tor_norm(shot, raw_data)
-        rho_tor_norm = rho_tor_norm_full[0]
-
-        # Interpolate to common grid
-        # Shape: (n_time, n_rho)
-        result = np.zeros((len(unified_time), len(rho_tor_norm)))
-
-        for i_time, time0 in enumerate(unified_time):
-            # Find nearest time index in this signal's native time array
-            time_index = np.argmin(np.abs(signal_time - time0))
-
-            # Get data at this time and apply unit conversion
-            data_at_time = ion_temp_raw[time_index, :] * unit_factor
-
-            # Interpolate from signal's native rho grid to common rho_tor_norm
-            result[i_time, :] = interp1d(
-                signal_rho,
-                data_at_time,
-                bounds_error=False,
-                fill_value=np.nan
-            )(rho_tor_norm)
-
-        return result
-
-    def _compose_carbon_density(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+    def _compose_carbon_density(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
-        Compose carbon density.
+        Compose carbon density as a jagged ak.Array (m^-3).
 
-        For ZIPFIT (d3d.py:1668, 1687):
-            query["ion[1].density_thermal"] = "\\TOP.PROFILES.ZDENSFIT"
-            data[entry] *= 1E19  # in [m^-3]
-
-        Returns:
-            2D array of shape (n_time, n_rho) with carbon density in m^-3
+        Slots in GTIME where ZDENSFIT has no matching time are empty.
         """
-        # Get raw data
-        data_key = self._get_requirement_key('carbon_density', shot, dim=None)
-        carbon_density_raw = raw_data[data_key]
+        return self._compose_profile_field(shot, raw_data, 'carbon_density', 'density')
 
-        # Get unit conversion factor (1e19 for ZIPFIT)
-        unit_factor = self._get_unit_conversion('density')
-
-        # Get time and rho dimensions for this signal
-        time_key = self._get_requirement_key('carbon_density', shot, dim=1)
-        rho_key = self._get_requirement_key('carbon_density', shot, dim=0)
-        signal_time = raw_data[time_key] * 1e-3  # Convert ms to s
-        signal_rho = raw_data[rho_key]
-
-        # Get unified time array (from all signals)
-        unified_time = self._get_unified_time(shot, raw_data)
-
-        # Get common rho_tor_norm grid
-        rho_tor_norm_full = self._compose_rho_tor_norm(shot, raw_data)
-        rho_tor_norm = rho_tor_norm_full[0]
-
-        # Interpolate to common grid
-        # Shape: (n_time, n_rho)
-        result = np.zeros((len(unified_time), len(rho_tor_norm)))
-
-        for i_time, time0 in enumerate(unified_time):
-            # Find nearest time index in this signal's native time array
-            time_index = np.argmin(np.abs(signal_time - time0))
-
-            # Get data at this time and apply unit conversion
-            data_at_time = carbon_density_raw[time_index, :] * unit_factor
-
-            # Interpolate from signal's native rho grid to common rho_tor_norm
-            result[i_time, :] = interp1d(
-                signal_rho,
-                data_at_time,
-                bounds_error=False,
-                fill_value=np.nan
-            )(rho_tor_norm)
-
-        return result
-
-    def _compose_carbon_rotation(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+    def _compose_carbon_rotation(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
-        Compose carbon rotation frequency.
+        Compose carbon rotation frequency as a jagged ak.Array (rad/s).
 
-        For ZIPFIT (d3d.py:1671, 1691):
-            query["ion[1].rotation_frequency_tor"] = "\\TOP.PROFILES.TROTFIT"
-            data[entry] *= 1E3  # in [rad/s]
-
-        Returns:
-            2D array of shape (n_time, n_rho) with rotation frequency in rad/s
+        Slots in GTIME where TROTFIT has no matching time are empty.
         """
-        # Get raw data
-        data_key = self._get_requirement_key('carbon_rotation', shot, dim=None)
-        carbon_rotation_raw = raw_data[data_key]
+        return self._compose_profile_field(shot, raw_data, 'carbon_rotation', 'rotation')
 
-        # Get unit conversion factor (1e3 for ZIPFIT)
-        unit_factor = self._get_unit_conversion('rotation')
-
-        # Get time and rho dimensions for this signal
-        time_key = self._get_requirement_key('carbon_rotation', shot, dim=1)
-        rho_key = self._get_requirement_key('carbon_rotation', shot, dim=0)
-        signal_time = raw_data[time_key] * 1e-3  # Convert ms to s
-        signal_rho = raw_data[rho_key]
-
-        # Get unified time array (from all signals)
-        unified_time = self._get_unified_time(shot, raw_data)
-
-        # Get common rho_tor_norm grid
-        rho_tor_norm_full = self._compose_rho_tor_norm(shot, raw_data)
-        rho_tor_norm = rho_tor_norm_full[0]
-
-        # Interpolate to common grid
-        # Shape: (n_time, n_rho)
-        result = np.zeros((len(unified_time), len(rho_tor_norm)))
-
-        for i_time, time0 in enumerate(unified_time):
-            # Find nearest time index in this signal's native time array
-            time_index = np.argmin(np.abs(signal_time - time0))
-
-            # Get data at this time and apply unit conversion
-            data_at_time = carbon_rotation_raw[time_index, :] * unit_factor
-
-            # Interpolate from signal's native rho grid to common rho_tor_norm
-            result[i_time, :] = interp1d(
-                signal_rho,
-                data_at_time,
-                bounds_error=False,
-                fill_value=np.nan
-            )(rho_tor_norm)
-
-        return result
-
-    def _compose_deuterium_density(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+    def _compose_deuterium_density(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
-        Compose deuterium density.
+        Compose deuterium density via quasineutrality as a jagged ak.Array (m^-3).
 
-        For ZIPFIT (d3d.py:1712):
-            # deuterium from quasineutrality
-            ods[f"{sh}[{i_time}].ion[0].density_thermal"] =
-                ods[f"{sh}[{i_time}].electrons.density"] -
-                ods[f"{sh}[{i_time}].ion[1].density_thermal"] * 6
-
-        Returns:
-            2D array of shape (n_time, n_rho) with deuterium density in m^-3
+        n_D = n_e - 6 * n_C. A slot is empty unless both n_e and n_C are
+        present at that GTIME point.
         """
-        # Use quasineutrality
-        # Get already-composed electron and carbon densities
-        n_e = self._compose_density_thermal(shot, raw_data)
-        n_C = self._compose_carbon_density(shot, raw_data)
-
-        # Quasineutrality: n_D = n_e - Z_C * n_C, where Z_C = 6
-        n_D = n_e - 6.0 * n_C
-
-        return n_D
+        n_e_jagged = self._compose_density_thermal(shot, raw_data)
+        n_C_jagged = self._compose_carbon_density(shot, raw_data)
+        result = []
+        for n_e, n_C in zip(n_e_jagged, n_C_jagged):
+            if len(n_e) > 0 and len(n_C) > 0:
+                result.append(np.asarray(n_e) - 6.0 * np.asarray(n_C))
+            else:
+                result.append(np.array([]))
+        return ak.Array(result)
 
     def _derive_vloop_data_requirements(self, shot: int, _raw_data: Dict[str, Any]) -> list:
         """Derive requirements for v_loop data (needs shot number in TDI expression)."""
