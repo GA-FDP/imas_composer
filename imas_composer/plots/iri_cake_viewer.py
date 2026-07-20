@@ -201,15 +201,14 @@ class DataLoader(QtCore.QThread):
             self.status.emit("Fetching CER Zeff (optional)…")
             try:
                 cx_data = simple_load(CX_ZEFF_FIELDS, self.shot, composer=composer)
-            except Exception:
-                print(traceback.format_exc(), file=sys.stderr)
+            except RuntimeError:
                 cx_data = {}
 
             # Shot comment is cosmetic (appended to the plot title); a missing
             # \D3D::TOP.COMMENTS:BRIEF node must not block the science panels.
             try:
                 summary_data = simple_load(SUMMARY_FIELDS, self.shot, composer=composer)
-            except Exception:
+            except RuntimeError:
                 summary_data = {'summary.description': None}
 
             eq_time = np.asarray(eq_data['equilibrium.time'])
