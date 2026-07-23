@@ -19,9 +19,6 @@ dependencies:
   - tqdm *
   - mdsplus =7.157.0
 
-  # # OMAS - available on conda-forge since 0.95.2
-  # - omas >=0.95.2
-
   # For pip install
   - pip *
   - setuptools
@@ -29,3 +26,17 @@ dependencies:
   - pyqtgraph
   - pyodbc
   - pyqt
+
+# # OMAS dependencies- available on conda-forge since 0.95.2
+  - boto3
+  - botocore
+  - cython
+  - dnspython
+  - matplotlib-base
+  - netcdf4
+  - pinty
+  - pymongo
+  - pyro5
+  - uncertainties
+  - xarray
+  - xmltodict

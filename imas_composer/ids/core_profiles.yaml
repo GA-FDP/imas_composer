@@ -38,6 +38,16 @@ fields:
   # Grid - OMFIT_PROFS only
   - field: profiles_1d.grid.rho_pol_norm
     trees: [OMFIT_PROFS]
+  - field: profiles_1d.grid.psi
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.grid.psi_magnetic_axis
+    trees: [OMFIT_PROFS]
+  - field: profiles_1d.grid.psi_magnetic_boundary
+    trees: [OMFIT_PROFS]
+  # psi_norm is imas_composer-only (no OMAS reference); OMAS comparison is
+  # skipped in test_config_core_profiles.yaml and covered by a dedicated test.
+  - field: profiles_1d.grid.psi_norm
+    trees: [OMFIT_PROFS]
 
   # Electrons - all trees
   - profiles_1d.electrons.density

@@ -12,7 +12,12 @@ import awkward as ak
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
-from ..cocos import COCOSTransform, get_cocos_transform_type
+from ..cocos import (
+    COCOSTransform,
+    get_cocos_transform_type,
+    identify_cocos_from_signals,
+    apply_cocos_transform,
+)
 from scipy.interpolate import interp1d
 
 
@@ -3250,26 +3255,15 @@ class EquilibriumMapper(IDSMapper):
         Note:
             This implements the same logic as OMAS MDS_gEQDSK_COCOS_identify
         """
-        if shot in self._cocos_cache:
-            return self._cocos_cache[shot]
-
-        # Get Bt and Ip from GEQDSK data
-        # Use mean values like OMAS does
+        # Get Bt and Ip from GEQDSK data (mean over time, like OMAS)
         bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self.resolve_shot(shot), self.efit_tree).as_key()
         cpasma_key = Requirement(f'{self.geqdsk_node}.CPASMA', self.resolve_shot(shot), self.efit_tree).as_key()
 
-        bt = raw_data[bcentr_key]
-        ip = raw_data[cpasma_key]
-
-        # Take mean if arrays (OMAS does this for time-dependent data)
-        bt_mean = np.mean(bt) if hasattr(bt, '__len__') else bt
-        ip_mean = np.mean(ip) if hasattr(ip, '__len__') else ip
-
-        # Identify COCOS
-        cocos = self.cocos.identify_cocos(bt_mean, ip_mean)
-        self._cocos_cache[shot] = cocos
-
-        return cocos
+        # Delegate to the shared helper (with per-shot caching)
+        return identify_cocos_from_signals(
+            raw_data[bcentr_key], raw_data[cpasma_key],
+            cocos=self.cocos, cache=self._cocos_cache, cache_key=shot,
+        )
 
     def _apply_cocos_transform(self, data: np.ndarray, shot: int, raw_data: dict,
                                ids_path: str, no_sign:bool = False) -> np.ndarray:
@@ -3289,5 +3283,9 @@ class EquilibriumMapper(IDSMapper):
         if transform_type is None:
             return data
 
-        source_cocos = self._get_cocos_for_shot(shot, raw_data)
-        return self.cocos.transform(data, source_cocos, transform_type, no_sign)
+        bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self.resolve_shot(shot), self.efit_tree).as_key()
+        cpasma_key = Requirement(f'{self.geqdsk_node}.CPASMA', self.resolve_shot(shot), self.efit_tree).as_key()
+        return apply_cocos_transform(
+            data, raw_data[bcentr_key], raw_data[cpasma_key], ids_path,
+            cocos=self.cocos, cache=self._cocos_cache, cache_key=shot, no_sign=no_sign,
+        )
