@@ -1,7 +1,11 @@
 # Test configuration for Core Profiles IDS
 
 # Fields to skip OMAS comparison for (composer still tested for requirements resolution)
-skip_fields: {}
+skip_fields:
+  # psi_norm is imas_composer-only (not mapped in OMAS). The composer value is
+  # still resolved/composed here; a dedicated test in test_core_profiles_composition.py
+  # validates it against the OMAS-validated rho_pol_norm (rho_pol_norm == sqrt(psi_norm)).
+  core_profiles.profiles_1d.grid.psi_norm: "imas_composer-only field, no OMAS reference"
 
 # Requirement validation settings
 requirement_validation:
@@ -18,6 +22,11 @@ field_tolerances:
   # This uses interpolation so accuracy is limited
     rtol: 1.0e-8
     atol: 1.0e-8
+
+  core_profiles.profiles_1d.grid.psi_magnetic_boundary:
+  # Derived by interpolating the psi profile at psi_norm=1.0, so accuracy is limited
+    rtol: 1.0e-6
+    atol: 1.0e-6
 
 # OMAS path mapping
 # Maps imas_composer notation to OMAS notation for fetching reference data.
@@ -39,6 +48,11 @@ omas_path_map:
   # Grid fields
   core_profiles.profiles_1d.grid.rho_tor_norm: core_profiles.profiles_1d.:.grid.rho_tor_norm
   core_profiles.profiles_1d.grid.rho_pol_norm: core_profiles.profiles_1d.:.grid.rho_pol_norm
+  core_profiles.profiles_1d.grid.psi: core_profiles.profiles_1d.:.grid.psi
+  core_profiles.profiles_1d.grid.psi_magnetic_axis: core_profiles.profiles_1d.:.grid.psi_magnetic_axis
+  core_profiles.profiles_1d.grid.psi_magnetic_boundary: core_profiles.profiles_1d.:.grid.psi_magnetic_boundary
+  # psi_norm has no OMAS reference (skipped above); mapping kept for documentation
+  core_profiles.profiles_1d.grid.psi_norm: core_profiles.profiles_1d.:.grid.psi_norm
 
   # Electron profiles
   core_profiles.profiles_1d.electrons.density: core_profiles.profiles_1d.:.electrons.density

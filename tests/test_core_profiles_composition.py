@@ -7,8 +7,9 @@ Note: ids_path is dynamically parametrized in conftest.py based on tree type
 (ZIPFIT vs OMFIT_PROFS), so each tree only tests fields it supports.
 """
 
+import numpy as np
 import pytest
-from tests.conftest import run_composition_against_omas
+from tests.conftest import resolve_and_compose, run_composition_against_omas
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_mdsplus, pytest.mark.omas_validation]
 
