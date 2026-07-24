@@ -717,7 +717,9 @@ class ChargeExchangeMapper(IDSMapper):
             stat = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP_ERR_PS'))
             sys = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP_ERR'))
             stat_arr = np.atleast_1d(stat) if stat is not None else np.array([])
+            stat_arr[stat_arr <= 0] = np.inf
             sys_arr = np.atleast_1d(sys) if sys is not None else np.array([])
+            sys_arr[sys_arr <= 0] = np.inf
             result.append(np.stack([stat_arr, sys_arr]))
         return ak.Array(result)[:, None,...]
 
@@ -864,6 +866,7 @@ class ChargeExchangeMapper(IDSMapper):
             ich = array_order.index(f'{sub[0:4]}{ch}')
             ind = slice(indices[ich], indices[ich+1])
             val = np.atleast_1d(impdens[ind])
+            val[val <= 0] = np.inf
             result.append(val if len(val) > 0 else np.array([]))
         return ak.Array(result)[:, None,...]
 
