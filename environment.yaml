@@ -20,7 +20,7 @@ dependencies:
   - mdsplus =7.157.0
 
   # # OMAS - available on conda-forge since 0.95.2
-  # - omas >=0.95.2
+  - omas >=0.95.2
 
   # For pip install
   - pip *

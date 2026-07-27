@@ -36,13 +36,11 @@ class CoreProfilesOmfitMapper(IDSMapper):
         self.run_id = profiles_run_id
         self.crop_core_profiles = crop_core_profiles
 
-        # EFIT config (forwarded by the composer/factory) — needed to identify the
-        # COCOS convention for the absolute poloidal flux (grid.psi and derived
-        # axis/boundary). The profile data itself comes from the OMFIT_PROFS tree;
+        # Need EFIT to identify cocos
         # only BCENTR/CPASMA are read from EFIT to pick the source COCOS.
-        self.efit_tree = kwargs.get('efit_tree', 'EFIT01')
-        self.efit_run_id = kwargs.get('efit_run_id', None)
-        self._geqdsk_node = f'\\{self.efit_tree}::TOP.RESULTS.GEQDSK'
+        # Hardcode to EFIT01 since these should be consistent across all EFITs
+        self.efit_tree = 'EFIT01'
+        self._geqdsk_node = f'\\TOP.RESULTS.GEQDSK'
         self.cocos = COCOSTransform()
         self._cocos_cache: Dict[int, int] = {}  # shot -> source COCOS
 
@@ -69,16 +67,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
         """
         if self.run_id is not None:
             return int(str(shot) + self.run_id)
-        return shot
-
-    def _efit_shot(self, shot: int) -> int:
-        """
-        Resolve the shot for EFIT queries (BCENTR/CPASMA used for COCOS).
-
-        Appends efit_run_id when set, mirroring EquilibriumMapper.resolve_shot.
-        """
-        if self.efit_run_id is not None:
-            return int(str(shot) + self.efit_run_id)
         return shot
 
     def _get_mds_path(self, field_type: str) -> str:
@@ -482,7 +470,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         self.specs["core_profiles._cocos_bcentr"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             derive_requirements=lambda shot, raw: [
-                Requirement(f'{self._geqdsk_node}.BCENTR', self._efit_shot(shot), self.efit_tree)
+                Requirement(f'{self._geqdsk_node}.BCENTR', shot, self.efit_tree)
             ],
             ids_path="core_profiles._cocos_bcentr",
             docs_file=self.DOCS_PATH
@@ -490,7 +478,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         self.specs["core_profiles._cocos_cpasma"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             derive_requirements=lambda shot, raw: [
-                Requirement(f'{self._geqdsk_node}.CPASMA', self._efit_shot(shot), self.efit_tree)
+                Requirement(f'{self._geqdsk_node}.CPASMA', shot, self.efit_tree)
             ],
             ids_path="core_profiles._cocos_cpasma",
             docs_file=self.DOCS_PATH
@@ -1141,18 +1129,18 @@ class CoreProfilesOmfitMapper(IDSMapper):
         unified_time = raw_data[time_key] * 1e-3  # Convert ms to s
         return unified_time
 
-    def _rho_mask(self, rho_row: np.ndarray) -> np.ndarray:
+    def _core_mask(self, normalized_coord: np.ndarray) -> np.ndarray:
         """
-        Boolean mask selecting points inside the separatrix (rho <= 1) for one time slice.
+        Boolean mask selecting points inside the separatrix (normalized_coord <= 1) for one time slice.
 
         When crop_core_profiles is False (default), keep all points (retain the scrape-off layer).
         """
         if self.crop_core_profiles:
-            return rho_row <= 1.0
-        return np.ones(rho_row.shape, dtype=bool)
+            return normalized_coord <= 1.0
+        return np.ones(normalized_coord.shape, dtype=bool)
 
-    def _apply_rho_mask(self, shot: int, raw_data: Dict[str, Any],
-                        data_2d: np.ndarray) -> list:
+    def _apply_core_mask(self, shot: int, raw_data: Dict[str, Any],
+                         data_2d: np.ndarray) -> list:
         """
         Apply rho <= 1.0 mask per time slice.
 
@@ -1168,7 +1156,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         rho_2d = raw_data[rho_key]
         result = []
         for i_time in range(data_2d.shape[0]):
-            mask = self._rho_mask(rho_2d[i_time, :])
+            mask = self._core_mask(rho_2d[i_time, :])
             result.append(data_2d[i_time, mask])
         return result
 
@@ -1235,7 +1223,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         result = []
         for i_time in range(rho_2d.shape[0]):
             if len(data_raw) > 0:
-                mask = self._rho_mask(rho_2d[i_time, :])
+                mask = self._core_mask(rho_2d[i_time, :])
                 result.append(data_raw[i_time, mask])
             else:
                 result.append([])
@@ -1248,7 +1236,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         Both D and C use T_D (same underlying data, stacked).
         """
         data_key = Requirement('\\TOP.T_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        t_slices = self._apply_rho_mask(shot, raw_data, raw_data[data_key])
+        t_slices = self._apply_core_mask(shot, raw_data, raw_data[data_key])
         return self._stack_ions({ion['label']: t_slices for ion in self.ions})
 
     def _compose_all_ion_density_thermal(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
@@ -1259,8 +1247,8 @@ class CoreProfilesOmfitMapper(IDSMapper):
         """
         d_key = Requirement('\\TOP.N_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
         c_key = Requirement('\\TOP.N_C', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        d_slices = self._apply_rho_mask(shot, raw_data, raw_data[d_key])
-        c_slices = self._apply_rho_mask(shot, raw_data, raw_data[c_key])
+        d_slices = self._apply_core_mask(shot, raw_data, raw_data[d_key])
+        c_slices = self._apply_core_mask(shot, raw_data, raw_data[c_key])
         return self._stack_ions({'D': d_slices, 'C': c_slices})
 
     def _compose_all_ion_velocity_toroidal(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
@@ -1270,7 +1258,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         Both D and C use V_TOR_C (d3d.py copies ion[1] velocity to ion[0]).
         """
         data_key = Requirement('\\TOP.V_TOR_C', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        v_slices = self._apply_rho_mask(shot, raw_data, raw_data[data_key])
+        v_slices = self._apply_core_mask(shot, raw_data, raw_data[data_key])
         return self._stack_ions({ion['label']: v_slices for ion in self.ions})
 
     def _compose_all_ion_velocity_error(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
@@ -1350,7 +1338,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         n_time = rho_2d.shape[0]
         result = []
         for i_time in range(n_time):
-            mask = self._rho_mask(rho_2d[i_time, :])
+            mask = self._core_mask(rho_2d[i_time, :])
             result.append(rho_2d[i_time, mask])
 
         return result
@@ -1384,7 +1372,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # Apply rho masking per time slice (same as other OMFIT_PROFS fields)
         result = []
         for i_time in range(n_time):
-            mask = self._rho_mask(rho_2d[i_time, :])
+            mask = self._core_mask(rho_2d[i_time, :])
             result.append(rho_pol_norm_full[i_time, mask])
 
         return np.array(result)
@@ -1400,8 +1388,8 @@ class CoreProfilesOmfitMapper(IDSMapper):
         psi_key = Requirement('\\TOP.PSI', self._get_pulse_id(shot), self.omfit_tree).as_key()
         psi = raw_data[psi_key]
 
-        bcentr_key = Requirement(f'{self._geqdsk_node}.BCENTR', self._efit_shot(shot), self.efit_tree).as_key()
-        cpasma_key = Requirement(f'{self._geqdsk_node}.CPASMA', self._efit_shot(shot), self.efit_tree).as_key()
+        bcentr_key = Requirement(f'{self._geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+        cpasma_key = Requirement(f'{self._geqdsk_node}.CPASMA', shot, self.efit_tree).as_key()
         return apply_cocos_transform(
             psi, raw_data[bcentr_key], raw_data[cpasma_key],
             "core_profiles.profiles_1d.grid.psi",
@@ -1423,15 +1411,13 @@ class CoreProfilesOmfitMapper(IDSMapper):
         psi_key = Requirement('dim_of(\\TOP.N_E,0)', self._get_pulse_id(shot), self.omfit_tree).as_key()
         psi_n = raw_data[psi_key]
 
-        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
-
-        n_time = rho_2d.shape[0]
+        n_time = psi_n.shape[0]
         psi_norm_full = np.broadcast_to(psi_n, (n_time, len(psi_n)))
 
         result = []
         for i_time in range(n_time):
-            mask = self._rho_mask(rho_2d[i_time, :])
+            # Since the mask cuts of at 1.0 we can just feed psi_n
+            mask = self._core_mask(psi_n[i_time, :])
             result.append(psi_norm_full[i_time, mask])
 
         return np.array(result)
@@ -1447,7 +1433,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         result = []
         for i_time in range(psi_2d.shape[0]):
-            mask = self._rho_mask(rho_2d[i_time, :])
+            mask = self._core_mask(rho_2d[i_time, :])
             result.append(psi_2d[i_time, mask])
         return result
 
@@ -1456,8 +1442,8 @@ class CoreProfilesOmfitMapper(IDSMapper):
         Compose grid.psi_magnetic_axis: psi at the magnetic axis (psi_norm index 0),
         one value per time slice.
         """
-        psi_2d = self._composed_psi(shot, raw_data)
-        return psi_2d[:, 0]
+        psi_grid = self._composed_psi(shot, raw_data)
+        return psi_grid[:, 0]
 
     def _compose_psi_magnetic_boundary(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
@@ -1467,14 +1453,14 @@ class CoreProfilesOmfitMapper(IDSMapper):
         The full (unmasked) psi_norm grid is used so 1.0 is always interpolable — the
         OMFIT grid can extend past 1.0 into the scrape-off layer.
         """
-        psi_2d = self._composed_psi(shot, raw_data)
+        psi_grid = self._composed_psi(shot, raw_data)
 
         psi_norm_key = Requirement('dim_of(\\TOP.N_E,0)', self._get_pulse_id(shot), self.omfit_tree).as_key()
         psi_n = raw_data[psi_norm_key]
 
         return np.array([
-            InterpolatedUnivariateSpline(psi_n, psi_2d[i_time])(1.0)
-            for i_time in range(psi_2d.shape[0])
+            InterpolatedUnivariateSpline(psi_n, psi_grid[i_time])(1.0)
+            for i_time in range(psi_grid.shape[0])
         ])
 
     def _compose_density(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
@@ -1623,7 +1609,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         result = []
         for i_time in range(pressure_sum.shape[0]):
-            mask = self._rho_mask(rho_2d[i_time, :])
+            mask = self._core_mask(rho_2d[i_time, :])
             result.append(pressure_sum[i_time, mask])
 
         return np.array(result)

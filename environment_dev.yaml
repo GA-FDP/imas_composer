@@ -27,7 +27,7 @@ dependencies:
   - pyodbc
   - pyqt
 
-# # OMAS dependencies- available on conda-forge since 0.95.2
+# # OMAS dependencies only
   - boto3
   - botocore
   - cython
