@@ -27,7 +27,7 @@ dependencies:
   - pyodbc
   - pyqt
 
-# # OMAS dependencies only
+  # OMAS dependencies only
   - boto3
   - botocore
   - cython
