@@ -54,6 +54,7 @@ plots = [
     "scipy",
     "contourpy",
     "pyodbc",
+    "freetds",
 ]
 
 # Development dependencies
