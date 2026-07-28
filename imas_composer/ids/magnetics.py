@@ -539,19 +539,19 @@ class MagneticsMapper(IDSMapper):
             ids_path="magnetics.flux_loop.name",
             docs_file=self.CONFIG_PATH
         )
-
+        # This needs to be an array not a floating point
         self.specs["magnetics.flux_loop.position.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            compose=lambda shot, _: np.array([f['position'][0]['r'] for f in self._load_flux_loops(shot)]),
+            compose=lambda shot, _: np.array([[f['position'][i]['r'] for i in range(len(f['position']))] for f in self._load_flux_loops(shot)]),
             ids_path="magnetics.flux_loop.position.r",
             docs_file=self.CONFIG_PATH
         )
-
+        # This needs to be an array not a floating point
         self.specs["magnetics.flux_loop.position.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            compose=lambda shot, _: np.array([f['position'][0]['z'] for f in self._load_flux_loops(shot)]),
+            compose=lambda shot, _: np.array([[f['position'][i]['z'] for i in range(len(f['position']))] for f in self._load_flux_loops(shot)]),
             ids_path="magnetics.flux_loop.position.z",
             docs_file=self.CONFIG_PATH
         )
