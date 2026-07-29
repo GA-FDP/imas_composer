@@ -44,8 +44,8 @@ omas_path_map:
   # position uses index 0 since DIII-D flux loops each have a single position point
   magnetics.flux_loop.identifier: magnetics.flux_loop.:.identifier
   magnetics.flux_loop.name: magnetics.flux_loop.:.name
-  magnetics.flux_loop.position.r: magnetics.flux_loop.:.position.0.r
-  magnetics.flux_loop.position.z: magnetics.flux_loop.:.position.0.z
+  magnetics.flux_loop.position.r: magnetics.flux_loop.:.position.:.r
+  magnetics.flux_loop.position.z: magnetics.flux_loop.:.position.:.z
   magnetics.flux_loop.type.index: magnetics.flux_loop.:.type.index
 
   # flux_loop - time-series data (from MDSplus via magnetics_floops_data)

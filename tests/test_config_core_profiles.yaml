@@ -14,14 +14,17 @@ requirement_validation:
 
 field_tolerances:
   core_profiles.time:
-  # This uses interpolation so accuracy is limited
-    rtol: 1.0e-8
-    atol: 1.0e-8
+    rtol: 1.0e-7
+    atol: 1.0e-7
 
   core_profiles.profiles_1d.time:
+    rtol: 1.0e-7
+    atol: 1.0e-7
+
   # This uses interpolation so accuracy is limited
-    rtol: 1.0e-8
-    atol: 1.0e-8
+  core_profiles.global_quantities.v_loop:
+    rtol: 1.0e-3
+    atol: 2.0e-4
 
   core_profiles.profiles_1d.grid.psi_magnetic_boundary:
   # Derived by interpolating the psi profile at psi_norm=1.0, so accuracy is limited

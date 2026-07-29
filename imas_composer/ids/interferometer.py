@@ -289,12 +289,12 @@ class InterferometerMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # Interlock signal from ECSDENSF ptdata2 pointname
+        # Interlock signal from the ECSDENSF ptdata pointname
         self.specs["interferometer._interlock_signal_data"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             depends_on=[],
             derive_requirements=lambda shot, raw:
-                [Requirement(f'ptdata2("ECSDENSF",{shot})', shot, None)],
+                [Requirement("ECSDENSF", shot, "__ptdata__")],
             ids_path="interferometer._interlock_signal_data",
             docs_file=self.DOCS_PATH
         )
@@ -303,7 +303,7 @@ class InterferometerMapper(IDSMapper):
             stage=RequirementStage.DERIVED,
             depends_on=[],
             derive_requirements=lambda shot, raw:
-                [Requirement(f'dim_of(ptdata2("ECSDENSF",{shot}),0)', shot, None)],
+                [Requirement("ECSDENSF", shot, "__ptdata__")],
             ids_path="interferometer._interlock_signal_time",
             docs_file=self.DOCS_PATH
         )
@@ -940,14 +940,14 @@ class InterferometerMapper(IDSMapper):
 
     def _compose_interlock_signal_time(self, shot: int, raw_data: dict) -> ak.Array:
         """Return 2D awkward array of interlock signal times, shape (1, n_time). Time in seconds."""
-        time_key = Requirement(f'dim_of(ptdata2("ECSDENSF",{shot}),0)', shot, None).as_key()
-        time_ms = raw_data[time_key]
+        key = Requirement("ECSDENSF", shot, "__ptdata__").as_key()
+        time_ms = raw_data[key]['times']
         return ak.Array([time_ms / 1.0e3])
 
     def _compose_interlock_signal_data(self, shot: int, raw_data: dict) -> ak.Array:
         """Return 2D awkward array of interlock signal data, shape (1, n_time)."""
-        data_key = Requirement(f'ptdata2("ECSDENSF",{shot})', shot, None).as_key()
-        return ak.Array([raw_data[data_key]])
+        key = Requirement("ECSDENSF", shot, "__ptdata__").as_key()
+        return ak.Array([raw_data[key]['data']])
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         """Return all IDS entry specifications"""
