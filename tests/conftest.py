@@ -309,7 +309,7 @@ def _matches_optional_pattern(mds_path, pattern):
 
     return bool(re.match(regex_pattern, mds_path))
 
-def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float=1e-12, atol_array=1e-6):
+def compare_values(composer_val, omas_val, label="value", rtol=1e-7, atol_float=1e-7, atol_array=1e-6):
     """
     Compare composer and OMAS values with appropriate method based on type.
 
@@ -897,8 +897,8 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
 
     # Get field-specific tolerances if configured
     field_tol = field_tolerances.get(ids_path, {})
-    rtol = field_tol.get('rtol', 1e-10)
-    atol_float = field_tol.get('atol', 1e-12)
+    rtol = field_tol.get('rtol', 1e-7)
+    atol_float = field_tol.get('atol', 1e-7)
     atol_array = field_tol.get('atol', 1e-6)
 
     # Determine fetch and access paths

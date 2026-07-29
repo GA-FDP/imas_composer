@@ -117,9 +117,6 @@ addopts = [
     "-v",
     "--strict-markers",
     "-x",  # Stop on first failure (fail-fast)
-    # Keep the repo root off sys.path: the omas and toksearch_d3d submodule
-    # directories would otherwise shadow the installed packages of the same name
-    "--import-mode=importlib",
     # Skip baseline_validation tests by default (opt-in only)
     "-m", "not baseline_validation",
 ]
