@@ -23,7 +23,7 @@ import yaml
 import awkward as ak
 from pathlib import Path
 
-from omas import ODS, mdsvalue
+from omas import ODS
 from omas.omas_machine import machine_to_omas
 
 from imas_composer import ImasComposer
@@ -745,7 +745,7 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
     """
     Generic helper function for requirement resolution testing.
 
-    Iteratively resolves requirements using OMAS mdsvalue to fetch raw MDSplus data,
+    Iteratively resolves requirements using fetch_requirements to fetch raw data,
     verifying that full resolution is achieved and tracking resolution depth.
 
     Args:
@@ -799,15 +799,11 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
                     f"to allow_different_shot in test_config_{ids_name}.yaml"
                 )
 
-        # Fetch data from MDSplus via OMAS mdsvalue
-        for req in requirements:
-            try:
-                mds = mdsvalue('d3d', req.treename, req.shot, req.mds_path)
-                value = mds.raw()
-                # IMPORTANT: Use tuple key (mds_path, shot, treename) to match Requirement.as_key()
-                raw_data[(req.mds_path, req.shot, req.treename)] = value
-            except Exception as e:
-                pytest.fail(f"Failed to fetch {req.mds_path} from {req.treename}: {e}")
+        # Fetch data via toksearch; keys are already Requirement.as_key() tuples
+        for key, value in fetch_requirements(requirements).items():
+            if isinstance(value, Exception):
+                pytest.fail(f"Failed to fetch {key[0]} from {key[2]}: {value}")
+            raw_data[key] = value
 
     # Should achieve full resolution within max_steps
     assert fully_resolved, f"{ids_path} could not be fully resolved in {max_steps} steps"

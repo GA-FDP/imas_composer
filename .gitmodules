@@ -1,0 +1,6 @@
+[submodule "toksearch_d3d"]
+	path = toksearch_d3d
+	url = git@github.com:GA-FDP/toksearch_d3d.git
+[submodule "omas"]
+	path = omas
+	url = git@github.com:gafusion/omas.git

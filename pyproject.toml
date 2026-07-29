@@ -38,12 +38,19 @@ mds = [
     "mdsplus",
 ]
 
-# Optional dependency for OMAS integration (includes simple_load functionality)
-# Users can install with: pip install imas_composer[omas]
+# Dependency for the fetching backend used by fetch_requirements and simple_load
+# Users can install with: pip install imas_composer[toksearch]
+toksearch = [
+    # Note: toksearch_d3d ships on the ga-fdp conda channel, not PyPI
+    # Users should install it separately: conda install -c ga-fdp toksearch_d3d
+]
+
+# OMAS is the reference implementation the test suite validates against; it is
+# not a fetching backend. Users can install with: pip install imas_composer[omas]
 omas = [
     "mdsplus",
-    # Note: OMAS not included as it may need special installation
-    # Users should install OMAS separately from the appropriate branch
+    # Note: OMAS not included as it is vendored as a submodule
+    # Install it with: pip install --no-deps --no-build-isolation -e ./omas
 ]
 
 # Optional dependencies for the plotting GUIs (iri-cake-viewer)
@@ -104,11 +111,15 @@ markers = [
     "omas_validation: marks tests that validate against OMAS reference implementation",
     "integration: marks tests as integration tests that require external services",
     "requires_mdsplus: marks tests that require MDSplus access to DIII-D data servers",
+    "requires_toksearch: marks tests that require toksearch_d3d",
 ]
 addopts = [
     "-v",
     "--strict-markers",
     "-x",  # Stop on first failure (fail-fast)
+    # Keep the repo root off sys.path: the omas and toksearch_d3d submodule
+    # directories would otherwise shadow the installed packages of the same name
+    "--import-mode=importlib",
     # Skip baseline_validation tests by default (opt-in only)
     "-m", "not baseline_validation",
 ]

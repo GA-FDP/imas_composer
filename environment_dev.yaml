@@ -1,0 +1,50 @@
+name: imas_composer
+
+channels:
+  - ga-fdp
+  - conda-forge
+
+dependencies:
+  # Core runtime deps
+  - python >=3.11
+  - numpy >=1.24
+  - pyyaml *
+  - awkward *
+  - scipy *
+
+  # Test tools
+  - pytest *
+  - pytest-benchmark *
+  - pytest-xdist *
+  - pexpect *
+  - tqdm *
+
+  # toksearch_d3d requirements
+  - versioneer
+  - toksearch >=2.8.1
+  - ptdata >=2.0.13,<3
+  - filelock >=3
+  - pelicanplatform >=7.24.3,<8
+  - fdp >=0.2.4
+
+  # For pip install
+  - pip *
+  - setuptools
+  - contourpy
+  - pyqtgraph
+  - pyodbc
+  - pyqt
+
+  # Omas requirements (not omas itself)
+  - boto3
+  - botocore
+  - cython
+  - dnspython
+  - matplotlib-base
+  - netcdf4
+  - pint
+  - pymongo
+  - pyro5
+  - uncertainties
+  - xarray
+  - xmltodict

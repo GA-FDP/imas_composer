@@ -10,6 +10,8 @@ import numpy as np
 
 from omas import ODS
 
+from imas_composer.fetchers import fetch_requirements
+
 
 pytestmark = [pytest.mark.omas_validation]
 
@@ -37,14 +39,11 @@ def test_profiles_2d_magnetic_fields(field_name, composer, test_shot):
         if status[ids_path]:
             break
 
-        # Fetch requirements from MDSplus
-        from omas import mdsvalue
-        for req in requirements:
-            try:
-                mds_data = mdsvalue('d3d', req.treename, req.shot, req.mds_path).raw()
-                raw_data[req.as_key()] = mds_data
-            except Exception as e:
-                pytest.skip(f"MDSplus data unavailable for {req.mds_path}: {e}")
+        # Fetch requirements via toksearch
+        for key, value in fetch_requirements(requirements).items():
+            if isinstance(value, Exception):
+                pytest.skip(f"Data unavailable for {key[0]}: {value}")
+            raw_data[key] = value
 
     # Compose the field
     composer_result = composer.compose([ids_path], test_shot, raw_data)
