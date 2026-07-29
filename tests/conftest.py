@@ -971,7 +971,8 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
         ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
                        fast_ece=fast_ece_omas)
     else:
-        ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=True,
+        # DO not reset the cache unnecessarily
+        ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
                         profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
 
     # Recursively compare using ndim-based logic with field-specific tolerances
