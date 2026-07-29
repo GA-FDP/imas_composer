@@ -466,7 +466,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         )
 
         # EFIT BCENTR / CPASMA — used only to identify the source COCOS for the
-        # absolute poloidal flux (see _composed_psi). Read from the EFIT tree.
+        # absolute poloidal flux (see _get_cocos_psi). Read from the EFIT tree.
         self.specs["core_profiles._cocos_bcentr"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             derive_requirements=lambda shot, raw: [
@@ -1384,7 +1384,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         psi_n_grid = self._compose_psi_norm(shot, raw_data)
         return np.array(np.sqrt(psi_n_grid))
 
-    def _composed_psi(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+    def _get_cocos_psi(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
         Absolute poloidal flux [time, psi_norm] from OMFIT \\TOP.PSI, COCOS PSI applied.
 
@@ -1408,7 +1408,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
             Compose grid.psi (absolute poloidal flux) for OMFIT_PROFS, masked per time slice.
             """
             # time dependent => 2D
-            psi_grid = self._composed_psi(shot, raw_data)
+            psi_grid = self._get_cocos_psi(shot, raw_data)
     
             rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
             rho_grid = raw_data[rho_key]
@@ -1424,7 +1424,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         Compose grid.psi_magnetic_axis: psi at the magnetic axis (psi_norm index 0),
         one value per time slice.
         """
-        psi_grid = self._composed_psi(shot, raw_data)
+        psi_grid = self._get_cocos_psi(shot, raw_data)
         return psi_grid[:, 0]
 
     def _compose_psi_magnetic_boundary(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
@@ -1435,7 +1435,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         The full (unmasked) psi_norm grid is used so 1.0 is always interpolable — the
         OMFIT grid can extend past 1.0 into the scrape-off layer.
         """
-        psi_grid = self._composed_psi(shot, raw_data)
+        psi_grid = self._get_cocos_psi(shot, raw_data)
 
         psi_norm_key = Requirement('dim_of(\\TOP.N_E,0)', self._get_pulse_id(shot), self.omfit_tree).as_key()
         psi_n = raw_data[psi_norm_key]
