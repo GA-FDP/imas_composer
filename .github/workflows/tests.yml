@@ -44,6 +44,7 @@ jobs:
       - name: Run quick tests
         env:
           BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
+          TOKSEARCH_D3D_NO_ATLAS: "1"
         run: pytest tests/test_fetchers.py tests/test_get_supported_fields.py -n auto --maxfail=0
 
   ids:
@@ -92,6 +93,7 @@ jobs:
       - name: Run ${{ matrix.ids }} tests
         env:
           BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
+          TOKSEARCH_D3D_NO_ATLAS: "1"
         # --maxfail=0 overrides the -x in pyproject addopts so a job reports
         # every failure in its IDS rather than stopping at the first.
         run: pytest tests/test_${{ matrix.ids }}_*.py -n auto --maxfail=0
