@@ -1437,7 +1437,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         """
         psi_grid = self._get_cocos_psi(shot, raw_data)
 
-        psi_norm_key = Requirement('dim_of(\\TOP.N_E,0)', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        psi_norm_key = Requirement('\\TOP.PSI_N', self._get_pulse_id(shot), self.omfit_tree).as_key()
         psi_n = raw_data[psi_norm_key]
 
         return np.array([
