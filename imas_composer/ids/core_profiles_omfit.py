@@ -1139,24 +1139,24 @@ class CoreProfilesOmfitMapper(IDSMapper):
         return np.ones(normalized_coord.shape, dtype=bool)
 
     def _apply_core_mask(self, shot: int, raw_data: Dict[str, Any],
-                         data_2d: np.ndarray) -> list:
+                         grid_data: np.ndarray) -> list:
         """
         Apply rho <= 1.0 mask per time slice.
 
         Args:
             shot: Shot number
             raw_data: Raw data dict
-            data_2d: (n_time, n_rho) array to mask
+            grid_data: (n_time, n_rho) array to mask
 
         Returns:
             List of 1D arrays (one per time slice) after masking
         """
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
+        rho_grid = raw_data[rho_key]
         result = []
-        for i_time in range(data_2d.shape[0]):
-            mask = self._core_mask(rho_2d[i_time, :])
-            result.append(data_2d[i_time, mask])
+        for i_time in range(grid_data.shape[0]):
+            mask = self._core_mask(rho_grid[i_time, :])
+            result.append(grid_data[i_time, mask])
         return result
 
     def _stack_ions(self, ion_slices: dict) -> ak.Array:
@@ -1217,12 +1217,12 @@ class CoreProfilesOmfitMapper(IDSMapper):
             raise ValueError(f"Cannot find spec or requirements for {data_key_name}")
 
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
+        rho_grid = raw_data[rho_key]
 
         result = []
-        for i_time in range(rho_2d.shape[0]):
+        for i_time in range(rho_grid.shape[0]):
             if len(data_raw) > 0:
-                mask = self._core_mask(rho_2d[i_time, :])
+                mask = self._core_mask(rho_grid[i_time, :])
                 result.append(data_raw[i_time, mask])
             else:
                 result.append([])
@@ -1331,14 +1331,14 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # For OMFIT_PROFS, rho comes directly from \TOP.rho
         # It's a 2D array [time, rho], but all time slices have the same rho grid
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
+        rho_grid = raw_data[rho_key]
 
         # Filter to <= 1.0 and broadcast to match the 2D shape [time, rho]
-        n_time = rho_2d.shape[0]
+        n_time = rho_grid.shape[0]
         result = []
         for i_time in range(n_time):
-            mask = self._core_mask(rho_2d[i_time, :])
-            result.append(rho_2d[i_time, mask])
+            mask = self._core_mask(rho_grid[i_time, :])
+            result.append(rho_grid[i_time, mask])
 
         return result
 
@@ -1418,21 +1418,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
                 mask = self._core_mask(rho_grid[i_time, :])
                 result.append(psi_grid[i_time, mask])
             return result
-
-    def _compose_psi(self, shot: int, raw_data: Dict[str, Any]) -> list:
-        """
-        Compose grid.psi (absolute poloidal flux) for OMFIT_PROFS, masked per time slice.
-        """
-        psi_2d = self._composed_psi(shot, raw_data)
-
-        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
-
-        result = []
-        for i_time in range(psi_2d.shape[0]):
-            mask = self._core_mask(rho_2d[i_time, :])
-            result.append(psi_2d[i_time, mask])
-        return result
 
     def _compose_psi_magnetic_axis(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
@@ -1601,11 +1586,11 @@ class CoreProfilesOmfitMapper(IDSMapper):
         pressure_sum = raw_data[d_key] + raw_data[c_key]
 
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
+        rho_grid = raw_data[rho_key]
 
         result = []
         for i_time in range(pressure_sum.shape[0]):
-            mask = self._core_mask(rho_2d[i_time, :])
+            mask = self._core_mask(rho_grid[i_time, :])
             result.append(pressure_sum[i_time, mask])
 
         return np.array(result)
@@ -1811,13 +1796,13 @@ class CoreProfilesOmfitMapper(IDSMapper):
 
         # Get rho_tor_norm for the main grid
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
+        rho_grid = raw_data[rho_key]
 
         # Create spline for each time slice and interpolate
         result = []
         for i_time in range(measured_raw.shape[0]):
             # Create spline from grid psi_n to grid rho_tor_norm
-            rho_spl = InterpolatedUnivariateSpline(grid_psi_n, rho_2d[i_time, :])
+            rho_spl = InterpolatedUnivariateSpline(grid_psi_n, rho_grid[i_time, :])
 
             # Apply isfinite mask to fit psi_norm
             mask = np.isfinite(measured_raw[i_time])
