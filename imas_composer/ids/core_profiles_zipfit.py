@@ -172,9 +172,6 @@ class CoreProfilesZipfitMapper(IDSMapper):
         self.specs["core_profiles.profiles_1d._carbon_rotation_rho"] = self._create_profile_field_spec(
             '_carbon_rotation_rho', 'carbon_rotation', dim=0)
 
-        # V_loop data (for global_quantities)
-        # Note: treename=None means this comes from ptdata2 (not a specific tree)
-        # Using DERIVED stage because ptdata2 requires the shot number in the TDI expression
         self.specs["core_profiles._vloop_data"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             derive_requirements=self._derive_vloop_data_requirements,
@@ -866,12 +863,12 @@ class CoreProfilesZipfitMapper(IDSMapper):
         return n_D
 
     def _derive_vloop_data_requirements(self, shot: int, _raw_data: Dict[str, Any]) -> list:
-        """Derive requirements for v_loop data (needs shot number in TDI expression)."""
-        return [Requirement(f'ptdata2("VLOOP",{shot})', shot, None)]
+        """Derive requirements for v_loop (data, time, and header bundled under __ptdata__ key)."""
+        return [Requirement("VLOOP", shot, "__ptdata__")]
 
     def _derive_vloop_time_requirements(self, shot: int, _raw_data: Dict[str, Any]) -> list:
-        """Derive requirements for v_loop time dimension (needs shot number in TDI expression)."""
-        return [Requirement(f'dim_of(ptdata2("VLOOP",{shot}),0)', shot, None)]
+        """Derive requirements for v_loop time (same key as data — deduplication handles it)."""
+        return [Requirement("VLOOP", shot, "__ptdata__")]
 
     def _compose_v_loop(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
@@ -886,11 +883,10 @@ class CoreProfilesZipfitMapper(IDSMapper):
             1D array of loop voltage in V, interpolated to profile time
         """
         # Get v_loop data and time
-        vloop_data_key = Requirement(f'ptdata2("VLOOP",{shot})', shot, None).as_key()
-        vloop_time_key = Requirement(f'dim_of(ptdata2("VLOOP",{shot}),0)', shot, None).as_key()
+        vloop_key = Requirement("VLOOP", shot, "__ptdata__").as_key()
 
-        vloop_data = raw_data[vloop_data_key]
-        vloop_time = raw_data[vloop_time_key] * 1e-3  # Convert ms to s
+        vloop_data = raw_data[vloop_key]['data']
+        vloop_time = raw_data[vloop_key]['times'] * 1e-3  # Convert ms to s
 
         # Get profile time - use the already-composed time to avoid bypassing dependencies
         # Note: We depend on "core_profiles.time" so we need to compose it first

@@ -213,10 +213,9 @@ class MagneticsMapper(IDSMapper):
             coeff = coeff_map.get(identifier)
             if coeff is None:
                 continue
-            data_key = Requirement(f'ptdata2("{compsig}",{shot})', shot, None).as_key()
-            time_key = Requirement(f'dim_of(ptdata2("{compsig}",{shot}),0)', shot, None).as_key()
-            compsig_data = raw_data[data_key]
-            compsig_time = raw_data[time_key] / 1000.0
+            key = Requirement(compsig, shot, "__ptdata__").as_key()
+            compsig_data = raw_data[key]['data']
+            compsig_time = raw_data[key]['times'] / 1000.0
             compsig_interp = np.interp(channel_time, compsig_time, compsig_data)
             result = result - coeff * compsig_interp
         return result
@@ -540,19 +539,19 @@ class MagneticsMapper(IDSMapper):
             ids_path="magnetics.flux_loop.name",
             docs_file=self.CONFIG_PATH
         )
-
+        # This needs to be an array not a floating point
         self.specs["magnetics.flux_loop.position.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            compose=lambda shot, _: np.array([f['position'][0]['r'] for f in self._load_flux_loops(shot)]),
+            compose=lambda shot, _: np.array([[f['position'][i]['r'] for i in range(len(f['position']))] for f in self._load_flux_loops(shot)]),
             ids_path="magnetics.flux_loop.position.r",
             docs_file=self.CONFIG_PATH
         )
-
+        # This needs to be an array not a floating point
         self.specs["magnetics.flux_loop.position.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[],
-            compose=lambda shot, _: np.array([f['position'][0]['z'] for f in self._load_flux_loops(shot)]),
+            compose=lambda shot, _: np.array([[f['position'][i]['z'] for i in range(len(f['position']))] for f in self._load_flux_loops(shot)]),
             ids_path="magnetics.flux_loop.position.z",
             docs_file=self.CONFIG_PATH
         )
@@ -600,97 +599,81 @@ class MagneticsMapper(IDSMapper):
 
     # Requirement derivation functions
     def _derive_ip_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for IP data (needs shot number in TDI expression)."""
-        return [Requirement(f'ptdata2("IP",{shot})', shot, None)]
+        """Derive requirements for IP (data, time, and header bundled under __ptdata__ key)."""
+        return [Requirement("IP", shot, "__ptdata__")]
 
     def _derive_ip_time_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for IP time dimension (needs shot number in TDI expression)."""
-        return [Requirement(f'dim_of(ptdata2("IP",{shot}),0)', shot, None)]
+        """Derive requirements for IP time (same key as data — deduplication handles it)."""
+        return [Requirement("IP", shot, "__ptdata__")]
 
     def _derive_ip_header_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for IP header (needs shot number in TDI expression)."""
-        return [Requirement(f'pthead2("IP",{shot}), __rarray', shot, None)]
+        """Derive requirements for IP header (same key as data — deduplication handles it)."""
+        return [Requirement("IP", shot, "__ptdata__")]
 
     def _derive_ipspr15v_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for IPSPR15V data (needs shot number in TDI expression)."""
-        return [Requirement(f'ptdata2("IPSPR15V",{shot})', shot, None)]
+        """Derive requirements for IPSPR15V (data, time, and header bundled under __ptdata__ key)."""
+        return [Requirement("IPSPR15V", shot, "__ptdata__")]
 
     def _derive_ipspr15v_time_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for IPSPR15V time dimension (needs shot number in TDI expression)."""
-        return [Requirement(f'dim_of(ptdata2("IPSPR15V",{shot}),0)', shot, None)]
+        """Derive requirements for IPSPR15V time (same key as data — deduplication handles it)."""
+        return [Requirement("IPSPR15V", shot, "__ptdata__")]
 
     def _derive_ipspr15v_header_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for IPSPR15V header (needs shot number in TDI expression)."""
-        return [Requirement(f'pthead2("IPSPR15V",{shot}), __rarray', shot, None)]
+        """Derive requirements for IPSPR15V header (same key as data — deduplication handles it)."""
+        return [Requirement("IPSPR15V", shot, "__ptdata__")]
 
     def _derive_diamag_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for DIAMAG3 data (needs shot number in TDI expression)."""
-        return [Requirement(f'ptdata2("DIAMAG3",{shot})', shot, None)]
+        """Derive requirements for DIAMAG3 (data, time, and header bundled under __ptdata__ key)."""
+        return [Requirement("DIAMAG3", shot, "__ptdata__")]
 
     def _derive_diamag_time_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for DIAMAG3 time dimension (needs shot number in TDI expression)."""
-        return [Requirement(f'dim_of(ptdata2("DIAMAG3",{shot}),0)', shot, None)]
+        """Derive requirements for DIAMAG3 time (same key as data — deduplication handles it)."""
+        return [Requirement("DIAMAG3", shot, "__ptdata__")]
 
     def _derive_diamag_header_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive requirements for DIAMAG3 header (needs shot number in TDI expression)."""
-        return [Requirement(f'pthead2("DIAMAG3",{shot}), __rarray', shot, None)]
+        """Derive requirements for DIAMAG3 header (same key as data — deduplication handles it)."""
+        return [Requirement("DIAMAG3", shot, "__ptdata__")]
 
     def _derive_comp_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive ptdata2 requirements for all compensation signals (btcomp, ccomp, icomp)."""
+        """Derive ptdata requirements for all compensation signals (btcomp, ccomp, icomp)."""
         corrections = self._get_comp_corrections(shot)
         seen = set()
         reqs = []
         for compsig, _ in corrections:
             if compsig not in seen:
                 seen.add(compsig)
-                reqs.append(Requirement(f'ptdata2("{compsig}",{shot})', shot, None))
+                reqs.append(Requirement(compsig, shot, "__ptdata__"))
         return reqs
 
     def _derive_comp_time_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive dim_of requirements for all compensation signals (btcomp, ccomp, icomp)."""
-        corrections = self._get_comp_corrections(shot)
-        seen = set()
-        reqs = []
-        for compsig, _ in corrections:
-            if compsig not in seen:
-                seen.add(compsig)
-                reqs.append(Requirement(f'dim_of(ptdata2("{compsig}",{shot}),0)', shot, None))
-        return reqs
+        """Derive compensation signal time requirements (same keys as data — dedup handles it)."""
+        return self._derive_comp_data_requirements(shot, _raw_data)
 
     def _derive_bpol_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive ptdata2 requirements for all b_field_pol_probe channels."""
+        """Derive ptdata requirements for all b_field_pol_probe channels."""
         probes = self._load_probes(shot)
-        return [Requirement(f'ptdata2("{p["identifier"]}",{shot})', shot, None) for p in probes]
+        return [Requirement(p["identifier"], shot, "__ptdata__") for p in probes]
 
     def _derive_bpol_time_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive dim_of requirements for all b_field_pol_probe channels."""
-        probes = self._load_probes(shot)
-        return [Requirement(f'dim_of(ptdata2("{p["identifier"]}",{shot}),0)', shot, None) for p in probes]
+        """Derive b_field_pol_probe time requirements (same keys as data — dedup handles it)."""
+        return self._derive_bpol_data_requirements(shot, _raw_data)
 
     def _derive_bpol_header_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive pthead2 requirements for all b_field_pol_probe channels."""
-        probes = self._load_probes(shot)
-        return [Requirement(f'pthead2("{p["identifier"].upper()}",{shot}), __rarray', shot, None) for p in probes]
+        """Derive b_field_pol_probe header requirements (same keys as data — dedup handles it)."""
+        return self._derive_bpol_data_requirements(shot, _raw_data)
 
     def _derive_floop_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive ptdata2 requirements for all flux_loop channels."""
+        """Derive ptdata requirements for all flux_loop channels."""
         loops = self._load_flux_loops(shot)
-        return [Requirement(f'ptdata2("{f["identifier"]}",{shot})', shot, None) for f in loops]
+        return [Requirement(f["identifier"], shot, "__ptdata__") for f in loops]
 
     def _derive_floop_time_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """
-        Derive dim_of requirement for flux_loop time base.
-
-        flux_loop uses homogeneous_time=True in OMAS: all loops share one time axis.
-        Only one dim_of is needed, fetched from the first loop identifier.
-        """
-        loops = self._load_flux_loops(shot)
-        return [Requirement(f'dim_of(ptdata2("{f["identifier"]}",{shot}),0)', shot, None) for f in loops]
+        """Derive flux_loop time requirements (same keys as data — dedup handles it)."""
+        return self._derive_floop_data_requirements(shot, _raw_data)
 
     def _derive_floop_header_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
-        """Derive pthead2 requirements for all flux_loop channels."""
-        loops = self._load_flux_loops(shot)
-        return [Requirement(f'pthead2("{f["identifier"].upper()}",{shot}), __rarray', shot, None) for f in loops]
+        """Derive flux_loop header requirements (same keys as data — dedup handles it)."""
+        return self._derive_floop_data_requirements(shot, _raw_data)
 
     # Compose functions
     def _compose_ip_data(self, shot: int, raw_data: dict) -> ak.Array:
@@ -701,13 +684,13 @@ class MagneticsMapper(IDSMapper):
         For DIII-D: 2 measurements (IP and IPSPR15V) with different time bases.
         """
         # Get first IP source (already in Amperes)
-        ip_key = Requirement(f'ptdata2("IP",{shot})', shot, None).as_key()
-        ip_data = raw_data[ip_key]
+        ip_key = Requirement("IP", shot, "__ptdata__").as_key()
+        ip_data = raw_data[ip_key]['data']
 
         # Get second IP source (IPSPR15V) and convert units
         # IPSPR15V is in units of 2 V/MA, multiply by 500e3 to convert to Amperes
-        ipspr15v_key = Requirement(f'ptdata2("IPSPR15V",{shot})', shot, None).as_key()
-        ipspr15v_data = raw_data[ipspr15v_key] * 500e3
+        ipspr15v_key = Requirement("IPSPR15V", shot, "__ptdata__").as_key()
+        ipspr15v_data = raw_data[ipspr15v_key]['data'] * 500e3
 
         # Return as awkward array (ragged array for different time bases)
         return ak.Array([ip_data, ipspr15v_data])
@@ -721,12 +704,12 @@ class MagneticsMapper(IDSMapper):
         For DIII-D: 2 measurements (IP and IPSPR15V) with potentially different time bases.
         """
         # Get first IP source time
-        ip_time_key = Requirement(f'dim_of(ptdata2("IP",{shot}),0)', shot, None).as_key()
-        ip_time = raw_data[ip_time_key] / 1000.0
+        ip_key = Requirement("IP", shot, "__ptdata__").as_key()
+        ip_time = raw_data[ip_key]['times'] / 1000.0
 
         # Get second IP source time (IPSPR15V)
-        ipspr15v_time_key = Requirement(f'dim_of(ptdata2("IPSPR15V",{shot}),0)', shot, None).as_key()
-        ipspr15v_time = raw_data[ipspr15v_time_key] / 1000.0
+        ipspr15v_key = Requirement("IPSPR15V", shot, "__ptdata__").as_key()
+        ipspr15v_time = raw_data[ipspr15v_key]['times'] / 1000.0
 
         # Return as awkward array (ragged array for different time bases)
         return ak.Array([ip_time, ipspr15v_time])
@@ -736,28 +719,22 @@ class MagneticsMapper(IDSMapper):
         Compute uncertainty for plasma current.
 
         From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0
-        where header is from pthead2("IP", shot)
+        where header is the ptdata rarray for IP
         Returns awkward array of shape (n_measurements,) where each element is a 1D time series.
         For DIII-D: 2 measurements (IP and IPSPR15V) with different time bases.
         """
         # Get the first IP source data to determine time length
-        ip_data_key = Requirement(f'ptdata2("IP",{shot})', shot, None).as_key()
-        nt_ip = len(raw_data[ip_data_key])
-
-        # Get first IP header information
-        ip_header_key = Requirement(f'pthead2("IP",{shot}), __rarray', shot, None).as_key()
-        ip_header = raw_data[ip_header_key]
+        ip_key = Requirement("IP", shot, "__ptdata__").as_key()
+        nt_ip = len(raw_data[ip_key]['data'])
+        ip_header = raw_data[ip_key]['rarray']
 
         # OMAS formula for IP: abs(header[3] * header[4]) * ones(nt) * 10.0
         ip_error = np.abs(ip_header[3] * ip_header[4]) * np.ones(nt_ip) * 10.0
 
         # Get the second IP source (IPSPR15V) data to determine time length
-        ipspr15v_data_key = Requirement(f'ptdata2("IPSPR15V",{shot})', shot, None).as_key()
-        nt_ipspr15v = len(raw_data[ipspr15v_data_key])
-
-        # Get second IP header information
-        ipspr15v_header_key = Requirement(f'pthead2("IPSPR15V",{shot}), __rarray', shot, None).as_key()
-        ipspr15v_header = raw_data[ipspr15v_header_key]
+        ipspr15v_key = Requirement("IPSPR15V", shot, "__ptdata__").as_key()
+        nt_ipspr15v = len(raw_data[ipspr15v_key]['data'])
+        ipspr15v_header = raw_data[ipspr15v_key]['rarray']
 
         # OMAS formula for IPSPR15V: abs(header[3] * header[4]) * ones(nt) * 10.0 * unit_conversion
         # Since IPSPR15V is in units of 2 V/MA, the error also needs to be scaled by 500e3
@@ -783,9 +760,9 @@ class MagneticsMapper(IDSMapper):
         Returns array of shape (n_measurements, n_time).
         For DIII-D: (1, n_time) - single diamagnetic flux measurement.
         """
-        data_key = Requirement(f'ptdata2("DIAMAG3",{shot})', shot, None).as_key()
+        key = Requirement("DIAMAG3", shot, "__ptdata__").as_key()
         # Add measurement dimension: (n_time,) -> (1, n_time)
-        return (raw_data[data_key] * 1e-3)[np.newaxis, :]
+        return (raw_data[key]['data'] * 1e-3)[np.newaxis, :]
 
     def _compose_diamagnetic_flux_time(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -795,26 +772,22 @@ class MagneticsMapper(IDSMapper):
         Returns array of shape (n_measurements, n_time).
         For DIII-D: (1, n_time) - single diamagnetic flux measurement.
         """
-        time_key = Requirement(f'dim_of(ptdata2("DIAMAG3",{shot}),0)', shot, None).as_key()
+        key = Requirement("DIAMAG3", shot, "__ptdata__").as_key()
         # Add measurement dimension: (n_time,) -> (1, n_time)
-        return (raw_data[time_key] / 1000.0)[np.newaxis, :]
+        return (raw_data[key]['times'] / 1000.0)[np.newaxis, :]
 
     def _compose_diamagnetic_flux_data_error_upper(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Compute uncertainty for diamagnetic flux.
 
         From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0 / 1000.0
-        where header is from pthead2("DIAMAG3", shot)
+        where header is the ptdata rarray for DIAMAG3
         Returns array of shape (n_measurements, n_time).
         For DIII-D: (1, n_time) - single diamagnetic flux measurement.
         """
-        # Get the data to determine time length
-        data_key = Requirement(f'ptdata2("DIAMAG3",{shot})', shot, None).as_key()
-        nt = len(raw_data[data_key])
-
-        # Get header information
-        header_key = Requirement(f'pthead2("DIAMAG3",{shot}), __rarray', shot, None).as_key()
-        header = raw_data[header_key]
+        key = Requirement("DIAMAG3", shot, "__ptdata__").as_key()
+        nt = len(raw_data[key]['data'])
+        header = raw_data[key]['rarray']
 
         # OMAS formula: abs(header[3] * header[4]) * ones(nt) / 100.0
         # Add measurement dimension: (n_time,) -> (1, n_time)
@@ -824,7 +797,7 @@ class MagneticsMapper(IDSMapper):
         """
         Get b_field_pol_probe field data per channel with compensation applied.
 
-        From OMAS: ptdata2("{identifier}", shot) minus compensation corrections
+        From OMAS: the probe ptdata pointname minus compensation corrections
         from btcomp, ccomp, icomp (applied only to valid channels).
         Returns ragged awkward array of shape (n_probes, n_time).
         """
@@ -832,10 +805,9 @@ class MagneticsMapper(IDSMapper):
         corrections = self._get_comp_corrections(shot)
         result = []
         for p in probes:
-            data_key = Requirement(f'ptdata2("{p["identifier"]}",{shot})', shot, None).as_key()
-            time_key = Requirement(f'dim_of(ptdata2("{p["identifier"]}",{shot}),0)', shot, None).as_key()
-            data = raw_data[data_key]
-            time_s = raw_data[time_key] / 1000.0
+            key = Requirement(p["identifier"], shot, "__ptdata__").as_key()
+            data = raw_data[key]['data']
+            time_s = raw_data[key]['times'] / 1000.0
             result.append(self._apply_compensation(corrections, shot, raw_data, p['identifier'], data, time_s))
         return ak.Array(result)
 
@@ -848,7 +820,7 @@ class MagneticsMapper(IDSMapper):
         """
         probes = self._load_probes(shot)
         return ak.Array([
-            raw_data[Requirement(f'dim_of(ptdata2("{p["identifier"]}",{shot}),0)', shot, None).as_key()] / 1000.0
+            raw_data[Requirement(p["identifier"], shot, "__ptdata__").as_key()]['times'] / 1000.0
             for p in probes
         ])
 
@@ -863,8 +835,8 @@ class MagneticsMapper(IDSMapper):
         weights = self._load_fitweights(shot, 'fwtmp2')
         result = []
         for k, p in enumerate(probes):
-            data_key = Requirement(f'ptdata2("{p["identifier"]}",{shot})', shot, None).as_key()
-            data_missing = data_key not in raw_data or len(raw_data[data_key]) <= 1
+            key = Requirement(p["identifier"], shot, "__ptdata__").as_key()
+            data_missing = key not in raw_data or len(raw_data[key]['data']) <= 1
             weight_invalid = k < len(weights) and weights[k] < 0.5
             result.append(-2 if data_missing or weight_invalid else 0)
         return np.array(result, dtype=int)
@@ -874,7 +846,7 @@ class MagneticsMapper(IDSMapper):
         Compute uncertainty for b_field_pol_probe channels.
 
         From OMAS: max(abs(header[3]*header[4]) * ones(nt) * 10.0, 0.03 * abs(compensated_data))
-        where header is from pthead2("{identifier}", shot).
+        where header is the ptdata rarray for the probe pointname.
         Returns 1e30 array for channels with invalid data or fitweight < 0.5.
         rel_error uses compensated data (matching OMAS which computes uncertainty after compensation).
         Returns ragged awkward array of shape (n_probes, n_time).
@@ -884,19 +856,17 @@ class MagneticsMapper(IDSMapper):
         corrections = self._get_comp_corrections(shot)
         result = []
         for k, p in enumerate(probes):
-            data_key = Requirement(f'ptdata2("{p["identifier"]}",{shot})', shot, None).as_key()
-            header_key = Requirement(f'pthead2("{p["identifier"].upper()}",{shot}), __rarray', shot, None).as_key()
-            time_key = Requirement(f'dim_of(ptdata2("{p["identifier"]}",{shot}),0)', shot, None).as_key()
-            data = raw_data[data_key]
+            key = Requirement(p["identifier"], shot, "__ptdata__").as_key()
+            data = raw_data[key]['data']
             nt = len(data)
             data_missing = nt <= 1
             weight_invalid = k < len(weights) and weights[k] < 0.5
             if data_missing or weight_invalid:
                 result.append(np.inf * np.ones(nt))
             else:
-                time_s = raw_data[time_key] / 1000.0
+                time_s = raw_data[key]['times'] / 1000.0
                 compensated = self._apply_compensation(corrections, shot, raw_data, p['identifier'], data, time_s)
-                header = raw_data[header_key]
+                header = raw_data[key]['rarray']
                 digi_error = np.abs(header[3] * header[4]) * np.ones(nt) * 10.0
                 rel_error = 0.03 * np.abs(compensated)
                 result.append(np.fmax(digi_error, rel_error))
@@ -907,7 +877,7 @@ class MagneticsMapper(IDSMapper):
         Get flux_loop flux data per channel with compensation and differential-to-total conversion.
 
         From OMAS magnetics_floops_data (store_differential=False, nref=0):
-          1. Fetch ptdata2 per loop
+          1. Fetch ptdata per loop
           2. Apply compensation corrections (btcomp, ccomp, icomp) for valid channels
           3. Convert differential fluxes to total by adding reference loop (index 0) data
         Returns ragged awkward array of shape (n_loops, n_time).
@@ -917,10 +887,9 @@ class MagneticsMapper(IDSMapper):
         result = []
         all_time = []
         for f in loops:
-            data_key = Requirement(f'ptdata2("{f["identifier"]}",{shot})', shot, None).as_key()
-            time_key = Requirement(f'dim_of(ptdata2("{f["identifier"]}",{shot}),0)', shot, None).as_key()
-            data = raw_data[data_key] * -2 * np.pi # COCOS transformation
-            time_s = raw_data[time_key] / 1000.0
+            key = Requirement(f["identifier"], shot, "__ptdata__").as_key()
+            data = raw_data[key]['data'] * -2 * np.pi # COCOS transformation
+            time_s = raw_data[key]['times'] / 1000.0
             result.append(self._apply_compensation(corrections, shot, raw_data, f['identifier'], data, time_s))
             all_time.append(time_s)
 
@@ -949,7 +918,7 @@ class MagneticsMapper(IDSMapper):
         """
         loops = self._load_flux_loops(shot)
         return ak.Array([
-            raw_data[Requirement(f'dim_of(ptdata2("{f["identifier"]}",{shot}),0)', shot, None).as_key()] / 1000.0
+            raw_data[Requirement(f["identifier"], shot, "__ptdata__").as_key()]['times'] / 1000.0
             for f in loops
         ])
 
@@ -964,8 +933,8 @@ class MagneticsMapper(IDSMapper):
         weights = self._load_fitweights(shot, 'fwtsi')
         result = []
         for k, f in enumerate(loops):
-            data_key = Requirement(f'ptdata2("{f["identifier"]}",{shot})', shot, None).as_key()
-            data_missing = data_key not in raw_data or len(raw_data[data_key]) <= 1
+            key = Requirement(f["identifier"], shot, "__ptdata__").as_key()
+            data_missing = key not in raw_data or len(raw_data[key]['data']) <= 1
             weight_invalid = k < len(weights) and weights[k] < 0.5
             result.append(-2 if data_missing or weight_invalid else 0)
         return np.array(result, dtype=int)
@@ -991,11 +960,9 @@ class MagneticsMapper(IDSMapper):
         result = []
         all_time = []
         for k, f in enumerate(loops):
-            data_key = Requirement(f'ptdata2("{f["identifier"]}",{shot})', shot, None).as_key()
-            time_key = Requirement(f'dim_of(ptdata2("{f["identifier"]}",{shot}),0)', shot, None).as_key()
-            header_key = Requirement(f'pthead2("{f["identifier"].upper()}",{shot}), __rarray', shot, None).as_key()
-            data = raw_data[data_key] * -2 * np.pi # COCOS transformation
-            time_s = raw_data[time_key] / 1000.0
+            key = Requirement(f["identifier"], shot, "__ptdata__").as_key()
+            data = raw_data[key]['data'] * -2 * np.pi # COCOS transformation
+            time_s = raw_data[key]['times'] / 1000.0
             nt = len(data)
             data_missing = nt <= 1
             weight_invalid = k < len(weights) and weights[k] < 0.5
@@ -1003,14 +970,13 @@ class MagneticsMapper(IDSMapper):
                 result.append(np.inf * np.ones(nt))
             else:
                 compensated = self._apply_compensation(corrections, shot, raw_data, f['identifier'], data, time_s)
-                header = raw_data[header_key]
+                header = raw_data[key]['rarray']
                 digi_error = 10 * np.abs(header[3] * header[4]) * np.ones(nt)
                 rel_error = 0.03 * np.abs(compensated)
                 # Interpolate Ip to flux loop time base for position_error term
-                ip_data_key = Requirement(f'ptdata2("IP",{shot})', shot, None).as_key()
-                ip_time_key = Requirement(f'dim_of(ptdata2("IP",{shot}),0)', shot, None).as_key()
-                Ip = np.interp(time_s, np.ravel(raw_data[ip_time_key]) / 1000.0,
-                            np.ravel(raw_data[ip_data_key]), left=0.0, right=0.0)
+                ip_key = Requirement("IP", shot, "__ptdata__").as_key()
+                Ip = np.interp(time_s, np.ravel(raw_data[ip_key]['times']) / 1000.0,
+                            np.ravel(raw_data[ip_key]['data']), left=0.0, right=0.0)
                 position_r = f['position'][0]['r']
                 position_error = 1.e-9 * position_r * np.abs(Ip)
                 result.append(np.fmax.reduce([digi_error, rel_error, position_error]))
