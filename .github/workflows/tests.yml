@@ -38,6 +38,8 @@ jobs:
       - name: Install packages
         run: |
           pip install --no-deps --no-build-isolation -e ./omas_submodule
+          pip install --no-deps --no-build-isolation -e ./toksearch_submodule
+          pip install --no-deps --no-build-isolation -e ./fdp_submodule
           pip install --no-deps --no-build-isolation -e ./toksearch_d3d_submodule
           pip install --no-deps --no-build-isolation -e .
 
@@ -87,6 +89,8 @@ jobs:
       - name: Install packages
         run: |
           pip install --no-deps --no-build-isolation -e ./omas_submodule
+          pip install --no-deps --no-build-isolation -e ./toksearch_submodule
+          pip install --no-deps --no-build-isolation -e ./fdp_submodule
           pip install --no-deps --no-build-isolation -e ./toksearch_d3d_submodule
           pip install --no-deps --no-build-isolation -e .
 
