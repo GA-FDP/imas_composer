@@ -261,3 +261,76 @@ def get_cocos_transform_type(ids_path: str) -> Optional[str]:
     """
     cocos_map = _load_cocos_mappings()
     return cocos_map.get(ids_path, None)
+
+
+def identify_cocos_from_signals(bcentr, cpasma, cocos: Optional['COCOSTransform'] = None,
+                                cache: Optional[Dict] = None, cache_key=None) -> int:
+    """
+    Identify the source COCOS from toroidal field and plasma current signals.
+
+    Uses the mean of ``bcentr`` (Bt) and ``cpasma`` (Ip), matching OMAS's
+    gEQDSK COCOS identification. Results are cached in ``cache`` under
+    ``cache_key`` when both are provided.
+
+    Args:
+        bcentr: Toroidal field (BCENTR); scalar or array (the mean is used).
+        cpasma: Plasma current (CPASMA); scalar or array (the mean is used).
+        cocos: Optional COCOSTransform instance to reuse (one is created if None).
+        cache: Optional dict caching the identified COCOS.
+        cache_key: Key into ``cache`` (e.g. the shot number).
+
+    Returns:
+        Source COCOS number (1, 3, 5, or 7 for typical DIII-D cases).
+    """
+    if cache is not None and cache_key is not None and cache_key in cache:
+        return cache[cache_key]
+
+    if cocos is None:
+        cocos = COCOSTransform()
+
+    bt_mean = np.mean(bcentr) if hasattr(bcentr, '__len__') else bcentr
+    ip_mean = np.mean(cpasma) if hasattr(cpasma, '__len__') else cpasma
+    source_cocos = cocos.identify_cocos(bt_mean, ip_mean)
+
+    if cache is not None and cache_key is not None:
+        cache[cache_key] = source_cocos
+    return source_cocos
+
+
+def apply_cocos_transform(data: np.ndarray, bcentr, cpasma, ids_path: str,
+                          cocos: Optional['COCOSTransform'] = None,
+                          cache: Optional[Dict] = None, cache_key=None,
+                          no_sign: bool = False) -> np.ndarray:
+    """
+    Apply the COCOS transform associated with ``ids_path`` to ``data``.
+
+    The source COCOS is identified from the signs of the mean toroidal field
+    (``bcentr``) and mean plasma current (``cpasma``). Returns ``data``
+    unchanged when ``ids_path`` has no COCOS mapping in ``cocos.yaml``.
+
+    This is the single COCOS entry point shared by the equilibrium and
+    core_profiles mappers so the identification/transform logic is not
+    duplicated between IDS mappers.
+
+    Args:
+        data: Array to transform.
+        bcentr: Toroidal field (BCENTR); scalar or array (the mean is used).
+        cpasma: Plasma current (CPASMA); scalar or array (the mean is used).
+        ids_path: Full dotted IDS path used to look up the transform type.
+        cocos: Optional COCOSTransform instance to reuse (one is created if None).
+        cache: Optional dict caching the identified source COCOS.
+        cache_key: Key into ``cache`` (e.g. the shot number).
+        no_sign: Forwarded to ``COCOSTransform.transform`` (use the factor magnitude).
+
+    Returns:
+        Transformed data (or the original array when no transform applies).
+    """
+    transform_type = get_cocos_transform_type(ids_path)
+    if transform_type is None:
+        return data
+
+    if cocos is None:
+        cocos = COCOSTransform()
+
+    source_cocos = identify_cocos_from_signals(bcentr, cpasma, cocos, cache, cache_key)
+    return cocos.transform(data, source_cocos, transform_type, no_sign)

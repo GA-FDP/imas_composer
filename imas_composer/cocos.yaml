@@ -52,6 +52,13 @@ equilibrium:
   # 2D Profiles
   time_slice.profiles_2d.psi: PSI
 
+core_profiles:
+  # Absolute poloidal flux profile (OMFIT_PROFS tree).
+  # psi_magnetic_axis / psi_magnetic_boundary are derived from this already
+  # transformed profile, so they must NOT appear here (would double-transform).
+  # psi_norm is normalized and COCOS-invariant, so it is omitted too.
+  profiles_1d.grid.psi: PSI
+
 # Note: Most equilibrium quantities don't need COCOS transforms:
 # - Geometric quantities (R, Z coordinates, triangularity, elongation, etc.) are COCOS-independent
 # - Gap values, strike points are geometric
