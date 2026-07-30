@@ -1790,8 +1790,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         else:
             raise ValueError(f"Cannot find spec or requirements for {measured_key_name}")
 
-        # Get psi_n for the main grid (from dim_of(\TOP.N_E, 0))
-        grid_psi_key = Requirement('dim_of(\\TOP.N_E,0)', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        grid_psi_key = Requirement('\\TOP.PSI_N', self._get_pulse_id(shot), self.omfit_tree).as_key()
         grid_psi_n = raw_data[grid_psi_key]
 
         # Get rho_tor_norm for the main grid
