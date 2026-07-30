@@ -26,6 +26,8 @@ from typing import Any, Dict, Optional
 import numpy as np
 import awkward as ak
 
+import time
+
 # ---------------------------------------------------------------------------
 # pyqtgraph (and its Qt compatibility layer — uses PySide6 on this system)
 # ---------------------------------------------------------------------------
@@ -769,6 +771,8 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         # A CLI --shot N is the one auto-load path: fetch it once the shot list
         # has been queried (so the two D3DRDB calls never overlap).
         self._pending_autofetch = shot > 0
+        self.rdb_fetch_start = None
+        self.data_fetch_start = None
 
         self._build_ui()
 
@@ -1060,6 +1064,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
     def _populate_shots(self):
         """Query D3DRDB for the shots available under the current tag."""
+        self.rdb_fetch_start = time.time()
         worker = self._start_rdb_worker(
             list_shots_for_tag, self._flavor_combo.currentText(),
             status_msg='Querying D3DRDB for shots…',
@@ -1077,7 +1082,10 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._shot_combo.addItems([str(s) for s in shots])   # most-recent first
         self._shot_combo.blockSignals(False)
         self._status_label.setStyleSheet('color: grey; font-style: italic;')
-        self._status_label.setText(f'{len(shots)} shots for tag {self._flavor_combo.currentText()}')
+        time_elapsed = -1.0
+        if self.rdb_fetch_start is not None:
+            time_elapsed = time.time() - self.rdb_fetch_start
+        self._status_label.setText(f'{len(shots)} shots for tag {self._flavor_combo.currentText()} in {time_elapsed:1.2f} s')
 
         # A CLI --shot N auto-loads once, after the list is available.
         if self._pending_autofetch:
@@ -1122,7 +1130,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         if not prof_id:
             prof_id = auto_prof
             self._prof_id_edit.setText(prof_id)
-
+        self.data_fetch_start = time.time()
         self._start_load(shot, efit_tree, eq_id, prof_tree, prof_id)
 
     def _start_load(self, shot, efit_tree, efit_run_id, profiles_tree, profiles_run_id):
@@ -1169,9 +1177,12 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             self._time_slider.setValue(0)
 
         self._status_label.setStyleSheet('color: grey; font-style: italic;')
+        time_elapsed = -1.0
+        if self.data_fetch_start is not None:
+            time_elapsed = time.time() - self.data_fetch_start
         self._status_label.setText(
             f'Loaded shot {self._shot_combo.currentText()}  —  '
-            f'{len(np.asarray(times)) if times is not None else 0} time slices'
+            f'{len(np.asarray(times)) if times is not None else 0} time slices in {time_elapsed:1.2f} s'
         )
         self._replot()
 
