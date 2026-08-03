@@ -42,7 +42,7 @@ fields:
     trees: [OMFIT_PROFS]
   - field: profiles_1d.grid.psi_magnetic_axis
     trees: [OMFIT_PROFS]
-  - field: profiles_1d.grid.psi_magnetic_boundary
+  - field: profiles_1d.grid.psi_boundary
     trees: [OMFIT_PROFS]
   # psi_norm is imas_composer-only (no OMAS reference); OMAS comparison is
   # skipped in test_config_core_profiles.yaml and covered by a dedicated test.
