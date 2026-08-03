@@ -26,7 +26,7 @@ field_tolerances:
     rtol: 1.0e-3
     atol: 2.0e-4
 
-  core_profiles.profiles_1d.grid.psi_magnetic_boundary:
+  core_profiles.profiles_1d.grid.psi_boundary:
   # Derived by interpolating the psi profile at psi_norm=1.0, so accuracy is limited
     rtol: 1.0e-6
     atol: 1.0e-6
@@ -53,7 +53,7 @@ omas_path_map:
   core_profiles.profiles_1d.grid.rho_pol_norm: core_profiles.profiles_1d.:.grid.rho_pol_norm
   core_profiles.profiles_1d.grid.psi: core_profiles.profiles_1d.:.grid.psi
   core_profiles.profiles_1d.grid.psi_magnetic_axis: core_profiles.profiles_1d.:.grid.psi_magnetic_axis
-  core_profiles.profiles_1d.grid.psi_magnetic_boundary: core_profiles.profiles_1d.:.grid.psi_magnetic_boundary
+  core_profiles.profiles_1d.grid.psi_boundary: core_profiles.profiles_1d.:.grid.psi_boundary
   # psi_norm has no OMAS reference (skipped above); mapping kept for documentation
   core_profiles.profiles_1d.grid.psi_norm: core_profiles.profiles_1d.:.grid.psi_norm
 

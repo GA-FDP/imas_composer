@@ -455,7 +455,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         )
 
         # Absolute poloidal flux profile from \TOP.PSI ([time, psi_norm]).
-        # Used for grid.psi and to derive psi_magnetic_axis / psi_magnetic_boundary.
+        # Used for grid.psi and to derive psi_magnetic_axis / psi_boundary.
         self.specs["core_profiles.profiles_1d._omfit_psi"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             derive_requirements=lambda shot, raw: [
@@ -556,8 +556,8 @@ class CoreProfilesOmfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # Grid: psi_magnetic_boundary (psi interpolated at psi_norm=1.0, per time slice)
-        self.specs["core_profiles.profiles_1d.grid.psi_magnetic_boundary"] = IDSEntrySpec(
+        # Grid: psi_boundary (psi interpolated at psi_norm=1.0, per time slice)
+        self.specs["core_profiles.profiles_1d.grid.psi_boundary"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
                 "core_profiles.profiles_1d._omfit_psi",
@@ -565,8 +565,8 @@ class CoreProfilesOmfitMapper(IDSMapper):
                 "core_profiles._cocos_bcentr",
                 "core_profiles._cocos_cpasma",
             ],
-            compose=self._compose_psi_magnetic_boundary,
-            ids_path="core_profiles.profiles_1d.grid.psi_magnetic_boundary",
+            compose=self._compose_psi_boundary,
+            ids_path="core_profiles.profiles_1d.grid.psi_boundary",
             docs_file=self.DOCS_PATH
         )
 
@@ -1427,9 +1427,9 @@ class CoreProfilesOmfitMapper(IDSMapper):
         psi_grid = self._get_cocos_psi(shot, raw_data)
         return psi_grid[:, 0]
 
-    def _compose_psi_magnetic_boundary(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+    def _compose_psi_boundary(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
-        Compose grid.psi_magnetic_boundary: psi at the boundary (psi_norm = 1.0),
+        Compose grid.psi_boundary: psi at the boundary (psi_norm = 1.0),
         interpolated from the absolute psi profile, one value per time slice.
 
         The full (unmasked) psi_norm grid is used so 1.0 is always interpolable — the
