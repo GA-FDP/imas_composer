@@ -2,6 +2,7 @@ name: imas_composer
 
 channels:
   - conda-forge
+  - ga-fdp
 
 dependencies:
   # Core runtime deps
