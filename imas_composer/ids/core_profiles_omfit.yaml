@@ -29,6 +29,10 @@ fields:
   # Grid
   - profiles_1d.grid.rho_tor_norm
   - profiles_1d.grid.rho_pol_norm
+  - profiles_1d.grid.psi
+  - profiles_1d.grid.psi_norm  # imas_composer-only (no OMAS reference)
+  - profiles_1d.grid.psi_magnetic_axis
+  - profiles_1d.grid.psi_magnetic_boundary
 
   # Electrons
   - profiles_1d.electrons.density

@@ -11,6 +11,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 import awkward as ak
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
+from ..cocos import COCOSTransform, apply_cocos_transform
 from .base import IDSMapper
 
 
@@ -34,6 +35,14 @@ class CoreProfilesOmfitMapper(IDSMapper):
         self.omfit_tree = omfit_tree
         self.run_id = profiles_run_id
         self.crop_core_profiles = crop_core_profiles
+
+        # Need EFIT to identify cocos
+        # only BCENTR/CPASMA are read from EFIT to pick the source COCOS.
+        # Hardcode to EFIT01 since these should be consistent across all EFITs
+        self.efit_tree = 'EFIT01'
+        self._geqdsk_node = f'\\TOP.RESULTS.GEQDSK'
+        self.cocos = COCOSTransform()
+        self._cocos_cache: Dict[int, int] = {}  # shot -> source COCOS
 
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
@@ -434,14 +443,44 @@ class CoreProfilesOmfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # psi_norm comes from dim_of(\TOP.N_E, 0)
-        # Used to calculate rho_pol_norm = sqrt(psi_norm)
+        # psi_norm comes from \\TOP.PSI_N
+        # Used to calculate rho_pol_norm = sqrt(psi_norm) and grid.psi_norm
         self.specs["core_profiles.profiles_1d._omfit_psi_norm"] = IDSEntrySpec(
             stage=RequirementStage.DERIVED,
             derive_requirements=lambda shot, raw: [
-                Requirement('dim_of(\\TOP.N_E,0)', self._get_pulse_id(shot), self.omfit_tree)
+                Requirement('\\TOP.PSI_N', self._get_pulse_id(shot), self.omfit_tree)
             ],
             ids_path="core_profiles.profiles_1d._omfit_psi_norm",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Absolute poloidal flux profile from \TOP.PSI ([time, psi_norm]).
+        # Used for grid.psi and to derive psi_magnetic_axis / psi_magnetic_boundary.
+        self.specs["core_profiles.profiles_1d._omfit_psi"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement('\\TOP.PSI', self._get_pulse_id(shot), self.omfit_tree)
+            ],
+            ids_path="core_profiles.profiles_1d._omfit_psi",
+            docs_file=self.DOCS_PATH
+        )
+
+        # EFIT BCENTR / CPASMA — used only to identify the source COCOS for the
+        # absolute poloidal flux (see _get_cocos_psi). Read from the EFIT tree.
+        self.specs["core_profiles._cocos_bcentr"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement(f'{self._geqdsk_node}.BCENTR', shot, self.efit_tree)
+            ],
+            ids_path="core_profiles._cocos_bcentr",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["core_profiles._cocos_cpasma"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            derive_requirements=lambda shot, raw: [
+                Requirement(f'{self._geqdsk_node}.CPASMA', shot, self.efit_tree)
+            ],
+            ids_path="core_profiles._cocos_cpasma",
             docs_file=self.DOCS_PATH
         )
 
@@ -463,6 +502,14 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # ============================================================
         # User-facing fields - COMPUTED stage
         # ============================================================
+                # Grid: rho_tor_norm
+        self.specs["core_profiles.profiles_1d.grid.psi_norm"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["core_profiles.profiles_1d._omfit_psi_norm", "core_profiles.time"],
+            compose=self._compose_psi_norm,
+            ids_path="core_profiles.profiles_1d.grid.psi_norm",
+            docs_file=self.DOCS_PATH
+        )
 
         # Grid: rho_tor_norm
         self.specs["core_profiles.profiles_1d.grid.rho_tor_norm"] = IDSEntrySpec(
@@ -476,9 +523,50 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # Grid: rho_pol_norm
         self.specs["core_profiles.profiles_1d.grid.rho_pol_norm"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["core_profiles.profiles_1d._omfit_psi_norm", "core_profiles.profiles_1d._omfit_rho"],
+            depends_on=["core_profiles.profiles_1d._omfit_psi_norm", "core_profiles.time"],
             compose=self._compose_rho_pol_norm,
             ids_path="core_profiles.profiles_1d.grid.rho_pol_norm",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Grid: psi (absolute poloidal flux, COCOS PSI applied)
+        self.specs["core_profiles.profiles_1d.grid.psi"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._omfit_psi",
+                "core_profiles.profiles_1d.grid.rho_tor_norm",
+                "core_profiles._cocos_bcentr",
+                "core_profiles._cocos_cpasma",
+            ],
+            compose=self._compose_psi,
+            ids_path="core_profiles.profiles_1d.grid.psi",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Grid: psi_magnetic_axis (psi at psi_norm index 0, per time slice)
+        self.specs["core_profiles.profiles_1d.grid.psi_magnetic_axis"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._omfit_psi",
+                "core_profiles._cocos_bcentr",
+                "core_profiles._cocos_cpasma",
+            ],
+            compose=self._compose_psi_magnetic_axis,
+            ids_path="core_profiles.profiles_1d.grid.psi_magnetic_axis",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Grid: psi_magnetic_boundary (psi interpolated at psi_norm=1.0, per time slice)
+        self.specs["core_profiles.profiles_1d.grid.psi_magnetic_boundary"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "core_profiles.profiles_1d._omfit_psi",
+                "core_profiles.profiles_1d._omfit_psi_norm",
+                "core_profiles._cocos_bcentr",
+                "core_profiles._cocos_cpasma",
+            ],
+            compose=self._compose_psi_magnetic_boundary,
+            ids_path="core_profiles.profiles_1d.grid.psi_magnetic_boundary",
             docs_file=self.DOCS_PATH
         )
 
@@ -1040,35 +1128,35 @@ class CoreProfilesOmfitMapper(IDSMapper):
         unified_time = raw_data[time_key] * 1e-3  # Convert ms to s
         return unified_time
 
-    def _rho_mask(self, rho_row: np.ndarray) -> np.ndarray:
+    def _core_mask(self, normalized_coord: np.ndarray) -> np.ndarray:
         """
-        Boolean mask selecting points inside the separatrix (rho <= 1) for one time slice.
+        Boolean mask selecting points inside the separatrix (normalized_coord <= 1) for one time slice.
 
         When crop_core_profiles is False (default), keep all points (retain the scrape-off layer).
         """
         if self.crop_core_profiles:
-            return rho_row <= 1.0
-        return np.ones(rho_row.shape, dtype=bool)
+            return normalized_coord <= 1.0
+        return np.ones(normalized_coord.shape, dtype=bool)
 
-    def _apply_rho_mask(self, shot: int, raw_data: Dict[str, Any],
-                        data_2d: np.ndarray) -> list:
+    def _apply_core_mask(self, shot: int, raw_data: Dict[str, Any],
+                         grid_data: np.ndarray) -> list:
         """
         Apply rho <= 1.0 mask per time slice.
 
         Args:
             shot: Shot number
             raw_data: Raw data dict
-            data_2d: (n_time, n_rho) array to mask
+            grid_data: (n_time, n_rho) array to mask
 
         Returns:
             List of 1D arrays (one per time slice) after masking
         """
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
+        rho_grid = raw_data[rho_key]
         result = []
-        for i_time in range(data_2d.shape[0]):
-            mask = self._rho_mask(rho_2d[i_time, :])
-            result.append(data_2d[i_time, mask])
+        for i_time in range(grid_data.shape[0]):
+            mask = self._core_mask(rho_grid[i_time, :])
+            result.append(grid_data[i_time, mask])
         return result
 
     def _stack_ions(self, ion_slices: dict) -> ak.Array:
@@ -1129,12 +1217,12 @@ class CoreProfilesOmfitMapper(IDSMapper):
             raise ValueError(f"Cannot find spec or requirements for {data_key_name}")
 
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
+        rho_grid = raw_data[rho_key]
 
         result = []
-        for i_time in range(rho_2d.shape[0]):
+        for i_time in range(rho_grid.shape[0]):
             if len(data_raw) > 0:
-                mask = self._rho_mask(rho_2d[i_time, :])
+                mask = self._core_mask(rho_grid[i_time, :])
                 result.append(data_raw[i_time, mask])
             else:
                 result.append([])
@@ -1147,7 +1235,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         Both D and C use T_D (same underlying data, stacked).
         """
         data_key = Requirement('\\TOP.T_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        t_slices = self._apply_rho_mask(shot, raw_data, raw_data[data_key])
+        t_slices = self._apply_core_mask(shot, raw_data, raw_data[data_key])
         return self._stack_ions({ion['label']: t_slices for ion in self.ions})
 
     def _compose_all_ion_density_thermal(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
@@ -1158,8 +1246,8 @@ class CoreProfilesOmfitMapper(IDSMapper):
         """
         d_key = Requirement('\\TOP.N_D', self._get_pulse_id(shot), self.omfit_tree).as_key()
         c_key = Requirement('\\TOP.N_C', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        d_slices = self._apply_rho_mask(shot, raw_data, raw_data[d_key])
-        c_slices = self._apply_rho_mask(shot, raw_data, raw_data[c_key])
+        d_slices = self._apply_core_mask(shot, raw_data, raw_data[d_key])
+        c_slices = self._apply_core_mask(shot, raw_data, raw_data[c_key])
         return self._stack_ions({'D': d_slices, 'C': c_slices})
 
     def _compose_all_ion_velocity_toroidal(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
@@ -1169,7 +1257,7 @@ class CoreProfilesOmfitMapper(IDSMapper):
         Both D and C use V_TOR_C (d3d.py copies ion[1] velocity to ion[0]).
         """
         data_key = Requirement('\\TOP.V_TOR_C', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        v_slices = self._apply_rho_mask(shot, raw_data, raw_data[data_key])
+        v_slices = self._apply_core_mask(shot, raw_data, raw_data[data_key])
         return self._stack_ions({ion['label']: v_slices for ion in self.ions})
 
     def _compose_all_ion_velocity_error(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
@@ -1243,50 +1331,119 @@ class CoreProfilesOmfitMapper(IDSMapper):
         # For OMFIT_PROFS, rho comes directly from \TOP.rho
         # It's a 2D array [time, rho], but all time slices have the same rho grid
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
+        rho_grid = raw_data[rho_key]
 
         # Filter to <= 1.0 and broadcast to match the 2D shape [time, rho]
-        n_time = rho_2d.shape[0]
+        n_time = rho_grid.shape[0]
         result = []
         for i_time in range(n_time):
-            mask = self._rho_mask(rho_2d[i_time, :])
-            result.append(rho_2d[i_time, mask])
+            mask = self._core_mask(rho_grid[i_time, :])
+            result.append(rho_grid[i_time, mask])
 
         return result
+
+    def _compose_psi_norm(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Compose grid.psi_norm for OMFIT_PROFS (normalized poloidal flux).
+
+        psi_norm comes directly from \\TOP.PSI_N
+
+        Returns:
+            2D array of shape (n_time, n_rho) with normalized poloidal flux, masked
+            per time slice.
+        """
+        psi_key = Requirement('\\TOP.PSI_N', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        psi_n = raw_data[psi_key]
+
+        # psi is 1D and needs to be broadcast
+        profile_time = self.specs["core_profiles.time"].compose(shot, raw_data)
+
+        n_time = profile_time.shape[0]
+        psi_norm_full = np.broadcast_to(psi_n, (n_time, len(psi_n)))
+
+        result = []
+        for i_time in range(n_time):
+            # Since the mask cuts of at 1.0 we can just feed psi_n
+            mask = self._core_mask(psi_norm_full[i_time, :])
+            result.append(psi_norm_full[i_time, mask])
+
+        return np.array(result)
 
     def _compose_rho_pol_norm(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
         Compose grid.rho_pol_norm for OMFIT_PROFS.
-
+        psi_n from routine above
         OMAS d3d.py lines 1590-1592, 1602:
-            psi_n = dim_info.dim_of(0)  # Get psi_norm from dimension 0 of n_e
             data['grid.rho_pol_norm'] = np.zeros((data['time'].shape + psi_n.shape))
             data['grid.rho_pol_norm'][:] = np.sqrt(psi_n)
             # Then apply mask: data['grid.rho_pol_norm'][i_time][mask[i_time]]
-
         Returns:
             2D array of shape (n_time, n_rho) with normalized poloidal flux coordinates
         """
-        # Get psi_norm from dim_of(\TOP.N_E, 0)
-        psi_key = Requirement('dim_of(\\TOP.N_E,0)', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        psi_n = raw_data[psi_key]
+        # 2D because already upgraded. Also masked!
+        psi_n_grid = self._compose_psi_norm(shot, raw_data)
+        return np.array(np.sqrt(psi_n_grid))
 
-        # Get rho for masking
-        rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
+    def _get_cocos_psi(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Absolute poloidal flux [time, psi_norm] from OMFIT \\TOP.PSI, COCOS PSI applied.
 
-        # Calculate rho_pol_norm = sqrt(psi_norm)
-        # Broadcast psi_n to match the 2D shape [time, rho]
-        n_time = rho_2d.shape[0]
-        rho_pol_norm_full = np.broadcast_to(np.sqrt(psi_n), (n_time, len(psi_n)))
+        The source COCOS is identified from EFIT BCENTR/CPASMA (same convention as
+        the equilibrium IDS). grid.psi and the derived psi_magnetic_axis/boundary all
+        go through this so COCOS is applied exactly once.
+        """
+        psi_key = Requirement('\\TOP.PSI', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        psi = raw_data[psi_key]
 
-        # Apply rho masking per time slice (same as other OMFIT_PROFS fields)
-        result = []
-        for i_time in range(n_time):
-            mask = self._rho_mask(rho_2d[i_time, :])
-            result.append(rho_pol_norm_full[i_time, mask])
+        bcentr_key = Requirement(f'{self._geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()
+        cpasma_key = Requirement(f'{self._geqdsk_node}.CPASMA', shot, self.efit_tree).as_key()
+        return apply_cocos_transform(
+            psi, raw_data[bcentr_key], raw_data[cpasma_key],
+            "core_profiles.profiles_1d.grid.psi",
+            cocos=self.cocos, cache=self._cocos_cache, cache_key=shot,
+        )
 
-        return np.array(result)
+    def _compose_psi(self, shot: int, raw_data: Dict[str, Any]) -> list:
+            """
+            Compose grid.psi (absolute poloidal flux) for OMFIT_PROFS, masked per time slice.
+            """
+            # time dependent => 2D
+            psi_grid = self._get_cocos_psi(shot, raw_data)
+    
+            rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
+            rho_grid = raw_data[rho_key]
+    
+            result = []
+            for i_time in range(psi_grid.shape[0]):
+                mask = self._core_mask(rho_grid[i_time, :])
+                result.append(psi_grid[i_time, mask])
+            return result
+
+    def _compose_psi_magnetic_axis(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Compose grid.psi_magnetic_axis: psi at the magnetic axis (psi_norm index 0),
+        one value per time slice.
+        """
+        psi_grid = self._get_cocos_psi(shot, raw_data)
+        return psi_grid[:, 0]
+
+    def _compose_psi_magnetic_boundary(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Compose grid.psi_magnetic_boundary: psi at the boundary (psi_norm = 1.0),
+        interpolated from the absolute psi profile, one value per time slice.
+
+        The full (unmasked) psi_norm grid is used so 1.0 is always interpolable — the
+        OMFIT grid can extend past 1.0 into the scrape-off layer.
+        """
+        psi_grid = self._get_cocos_psi(shot, raw_data)
+
+        psi_norm_key = Requirement('\\TOP.PSI_N', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        psi_n = raw_data[psi_norm_key]
+
+        return np.array([
+            InterpolatedUnivariateSpline(psi_n, psi_grid[i_time])(1.0)
+            for i_time in range(psi_grid.shape[0])
+        ])
 
     def _compose_density(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose electrons.density_thermal for OMFIT_PROFS (from \\TOP.N_E)."""
@@ -1429,11 +1586,11 @@ class CoreProfilesOmfitMapper(IDSMapper):
         pressure_sum = raw_data[d_key] + raw_data[c_key]
 
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
+        rho_grid = raw_data[rho_key]
 
         result = []
         for i_time in range(pressure_sum.shape[0]):
-            mask = self._rho_mask(rho_2d[i_time, :])
+            mask = self._core_mask(rho_grid[i_time, :])
             result.append(pressure_sum[i_time, mask])
 
         return np.array(result)
@@ -1633,19 +1790,18 @@ class CoreProfilesOmfitMapper(IDSMapper):
         else:
             raise ValueError(f"Cannot find spec or requirements for {measured_key_name}")
 
-        # Get psi_n for the main grid (from dim_of(\TOP.N_E, 0))
-        grid_psi_key = Requirement('dim_of(\\TOP.N_E,0)', self._get_pulse_id(shot), self.omfit_tree).as_key()
+        grid_psi_key = Requirement('\\TOP.PSI_N', self._get_pulse_id(shot), self.omfit_tree).as_key()
         grid_psi_n = raw_data[grid_psi_key]
 
         # Get rho_tor_norm for the main grid
         rho_key = Requirement('\\TOP.rho', self._get_pulse_id(shot), self.omfit_tree).as_key()
-        rho_2d = raw_data[rho_key]
+        rho_grid = raw_data[rho_key]
 
         # Create spline for each time slice and interpolate
         result = []
         for i_time in range(measured_raw.shape[0]):
             # Create spline from grid psi_n to grid rho_tor_norm
-            rho_spl = InterpolatedUnivariateSpline(grid_psi_n, rho_2d[i_time, :])
+            rho_spl = InterpolatedUnivariateSpline(grid_psi_n, rho_grid[i_time, :])
 
             # Apply isfinite mask to fit psi_norm
             mask = np.isfinite(measured_raw[i_time])

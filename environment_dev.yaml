@@ -1,7 +1,6 @@
 name: imas_composer
 
 channels:
-  - ga-fdp
   - conda-forge
 
 dependencies:
@@ -60,7 +59,7 @@ dependencies:
   - pyodbc
   - pyqt
 
-  # Omas requirements (not omas itself)
+  # OMAS dependencies only
   - boto3
   - botocore
   - cython
