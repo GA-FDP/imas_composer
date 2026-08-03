@@ -1,7 +1,7 @@
 """
 Tests for fetch_requirements, which fetches through toksearch_d3d.
 
-The location-parsing and error-contract tests monkeypatch fetch_from_req and run
+The location-parsing and dedup tests monkeypatch fetch_many_from_req and run
 anywhere.  The remaining tests fetch real data and are skipped when toksearch_d3d
 is not installed.
 """
@@ -27,15 +27,15 @@ requires_toksearch = pytest.mark.skipif(
 
 @pytest.fixture
 def recorded_fetch(monkeypatch):
-    """Replace fetch_from_req with a recorder, returning the list of call args."""
+    """Replace fetch_many_from_req with a recorder, returning the list of call args."""
     calls = []
 
-    def _record(req, server, is_remote, location):
-        calls.append((req, server, is_remote, location))
-        return np.zeros(3)
+    def _record(reqs, server, is_remote, location):
+        calls.append((reqs, server, is_remote, location))
+        return {req.as_key(): np.zeros(3) for req in reqs}
 
     monkeypatch.setattr("imas_composer.fetchers.TOKSEARCH_AVAILABLE", True)
-    monkeypatch.setattr("imas_composer.fetchers.fetch_from_req", _record)
+    monkeypatch.setattr("imas_composer.fetchers.fetch_many_from_req", _record)
     return calls
 
 
@@ -64,16 +64,17 @@ def test_duplicate_requirements_fetched_once(recorded_fetch):
     result = fetch_requirements(reqs)
 
     assert len(recorded_fetch) == 1
+    assert len(recorded_fetch[0][0]) == 1
     assert len(result) == 1
 
 
 def test_failure_is_stored_in_band(monkeypatch):
-    """A raising fetch yields the Exception as the value rather than propagating."""
-    def _raise(req, server, is_remote, location):
-        raise ValueError("%TREE-E-NODATA")
+    """An in-band Exception from fetch_many_from_req passes straight through."""
+    def _fake_fetch_many(reqs, server, is_remote, location):
+        return {req.as_key(): ValueError("%TREE-E-NODATA") for req in reqs}
 
     monkeypatch.setattr("imas_composer.fetchers.TOKSEARCH_AVAILABLE", True)
-    monkeypatch.setattr("imas_composer.fetchers.fetch_from_req", _raise)
+    monkeypatch.setattr("imas_composer.fetchers.fetch_many_from_req", _fake_fetch_many)
 
     req = Requirement("NOSUCHPOINT", REFERENCE_SHOT, "__ptdata__")
     result = fetch_requirements([req])

@@ -17,11 +17,11 @@ from .core import Requirement
 from .composer import ImasComposer
 
 try:
-    from toksearch_d3d.interfaces.req_interface import fetch_from_req
+    from toksearch_d3d.interfaces.req_interface import fetch_many_from_req
     TOKSEARCH_AVAILABLE = True
 except ImportError:
     TOKSEARCH_AVAILABLE = False
-    fetch_from_req = None
+    fetch_many_from_req = None
 
 
 def fetch_requirements(
@@ -37,10 +37,11 @@ def fetch_requirements(
     result is stored as a dict with keys 'data', 'times' (ms), and 'rarray',
     matching the format expected by mapper compose functions.
 
-    fetch_from_req has no batch form, so requirements are fetched one at a time.
-    toksearch caches the open tree/connection per (treename, shot) process-wide,
-    so only the first requirement per tree pays the open; the cost relative to
-    the OMAS backend is N TDI round trips instead of one batched query.
+    When the default (unset) location is reachable directly against atlas,
+    fetch_many_from_req batches all requirements sharing a (treename, shot)
+    into a single MDSplus getMany() round trip; otherwise (or with an
+    explicit location) requirements are fetched one at a time via the
+    origin/Pelican/thin-client path.
 
     Args:
         requirements: List of Requirement objects to fetch.
@@ -71,18 +72,16 @@ def fetch_requirements(
         is_remote = parsed.scheme == 'remote'
         server = parsed.netloc if is_remote else None
 
-    raw_data = {}
-
+    unique_requirements = []
+    seen_keys = set()
     for req in requirements:
         key = req.as_key()
-        if key in raw_data:
+        if key in seen_keys:
             continue
-        try:
-            raw_data[key] = fetch_from_req(req, server, is_remote, location)
-        except Exception as e:
-            raw_data[key] = e
+        seen_keys.add(key)
+        unique_requirements.append(req)
 
-    return raw_data
+    return fetch_many_from_req(unique_requirements, server, is_remote, location)
 
 
 def simple_load(
