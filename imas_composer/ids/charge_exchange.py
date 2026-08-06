@@ -15,11 +15,80 @@ fetched per subsystem; channels with LENGTH > 0 are active and fetched individua
 """
 
 from typing import Dict, List, Optional, Tuple
+import re
 import numpy as np
 import awkward as ak
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
+
+
+# Element symbol -> (nuclear charge, mass number) for every species CERFIT can fit.
+# D is kept separate from H so that the mass number stays 2.
+CER_ELEMENTS = {
+    'D': (1, 2.0),
+    'He': (2, 4.0),
+    'Li': (3, 7.0),
+    'B': (5, 11.0),
+    'C': (6, 12.0),
+    'N': (7, 14.0),
+    'O': (8, 16.0),
+    'F': (9, 19.0),
+    'Ne': (10, 20.0),
+    'Al': (13, 27.0),
+    'Si': (14, 28.0),
+    'Ar': (18, 40.0),
+    'Ca': (20, 40.0),
+    'Kr': (36, 84.0),
+}
+
+ROMAN_DIGITS = {'I': 1, 'V': 5, 'X': 10}
+
+# '<element><charge state in Roman numerals><upper-lower transition>', e.g. 'C VI 8-7'.
+# Spaces are optional and the transition levels may carry orbital letters ('C IV 6h-7i').
+LINEID_PATTERN = re.compile('([A-Z][a-z]*) *([A-Z]*) *([0-9]*[a-z]*-[0-9]*[a-z]*)')
+
+
+def _roman_to_int(roman: str) -> int:
+    total = 0
+    highest = 0
+    for char in reversed(roman):
+        value = ROMAN_DIGITS[char]
+        total += value if value >= highest else -value
+        highest = max(highest, value)
+    return total
+
+
+def _parse_lineid(lineid, sub: str, ch: int) -> Dict:
+    """Parse a CER LINEID string into the IMAS ion identity fields.
+
+    Charge exchange measures the ion in the charge state it held *before* capturing the
+    beam electron, so the Roman numeral of the observed line is the ion charge: 'C VI 8-7'
+    is emitted by C5+ but reports the C6+ population, giving z_ion = 6. z_n stays the
+    nuclear charge of the element, so it is 6 for every carbon line including 'C IV'
+    (z_ion = 4). Do not collapse the two.
+
+    Raises:
+        ValueError: LINEID is missing, or the element/charge state is not recognised.
+    """
+    if lineid is None:
+        raise ValueError(f'{sub} channel {ch:02d}: LINEID is missing')
+    if isinstance(lineid, np.ndarray):
+        lineid = lineid.item()
+    if isinstance(lineid, bytes):
+        lineid = lineid.decode()
+    match = LINEID_PATTERN.search(lineid)
+    element = match.group(1) if match else ''
+    roman = match.group(2) if match else ''
+    if element not in CER_ELEMENTS or not roman or not set(roman) <= set(ROMAN_DIGITS):
+        raise ValueError(f'{sub} channel {ch:02d}: cannot parse LINEID {lineid!r}')
+    z_n, a = CER_ELEMENTS[element]
+    z_ion = _roman_to_int(roman)
+    symbol = 'H' if element == 'D' else element
+    return {'label': f'{round(a)}{symbol}{z_ion}',
+            'a': a,
+            'z_ion': float(z_ion),
+            'z_n': float(z_n)}
 
 
 class ChargeExchangeMapper(IDSMapper):
@@ -61,6 +130,13 @@ class ChargeExchangeMapper(IDSMapper):
         new_node = self._handle_ROTC(sub, node)
         return f'dim_of({self._cer_path(sub, ch, new_node)}, 0)/1000'
 
+    def _lineid_path(self, sub: str, ch: int) -> str:
+        """MDSplus path for a channel's spectral line identification, e.g. 'C VI 8-7'.
+
+        Lives in the CALIBRATION subtree, which is analysis-type independent.
+        """
+        return f'\\IONS::TOP.CER.CALIBRATION.{sub}.CHANNEL{ch:02d}:LINEID'
+
     def _zeff_path(self) -> str:
         """MDSplus path for bulk ZEFF data — flattened array covering all channels."""
         return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.ZEFF'
@@ -68,14 +144,6 @@ class ChargeExchangeMapper(IDSMapper):
     def _zeff_time_path(self) -> str:
         """MDSplus dim_of for ZEFF time axis (seconds)."""
         return f'dim_of({self._zeff_path()}, 0)/1000'
-
-    def _zimp_path(self) -> str:
-        """MDSplus path for charge of the impurity measured — flattened array covering all channels."""
-        return f'\\IONS::TOP.IMPDENS.{self.analysis_type}.ZIMP'
-
-    def _zimp_time_path(self) -> str:
-        """MDSplus dim_of for ZIMP time axis (seconds)."""
-        return f'dim_of({self._zimp_path()}, 0)/1000'
 
     def _concen_path(self) -> str:
         """MDSplus path for bulk CONCEN (ion fraction) data — flattened array covering all channels."""
@@ -238,7 +306,15 @@ class ChargeExchangeMapper(IDSMapper):
             ids_path="charge_exchange._velocity_time",
             docs_file=self.DOCS_PATH
         )
-        # Bulk IMPDENS data: ZEFF, ZIMP (charge of measured impurity) and CONCEN (ion fraction) are flattened arrays
+        self.specs["charge_exchange._lineid"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=_active_deps,
+            derive_requirements=self._make_derive_fn(self._lineid_path),
+            ids_path="charge_exchange._lineid",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Bulk IMPDENS data: ZEFF and CONCEN (ion fraction) are flattened arrays
         # covering all channels. INDECIES maps array columns to CER channel numbers.
         # ARRAY_ORDER from CALIBRATION describes the subsystem/channel ordering.
 
@@ -253,20 +329,6 @@ class ChargeExchangeMapper(IDSMapper):
             stage=RequirementStage.DIRECT,
             static_requirements=[Requirement(self._zeff_time_path(), 0, 'IONS')],
             ids_path="charge_exchange._zeff_time",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["charge_exchange._zimp"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(self._zimp_path(), 0, 'IONS')],
-            ids_path="charge_exchange._zimp",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["charge_exchange._zimp_time"] = IDSEntrySpec(
-            stage=RequirementStage.DIRECT,
-            static_requirements=[Requirement(self._zimp_time_path(), 0, 'IONS')],
-            ids_path="charge_exchange._zimp_time",
             docs_file=self.DOCS_PATH
         )
 
@@ -426,6 +488,41 @@ class ChargeExchangeMapper(IDSMapper):
             depends_on=_active_deps + ["charge_exchange._zeff_time"] + _impdens_deps,
             compose=self._compose_zeff_time,
             ids_path="charge_exchange.channel.zeff.time",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Ion identity, parsed per channel from the CALIBRATION LINEID string.
+        _lineid_deps = _active_deps + ["charge_exchange._lineid"]
+
+        self.specs["charge_exchange.channel.ion.label"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=_lineid_deps,
+            compose=self._compose_ion_label,
+            ids_path="charge_exchange.channel.ion.label",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange.channel.ion.a"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=_lineid_deps,
+            compose=self._compose_ion_a,
+            ids_path="charge_exchange.channel.ion.a",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange.channel.ion.z_ion"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=_lineid_deps,
+            compose=self._compose_ion_z_ion,
+            ids_path="charge_exchange.channel.ion.z_ion",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["charge_exchange.channel.ion.z_n"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=_lineid_deps,
+            compose=self._compose_ion_z_n,
+            ids_path="charge_exchange.channel.ion.z_n",
             docs_file=self.DOCS_PATH
         )
 
@@ -612,6 +709,11 @@ class ChargeExchangeMapper(IDSMapper):
         array_order = self._lookup(raw_data, shot, '\\IONS::TOP.CER.CALIBRATION.ARRAY_ORDER')
         return [a.decode().strip() for a in array_order]
 
+    def _get_ion_species(self, shot: int, raw_data: dict) -> List[Dict]:
+        """Return the ion identity parsed from LINEID for each active channel."""
+        return [_parse_lineid(self._lookup(raw_data, shot, self._lineid_path(sub, ch)), sub, ch)
+                for sub, ch in self._get_active_channels(shot, raw_data)]
+
     def _lookup(self, raw_data: dict, shot: int, mds_path: str) -> Optional[np.ndarray]:
         """Look up a value in raw_data by MDS path.
 
@@ -642,6 +744,22 @@ class ChargeExchangeMapper(IDSMapper):
         """
         active = self._get_active_channels(shot, raw_data)
         return np.array([f'impCER_{sub}{ch:02d}' for sub, ch in active])
+
+    def _compose_ion_label(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose ion labels per channel, e.g. '12C6' for a channel fitting 'C VI 8-7'."""
+        return np.array([s['label'] for s in self._get_ion_species(shot, raw_data)])[:, None]
+
+    def _compose_ion_a(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose ion mass per channel (amu)."""
+        return np.array([s['a'] for s in self._get_ion_species(shot, raw_data)])[:, None]
+
+    def _compose_ion_z_ion(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose measured ion charge per channel (the LINEID Roman numeral)."""
+        return np.array([s['z_ion'] for s in self._get_ion_species(shot, raw_data)])[:, None]
+
+    def _compose_ion_z_n(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose nuclear charge per channel — the element, not the charge state."""
+        return np.array([s['z_n'] for s in self._get_ion_species(shot, raw_data)])[:, None]
 
     def _compose_position_time(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose position time arrays (TIME / 1000, in seconds).
@@ -705,27 +823,50 @@ class ChargeExchangeMapper(IDSMapper):
             result.append(np.atleast_1d(val) if val is not None else np.array([]))
         return ak.Array(result)[:, None, ...]
 
-    def _compose_t_i_error(self, shot: int, raw_data: dict) -> ak.Array:
-        """Compose ion temperature errors per channel (in eV), shape (2, n_time) per channel.
+    def _t_i_error_components(self, shot: int, raw_data: dict) -> List[Tuple[np.ndarray, np.ndarray]]:
+        """Return the unmasked (statistical, systematic) TEMP error arrays per active channel.
 
-        Element 0: statistical uncertainty (TEMP_ERR_PS)
-        Element 1: systematic uncertainty (TEMP_ERR)
+        Copies so that masking by the callers cannot write back into the fetched raw data.
         """
         active = self._get_active_channels(shot, raw_data)
         result = []
         for sub, ch in active:
             stat = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP_ERR_PS'))
             sys = self._lookup(raw_data, shot, self._cer_path(sub, ch, 'TEMP_ERR'))
-            stat_arr = np.atleast_1d(stat) if stat is not None else np.array([])
+            stat_arr = np.atleast_1d(stat).copy() if stat is not None else np.array([])
+            sys_arr = np.atleast_1d(sys).copy() if sys is not None else np.array([])
+            result.append((stat_arr, sys_arr))
+        return result
+
+    def _compose_t_i_error(self, shot: int, raw_data: dict) -> ak.Array:
+        """Compose ion temperature errors per channel (in eV), shape (2, n_time) per channel.
+
+        Element 0: statistical uncertainty (TEMP_ERR_PS)
+        Element 1: systematic uncertainty (TEMP_ERR)
+
+        A non-positive uncertainty is unphysical and would divide by zero downstream, so
+        each component is masked to inf on its own to carry no weight.
+        """
+        result = []
+        for stat_arr, sys_arr in self._t_i_error_components(shot, raw_data):
             stat_arr[stat_arr <= 0] = np.inf
-            sys_arr = np.atleast_1d(sys) if sys is not None else np.array([])
             sys_arr[sys_arr <= 0] = np.inf
             result.append(np.stack([stat_arr, sys_arr]))
         return ak.Array(result)[:, None,...]
 
     def _compose_t_i_data_error_upper(self, shot: int, raw_data: dict) -> ak.Array:
-        """Compose total ion temperature uncertainty per channel (sum of statistical and systematic, in eV)."""
-        return ak.sum(self._compose_t_i_error(shot, raw_data), axis=-2)
+        """Compose total ion temperature uncertainty per channel (sum of statistical and systematic, in eV).
+
+        Masks the sum rather than reusing the per-component masking of t_i.error: a
+        vanishing statistical uncertainty is tolerable as long as the systematic one is
+        finite, and only a non-positive total leaves the measurement unusable.
+        """
+        result = []
+        for stat_arr, sys_arr in self._t_i_error_components(shot, raw_data):
+            total = stat_arr + sys_arr
+            total[total <= 0] = np.inf
+            result.append(total)
+        return ak.Array(result)[:, None,...]
 
     def _compose_t_i_time(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose ion temperature time arrays per channel (in seconds).
@@ -925,8 +1066,8 @@ class ChargeExchangeMapper(IDSMapper):
     def _compose_zeff_time(self, shot: int, raw_data: dict) -> ak.Array:
         """Compose effective charge time arrays per channel (in seconds).
 
-        Data source: dim_of(ZIMP) time axis, indexed via INDECIES and ARRAY_ORDER.
-        Matches OMAS: ch['zeff.time'] = dim_of(ZIMP, 0)/1000
+        Data source: dim_of(ZEFF) time axis, indexed via INDECIES and ARRAY_ORDER.
+        Matches OMAS: ch['zeff.time'] = dim_of(ZEFF, 0)/1000
         """
         active = self._get_active_channels(shot, raw_data)
         zeff_time = self._lookup(raw_data, shot, self._zeff_time_path())
