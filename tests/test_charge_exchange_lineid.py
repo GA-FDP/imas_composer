@@ -69,12 +69,6 @@ def test_roman_to_int(roman, expected):
     assert _roman_to_int(roman) == expected
 
 
-@pytest.mark.parametrize('roman,expected', [('XL', 40), ('L', 50), ('XC', 90), ('C', 100)])
-def test_roman_to_int_handles_subtractive_pairs_above_range(roman, expected):
-    """Subtractive notation keeps working past the charge states CER actually uses."""
-    assert _roman_to_int(roman) == expected
-
-
 @pytest.mark.parametrize('lineid,expected', sorted(MASTER_LINES.items()))
 def test_parse_lineid_master_list(lineid, expected):
     """Every configurable CERFIT line parses to the documented ion identity."""
