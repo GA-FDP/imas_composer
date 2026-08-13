@@ -54,6 +54,10 @@ class EquilibriumMapper(IDSMapper):
     DOCS_PATH = "equilibrium.yaml"
     CONFIG_PATH = "equilibrium.yaml"
 
+    # Constraints are always sourced from COCOS 7, regardless of the
+    # Bt/Ip-identified COCOS used for the rest of the equilibrium IDS.
+    CONSTRAINTS_SOURCE_COCOS = 7
+
     def __init__(self, efit_tree: str = 'EFIT01', efit_run_id: Optional[str] = None, **kwargs):
         """
         Initialize Equilibrium mapper.
@@ -3270,6 +3274,10 @@ class EquilibriumMapper(IDSMapper):
         """
         Apply COCOS transformation to data if needed.
 
+        Constraints (equilibrium.time_slice.constraints.*) always transform from
+        COCOS 7, since the constraint measurements are not identified from the
+        Bt/Ip signs like the rest of the equilibrium IDS.
+
         Args:
             data: Data to transform
             shot: Shot number
@@ -3282,6 +3290,9 @@ class EquilibriumMapper(IDSMapper):
         transform_type = get_cocos_transform_type(ids_path)
         if transform_type is None:
             return data
+
+        if ids_path.startswith("equilibrium.time_slice.constraints."):
+            return self.cocos.transform(data, self.CONSTRAINTS_SOURCE_COCOS, transform_type, no_sign)
 
         bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self.resolve_shot(shot), self.efit_tree).as_key()
         cpasma_key = Requirement(f'{self.geqdsk_node}.CPASMA', self.resolve_shot(shot), self.efit_tree).as_key()
