@@ -3291,7 +3291,7 @@ class EquilibriumMapper(IDSMapper):
         if transform_type is None:
             return data
 
-        if ids_path.startswith("equilibrium.time_slice.constraints."):
+        if ids_path.startswith("equilibrium.time_slice.constraints.") and "position" not in ids_path:
             return self.cocos.transform(data, self.CONSTRAINTS_SOURCE_COCOS, transform_type, no_sign)
 
         bcentr_key = Requirement(f'{self.geqdsk_node}.BCENTR', self.resolve_shot(shot), self.efit_tree).as_key()
