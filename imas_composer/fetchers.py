@@ -37,17 +37,17 @@ def fetch_requirements(
     result is stored as a dict with keys 'data', 'times' (ms), and 'rarray',
     matching the format expected by mapper compose functions.
 
-    When the default (unset) location is reachable directly against atlas,
-    fetch_many_from_req batches all requirements sharing a (treename, shot)
-    into a single MDSplus getMany() round trip; otherwise (or with an
-    explicit location) requirements are fetched one at a time via the
-    origin/Pelican/thin-client path.
+    With the default (unset) location, fetch_many_from_req batches all
+    requirements sharing a (treename, shot) into a single getMany() round
+    trip, tried first against the FDP thin client and then atlas; otherwise
+    (with an explicit location) requirements are fetched one at a time
+    against that server.
 
     Args:
         requirements: List of Requirement objects to fetch.
-        location: None for local trees at the default MDSplus tree path,
-            'remote://<server>' for a thin-client connection, or a treepath for
-            local/Pelican tree access.
+        location: None for the default FDP-then-atlas thin-client fallback
+            chain, or 'remote://<server>' for an explicit single-server
+            override.
 
     Returns:
         Dict mapping each requirement's as_key() tuple to its fetched value,
@@ -55,6 +55,7 @@ def fetch_requirements(
 
     Raises:
         RuntimeError: If toksearch_d3d is not installed.
+        ValueError: If location is a string other than 'remote://<server>'.
     """
     if not requirements:
         return {}
@@ -69,8 +70,13 @@ def fetch_requirements(
     server = None
     if isinstance(location, str):
         parsed = urlparse(location)
-        is_remote = parsed.scheme == 'remote'
-        server = parsed.netloc if is_remote else None
+        if parsed.scheme != 'remote':
+            raise ValueError(
+                f"Unsupported location {location!r}; only None or "
+                f"'remote://<server>' is supported"
+            )
+        is_remote = True
+        server = parsed.netloc
 
     unique_requirements = []
     seen_keys = set()
@@ -81,7 +87,7 @@ def fetch_requirements(
         seen_keys.add(key)
         unique_requirements.append(req)
 
-    return fetch_many_from_req(unique_requirements, server, is_remote, location)
+    return fetch_many_from_req(unique_requirements, server, is_remote)
 
 
 def simple_load(
@@ -116,8 +122,9 @@ def simple_load(
         crop_core_profiles: Whether to crop core_profiles to inside the separatrix (rho <= 1)
             (default: False, keeps scrape-off layer data)
         max_iterations: Maximum resolve-fetch iterations (default: 10)
-        location: None for local trees at the default MDSplus tree path,
-            'remote://<server>' for a thin-client connection (default: None)
+        location: None for the default FDP-then-atlas thin-client fallback
+            chain, or 'remote://<server>' for an explicit single-server
+            override (default: None)
 
     Returns:
         Dict mapping each ids_path -> composed IDS data
