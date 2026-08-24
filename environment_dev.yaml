@@ -23,7 +23,7 @@ dependencies:
   # toksearch_submodule, not conda, since we need an unreleased version)
   - gcc
   - openblas
-  - mdsplus-xrdcl >=1,<2
+  - mdsip-fdp
   - pymssql
   - ray-core
   - pyspark >=4
