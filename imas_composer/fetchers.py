@@ -11,7 +11,6 @@ Public API:
 """
 
 from typing import Dict, List, Tuple, Any, Optional
-from urllib.parse import urlparse
 
 from .core import Requirement
 from .composer import ImasComposer
@@ -26,28 +25,18 @@ except ImportError:
 
 def fetch_requirements(
     requirements: List[Requirement],
-    location: Optional[str] = None,
 ) -> Dict[Tuple[str, int, str], Any]:
     """
     Fetch a list of requirements via toksearch_d3d.
 
-    Requirements with treename == "__ptdata__" go through PtDataSignal, which
-    reads the PTDATA library directly rather than routing through an MDSplus
-    server.  Everything else is evaluated as TDI against an MDSplus tree.  The
-    result is stored as a dict with keys 'data', 'times' (ms), and 'rarray',
-    matching the format expected by mapper compose functions.
-
-    With the default (unset) location, fetch_many_from_req batches all
-    requirements sharing a (treename, shot) into a single getMany() round
-    trip, tried first against the FDP thin client and then atlas; otherwise
-    (with an explicit location) requirements are fetched one at a time
-    against that server.
+    Requirements with treename == "__ptdata__" are batched into a single
+    tree-less getMany() of ptdata2/dim_of/pthead2 TDI, returning a dict with
+    keys 'data', 'times' (ms), and 'rarray'.  Everything else is batched per
+    (treename, shot) and evaluated as TDI against an MDSplus tree.  Every group
+    is tried first against the FDP thin client and then atlas.
 
     Args:
         requirements: List of Requirement objects to fetch.
-        location: None for the default FDP-then-atlas thin-client fallback
-            chain, or 'remote://<server>' for an explicit single-server
-            override.
 
     Returns:
         Dict mapping each requirement's as_key() tuple to its fetched value,
@@ -55,7 +44,6 @@ def fetch_requirements(
 
     Raises:
         RuntimeError: If toksearch_d3d is not installed.
-        ValueError: If location is a string other than 'remote://<server>'.
     """
     if not requirements:
         return {}
@@ -66,18 +54,6 @@ def fetch_requirements(
             "installed. Install it with: conda install -c ga-fdp toksearch_d3d"
         )
 
-    is_remote = False
-    server = None
-    if isinstance(location, str):
-        parsed = urlparse(location)
-        if parsed.scheme != 'remote':
-            raise ValueError(
-                f"Unsupported location {location!r}; only None or "
-                f"'remote://<server>' is supported"
-            )
-        is_remote = True
-        server = parsed.netloc
-
     unique_requirements = []
     seen_keys = set()
     for req in requirements:
@@ -87,7 +63,7 @@ def fetch_requirements(
         seen_keys.add(key)
         unique_requirements.append(req)
 
-    return fetch_many_from_req(unique_requirements, server, is_remote)
+    return fetch_many_from_req(unique_requirements)
 
 
 def simple_load(
@@ -102,7 +78,6 @@ def simple_load(
     include_rip: bool = False,
     crop_core_profiles: bool = False,
     max_iterations: int = 10,
-    location: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Simple utility function to resolve and compose IDS data in one call.
@@ -122,9 +97,6 @@ def simple_load(
         crop_core_profiles: Whether to crop core_profiles to inside the separatrix (rho <= 1)
             (default: False, keeps scrape-off layer data)
         max_iterations: Maximum resolve-fetch iterations (default: 10)
-        location: None for the default FDP-then-atlas thin-client fallback
-            chain, or 'remote://<server>' for an explicit single-server
-            override (default: None)
 
     Returns:
         Dict mapping each ids_path -> composed IDS data
@@ -136,8 +108,6 @@ def simple_load(
     Example:
         >>> result = simple_load(['equilibrium.time'], 200000)
         >>> result = simple_load(['ece.channel.t_e.data'], 180000, efit_tree='EFIT02')
-        >>> result = simple_load(['equilibrium.time'], 200000,
-        ...                      location='remote://atlas.gat.com')
     """
     if composer is None:
         composer = ImasComposer(
@@ -158,7 +128,7 @@ def simple_load(
         if all(status.values()):
             break
 
-        fetched = fetch_requirements(requirements, location=location)
+        fetched = fetch_requirements(requirements)
 
         for key, value in fetched.items():
             if isinstance(value, Exception):

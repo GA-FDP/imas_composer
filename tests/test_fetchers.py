@@ -1,7 +1,7 @@
 """
 Tests for fetch_requirements, which fetches through toksearch_d3d.
 
-The location-parsing and dedup tests monkeypatch fetch_many_from_req and run
+The dedup and pass-through tests monkeypatch fetch_many_from_req and run
 anywhere.  The remaining tests fetch real data and are skipped when toksearch_d3d
 is not installed.
 """
@@ -30,8 +30,8 @@ def recorded_fetch(monkeypatch):
     """Replace fetch_many_from_req with a recorder, returning the list of call args."""
     calls = []
 
-    def _record(reqs, server, is_remote, location):
-        calls.append((reqs, server, is_remote, location))
+    def _record(reqs):
+        calls.append(reqs)
         return {req.as_key(): np.zeros(3) for req in reqs}
 
     monkeypatch.setattr("imas_composer.fetchers.TOKSEARCH_AVAILABLE", True)
@@ -39,22 +39,14 @@ def recorded_fetch(monkeypatch):
     return calls
 
 
-@pytest.mark.parametrize("location,expected_server,expected_remote", [
-    (None, None, False),
-    ("remote://atlas.gat.com", "atlas.gat.com", True),
-    ("/fusion/projects/trees", None, False),
-])
-def test_location_parsing(recorded_fetch, location, expected_server, expected_remote):
-    """location is parsed into (server, is_remote) and passed through unmodified."""
+def test_requirements_passed_through_unmodified(recorded_fetch):
+    """fetch_requirements hands the deduplicated reqs straight to fetch_many_from_req."""
     req = Requirement("BT", REFERENCE_SHOT, "__ptdata__")
 
-    fetch_requirements([req], location=location)
+    fetch_requirements([req])
 
     assert len(recorded_fetch) == 1
-    _, server, is_remote, passed_location = recorded_fetch[0]
-    assert server == expected_server
-    assert is_remote is expected_remote
-    assert passed_location == location
+    assert recorded_fetch[0] == [req]
 
 
 def test_duplicate_requirements_fetched_once(recorded_fetch):
@@ -64,13 +56,13 @@ def test_duplicate_requirements_fetched_once(recorded_fetch):
     result = fetch_requirements(reqs)
 
     assert len(recorded_fetch) == 1
-    assert len(recorded_fetch[0][0]) == 1
+    assert len(recorded_fetch[0]) == 1
     assert len(result) == 1
 
 
 def test_failure_is_stored_in_band(monkeypatch):
     """An in-band Exception from fetch_many_from_req passes straight through."""
-    def _fake_fetch_many(reqs, server, is_remote, location):
+    def _fake_fetch_many(reqs):
         return {req.as_key(): ValueError("%TREE-E-NODATA") for req in reqs}
 
     monkeypatch.setattr("imas_composer.fetchers.TOKSEARCH_AVAILABLE", True)
