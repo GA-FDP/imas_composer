@@ -98,13 +98,22 @@ class TestAgainstRealData:
         assert len(value['times']) == len(value['data'])
         assert len(value['rarray']) > 4
 
-    def test_bad_pointname_is_in_band(self):
-        """A nonexistent pointname yields an Exception value, not a raise."""
+    def test_bad_pointname_returns_degenerate_data(self):
+        """A nonexistent pointname is not an error: ptdata2() TDI returns a
+        degenerate result rather than raising.  ptdata2 is legacy and deeply
+        embedded, so we cannot make it signal a missing point; instead a bad
+        point comes back as a single-sample zero 'data'/'times' (a real point
+        has many samples), which callers must treat as "no data".
+        """
         req = Requirement("NOSUCHPOINT", REFERENCE_SHOT, "__ptdata__")
 
         value = fetch_requirements([req])[req.as_key()]
 
-        assert isinstance(value, Exception)
+        assert not isinstance(value, Exception), value
+        assert set(value) == {'data', 'times', 'rarray'}
+        assert len(value['data']) == 1
+        assert np.all(np.asarray(value['data']) == 0)
+        assert len(value['times']) == len(value['data'])
 
     def test_tree_requirement(self):
         """A named-tree requirement returns an array."""
