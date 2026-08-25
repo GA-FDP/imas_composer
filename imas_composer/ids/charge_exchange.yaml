@@ -24,6 +24,12 @@ fields:
   - channel.position.phi.time
   - channel.zeff.data
   - channel.zeff.time
+# Ion identity parsed per channel from the CALIBRATION LINEID string ('C VI 8-7' -> 12C6).
+# z_ion is the Roman numeral (the charge state CX measures); z_n is the nuclear charge.
+  - channel.ion.label
+  - channel.ion.a
+  - channel.ion.z_ion
+  - channel.ion.z_n
   - channel.ion.n_i_over_n_e.data
   - channel.ion.n_i_over_n_e.data_error_upper
   - channel.ion.n_i_over_n_e.time

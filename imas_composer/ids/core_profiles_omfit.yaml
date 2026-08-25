@@ -32,7 +32,7 @@ fields:
   - profiles_1d.grid.psi
   - profiles_1d.grid.psi_norm  # imas_composer-only (no OMAS reference)
   - profiles_1d.grid.psi_magnetic_axis
-  - profiles_1d.grid.psi_magnetic_boundary
+  - profiles_1d.grid.psi_boundary
 
   # Electrons
   - profiles_1d.electrons.density
