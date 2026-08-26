@@ -325,7 +325,8 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.boundary_separatrix.x_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._zxpt1", "equilibrium._zxpt2"],
+            depends_on=["equilibrium._zxpt1", "equilibrium._zxpt2",
+                        "equilibrium._rxpt1", "equilibrium._rxpt2"],
             compose=self._compose_xpoint_z,
             ids_path="equilibrium.time_slice.boundary_separatrix.x_point.z",
             docs_file=self.DOCS_PATH
@@ -1930,17 +1931,24 @@ class EquilibriumMapper(IDSMapper):
         Returns:
             Ragged awkward array (n_time, var) where each time slice has 0-2 X-points
         """
-        zxpt1_key = Requirement(f'{self.aeqdsk_node}.ZXPT1', self.resolve_shot(shot), self.efit_tree).as_key()
-        zxpt2_key = Requirement(f'{self.aeqdsk_node}.ZXPT2', self.resolve_shot(shot), self.efit_tree).as_key()
+        zxpt1_key = Requirement(f'{self.aeqdsk_node}.ZXPT1', self.resolve_shot(shot),
+                                 self.efit_tree).as_key()
+        zxpt2_key = Requirement(f'{self.aeqdsk_node}.ZXPT2', self.resolve_shot(shot), 
+                                self.efit_tree).as_key()
+        rxpt1_key = Requirement(f'{self.aeqdsk_node}.RXPT1', self.resolve_shot(shot), self.efit_tree).as_key()
+        rxpt2_key = Requirement(f'{self.aeqdsk_node}.RXPT2', self.resolve_shot(shot), self.efit_tree).as_key()
+
+        rxpt1 = raw_data[rxpt1_key]
+        rxpt2 = raw_data[rxpt2_key]
 
         zxpt1 = raw_data[zxpt1_key]
         zxpt2 = raw_data[zxpt2_key]
 
         # Stack Z coordinates
-        xpoints_z = np.column_stack([zxpt1, zxpt2])
+        xpoints_r = np.column_stack([rxpt1, rxpt2])
+        xpoints_z = np.column_stack([zxpt1, zxpt2]) * 1.e-2
 
-        # Z==0 means padding (X-points are never at midplane due to physics)
-        mask = xpoints_z != 0
+        mask = xpoints_r > 0
 
         return filter_padding(xpoints_z, mask)
 
