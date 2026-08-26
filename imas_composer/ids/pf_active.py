@@ -140,6 +140,16 @@ class PfActiveMapper(IDSMapper):
             docs_file=self.CONFIG_PATH
         )
 
+        for field in ['r', 'z']:
+            self.specs[f"pf_active.coil.element.geometry.outline.{field}"] = IDSEntrySpec(
+                stage=RequirementStage.COMPUTED,
+                depends_on=[],
+                compose=lambda shot, raw, fld=field:
+                    self._compose_outline_field(shot, raw, fld),
+                ids_path=f"pf_active.coil.element.geometry.outline.{field}",
+                docs_file=self.CONFIG_PATH
+            )
+
         for field in ['r', 'z', 'width', 'height']:
             self.specs[f"pf_active.coil.element.geometry.rectangle.{field}"] = IDSEntrySpec(
                 stage=RequirementStage.COMPUTED,
@@ -295,6 +305,31 @@ class PfActiveMapper(IDSMapper):
                     rectangle = geometry['rectangle']
                     coil_elements.append(rectangle.get(field, 0.0))
                 # For outline geometry (type 1), don't add anything - leave empty
+            result.append(coil_elements)
+
+        return ak.Array(result)
+
+    def _compose_outline_field(self, shot: int, raw_data: dict, field: str) -> ak.Array:
+        """
+        Compose outline geometry field (r, z).
+
+        Returns awkward array: ragged array (different element counts per coil).
+        Note: Some coils use rectangle geometry (type 2) instead of outline (type 1).
+        For those elements, outline fields are empty arrays (not present).
+        """
+        coils = self._load_pf_coils(shot)
+
+        result = []
+        for coil in coils:
+            elements = coil.get('element', [])
+            coil_elements = []
+            for element in elements:
+                geometry = element.get('geometry', {})
+                # Only add outline field if outline geometry exists
+                if 'outline' in geometry:
+                    outline = geometry['outline']
+                    coil_elements.append(outline.get(field, 0.0))
+                # For other types of geometry, don't add anything - leave empty
             result.append(coil_elements)
 
         return ak.Array(result)
