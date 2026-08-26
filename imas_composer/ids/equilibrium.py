@@ -1917,7 +1917,7 @@ class EquilibriumMapper(IDSMapper):
         xpoints = np.column_stack([rxpt1, rxpt2])
 
         # Filter out padding (where X-point R==0)
-        mask = xpoints != 0
+        mask = xpoints > 0
         return filter_padding(xpoints, mask)
 
     def _compose_xpoint_z(self, shot: int, raw_data: dict) -> ak.Array:
@@ -1935,8 +1935,10 @@ class EquilibriumMapper(IDSMapper):
                                  self.efit_tree).as_key()
         zxpt2_key = Requirement(f'{self.aeqdsk_node}.ZXPT2', self.resolve_shot(shot), 
                                 self.efit_tree).as_key()
-        rxpt1_key = Requirement(f'{self.aeqdsk_node}.RXPT1', self.resolve_shot(shot), self.efit_tree).as_key()
-        rxpt2_key = Requirement(f'{self.aeqdsk_node}.RXPT2', self.resolve_shot(shot), self.efit_tree).as_key()
+        rxpt1_key = Requirement(f'{self.aeqdsk_node}.RXPT1', self.resolve_shot(shot), 
+                                self.efit_tree).as_key()
+        rxpt2_key = Requirement(f'{self.aeqdsk_node}.RXPT2', self.resolve_shot(shot),
+                                self.efit_tree).as_key()
 
         rxpt1 = raw_data[rxpt1_key]
         rxpt2 = raw_data[rxpt2_key]
