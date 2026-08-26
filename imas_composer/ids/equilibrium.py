@@ -2035,10 +2035,10 @@ class EquilibriumMapper(IDSMapper):
         rvsou_cm = raw_data[rvsou_key]
 
         # Stack into (n_time, 4) array and convert to meters
-        strike_points_m = np.column_stack([rvsid_cm, rvsod_cm, rvsiu_cm, rvsou_cm]) / 100.0
+        strike_points_m = np.column_stack([rvsid_cm, rvsod_cm, rvsiu_cm, rvsou_cm])
 
         # Filter out invalid strike points (OMAS uses -0.89 cm as sentinel, which becomes -0.0089 m)
-        mask = strike_points_m != -0.0089
+        mask = strike_points_m > 0.0
         return filter_padding(strike_points_m, mask)
 
     def _compose_strike_point_z(self, shot: int, raw_data: dict) -> ak.Array:
@@ -2074,7 +2074,7 @@ class EquilibriumMapper(IDSMapper):
 
         # Use R coordinates as mask (R == -0.0089 m means invalid)
         strike_points_r_m = np.column_stack([rvsid_cm, rvsod_cm, rvsiu_cm, rvsou_cm]) / 100.0
-        mask = strike_points_r_m != -0.0089
+        mask = strike_points_m > 0.0
 
         return filter_padding(strike_points_z_m, mask)
 
