@@ -51,7 +51,7 @@ dependencies:
   - pelicanplatform >=7.24.3,<8 # also required by fdp
 
  # mdsip-fdp with normal MDSplus
-  - mdsplus >=7.158.0
+  - mdsplus >=7.157
   - mdsip-fdp
 
   # For pip install
