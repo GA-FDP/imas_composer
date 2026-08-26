@@ -7,7 +7,7 @@ channels:
 dependencies:
   # Core runtime deps
   - python >=3.11
-  - numpy >=1.24,<2
+  - numpy >=1.24
   - pyyaml *
   - awkward *
   - scipy *
@@ -23,7 +23,6 @@ dependencies:
   # toksearch_submodule, not conda, since we need an unreleased version)
   - gcc
   - openblas
-  - mdsip-fdp
   - pymssql
   - ray-core
   - pyspark >=4
@@ -48,9 +47,12 @@ dependencies:
 
   # toksearch_d3d requirements
   - versioneer
-  - ptdata >=2.0.13,<3
   - filelock >=3
   - pelicanplatform >=7.24.3,<8 # also required by fdp
+
+ # mdsip-fdp with normal MDSplus
+  - mdsplus >=7.158.0
+  - mdsip-fdp
 
   # For pip install
   - pip *
