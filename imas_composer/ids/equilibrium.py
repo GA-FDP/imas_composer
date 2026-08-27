@@ -291,7 +291,8 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.boundary.x_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._zxpt1", "equilibrium._zxpt2"],
+            depends_on=["equilibrium._rxpt1", "equilibrium._rxpt2",
+                        "equilibrium._zxpt1", "equilibrium._zxpt2"],
             compose=self._compose_xpoint_z,
             ids_path="equilibrium.time_slice.boundary.x_point.z",
             docs_file=self.DOCS_PATH
@@ -519,7 +520,8 @@ class EquilibriumMapper(IDSMapper):
         # Boundary separatrix strike points (4 points: vsid, vsod, vsiu, vsou)
         self.specs["equilibrium.time_slice.boundary_separatrix.strike_point.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._rvsid", "equilibrium._rvsod", "equilibrium._rvsiu", "equilibrium._rvsou"],
+            depends_on=["equilibrium._rvsid", "equilibrium._rvsod", 
+                        "equilibrium._rvsiu", "equilibrium._rvsou"],
             compose=self._compose_strike_point_r,
             ids_path="equilibrium.time_slice.boundary_separatrix.strike_point.r",
             docs_file=self.DOCS_PATH
@@ -527,8 +529,10 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.boundary_separatrix.strike_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._rvsid", "equilibrium._zvsid", "equilibrium._rvsod", "equilibrium._zvsod",
-                       "equilibrium._rvsiu", "equilibrium._zvsiu", "equilibrium._rvsou", "equilibrium._zvsou"],
+            depends_on=["equilibrium._rvsid", "equilibrium._zvsid", 
+                        "equilibrium._rvsod", "equilibrium._zvsod",
+                       "equilibrium._rvsiu", "equilibrium._zvsiu", 
+                       "equilibrium._rvsou", "equilibrium._zvsou"],
             compose=self._compose_strike_point_z,
             ids_path="equilibrium.time_slice.boundary_separatrix.strike_point.z",
             docs_file=self.DOCS_PATH
@@ -2084,7 +2088,7 @@ class EquilibriumMapper(IDSMapper):
 
         # Use R coordinates as mask (R == -0.0089 m means invalid)
         strike_points_r_m = np.column_stack([rvsid_cm, rvsod_cm, rvsiu_cm, rvsou_cm]) / 100.0
-        mask = strike_points_m > 0.0
+        mask = strike_points_r_m > 0.0
 
         return filter_padding(strike_points_z_m, mask)
 
