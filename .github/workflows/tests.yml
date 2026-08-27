@@ -63,6 +63,7 @@ jobs:
           - ec_launchers
           - ece
           - equilibrium
+          - equilibrium_derived
           - gas_injection
           - interferometer
           - magnetics
