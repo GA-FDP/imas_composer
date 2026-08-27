@@ -16,7 +16,7 @@ from .core import Requirement
 from .composer import ImasComposer
 
 try:
-    from toksearch_d3d.interfaces.req_interface import fetch_many_from_req
+    from toksearch.interfaces.req_interface import fetch_many_from_req
     TOKSEARCH_AVAILABLE = True
 except ImportError:
     TOKSEARCH_AVAILABLE = False

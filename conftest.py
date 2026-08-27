@@ -24,18 +24,18 @@ if "BEARER_TOKEN" not in os.environ:
     if _token_file.exists():
         os.environ["BEARER_TOKEN"] = _token_file.read_text().strip()
 
-import toksearch_d3d  # noqa: F401  isort:skip  -- must follow the token, precede omas
+import toksearch  # noqa: F401  isort:skip  -- must follow the token, precede omas
 
-from fdp.environment import _resolve_device_handle, resolve_bearer_token
 from omas.utilities.omas_mds import set_default_mds_backend
-from toksearch_d3d import setup_environment
+from fdp.environment import setup_environment
 
 setup_environment()
 
-if resolve_bearer_token(_resolve_device_handle("d3d")) is None:
-    raise RuntimeError(
-        "No valid FDP bearer token; Pelican fetches will fail. Run `fdp login`."
-    )
+# Remove this check because it introduces a dependency on toksearch_d3d
+# if resolve_bearer_token(_resolve_device_handle("d3d")) is None:
+#     raise RuntimeError(
+#         "No valid FDP bearer token; Pelican fetches will fail. Run `fdp login`."
+#     )
 
 # Route the OMAS reference implementation through toksearch as well, so the
 # oracle reads from the Pelican origin rather than the atlas thin-client
