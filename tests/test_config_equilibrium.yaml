@@ -207,7 +207,6 @@ omas_path_map:
   equilibrium.time_slice.global_quantities.psi_boundary: equilibrium.time_slice.:.global_quantities.psi_boundary
   equilibrium.time_slice.global_quantities.area: equilibrium.time_slice.:.global_quantities.area
   equilibrium.time_slice.global_quantities.surface: equilibrium.time_slice.:.global_quantities.surface
-  equilibrium.time_slice.global_quantities.volume: equilibrium.time_slice.:.global_quantities.volume
   equilibrium.time_slice.global_quantities.beta_pol: equilibrium.time_slice.:.global_quantities.beta_pol
   equilibrium.time_slice.global_quantities.beta_tor: equilibrium.time_slice.:.global_quantities.beta_tor
   equilibrium.time_slice.global_quantities.beta_normal: equilibrium.time_slice.:.global_quantities.beta_normal
