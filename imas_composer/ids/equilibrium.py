@@ -291,7 +291,8 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.boundary.x_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._zxpt1", "equilibrium._zxpt2"],
+            depends_on=["equilibrium._rxpt1", "equilibrium._rxpt2",
+                        "equilibrium._zxpt1", "equilibrium._zxpt2"],
             compose=self._compose_xpoint_z,
             ids_path="equilibrium.time_slice.boundary.x_point.z",
             docs_file=self.DOCS_PATH
@@ -325,7 +326,8 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.boundary_separatrix.x_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._zxpt1", "equilibrium._zxpt2"],
+            depends_on=["equilibrium._zxpt1", "equilibrium._zxpt2",
+                        "equilibrium._rxpt1", "equilibrium._rxpt2"],
             compose=self._compose_xpoint_z,
             ids_path="equilibrium.time_slice.boundary_separatrix.x_point.z",
             docs_file=self.DOCS_PATH
@@ -518,7 +520,8 @@ class EquilibriumMapper(IDSMapper):
         # Boundary separatrix strike points (4 points: vsid, vsod, vsiu, vsou)
         self.specs["equilibrium.time_slice.boundary_separatrix.strike_point.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._rvsid", "equilibrium._rvsod", "equilibrium._rvsiu", "equilibrium._rvsou"],
+            depends_on=["equilibrium._rvsid", "equilibrium._rvsod", 
+                        "equilibrium._rvsiu", "equilibrium._rvsou"],
             compose=self._compose_strike_point_r,
             ids_path="equilibrium.time_slice.boundary_separatrix.strike_point.r",
             docs_file=self.DOCS_PATH
@@ -526,8 +529,10 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.boundary_separatrix.strike_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._rvsid", "equilibrium._zvsid", "equilibrium._rvsod", "equilibrium._zvsod",
-                       "equilibrium._rvsiu", "equilibrium._zvsiu", "equilibrium._rvsou", "equilibrium._zvsou"],
+            depends_on=["equilibrium._rvsid", "equilibrium._zvsid", 
+                        "equilibrium._rvsod", "equilibrium._zvsod",
+                       "equilibrium._rvsiu", "equilibrium._zvsiu", 
+                       "equilibrium._rvsou", "equilibrium._zvsou"],
             compose=self._compose_strike_point_z,
             ids_path="equilibrium.time_slice.boundary_separatrix.strike_point.z",
             docs_file=self.DOCS_PATH
@@ -1916,7 +1921,7 @@ class EquilibriumMapper(IDSMapper):
         xpoints = np.column_stack([rxpt1, rxpt2])
 
         # Filter out padding (where X-point R==0)
-        mask = xpoints != 0
+        mask = xpoints > 0
         return filter_padding(xpoints, mask)
 
     def _compose_xpoint_z(self, shot: int, raw_data: dict) -> ak.Array:
@@ -1930,17 +1935,26 @@ class EquilibriumMapper(IDSMapper):
         Returns:
             Ragged awkward array (n_time, var) where each time slice has 0-2 X-points
         """
-        zxpt1_key = Requirement(f'{self.aeqdsk_node}.ZXPT1', self.resolve_shot(shot), self.efit_tree).as_key()
-        zxpt2_key = Requirement(f'{self.aeqdsk_node}.ZXPT2', self.resolve_shot(shot), self.efit_tree).as_key()
+        zxpt1_key = Requirement(f'{self.aeqdsk_node}.ZXPT1', self.resolve_shot(shot),
+                                 self.efit_tree).as_key()
+        zxpt2_key = Requirement(f'{self.aeqdsk_node}.ZXPT2', self.resolve_shot(shot), 
+                                self.efit_tree).as_key()
+        rxpt1_key = Requirement(f'{self.aeqdsk_node}.RXPT1', self.resolve_shot(shot), 
+                                self.efit_tree).as_key()
+        rxpt2_key = Requirement(f'{self.aeqdsk_node}.RXPT2', self.resolve_shot(shot),
+                                self.efit_tree).as_key()
+
+        rxpt1 = raw_data[rxpt1_key]
+        rxpt2 = raw_data[rxpt2_key]
 
         zxpt1 = raw_data[zxpt1_key]
         zxpt2 = raw_data[zxpt2_key]
 
         # Stack Z coordinates
+        xpoints_r = np.column_stack([rxpt1, rxpt2])
         xpoints_z = np.column_stack([zxpt1, zxpt2])
 
-        # Z==0 means padding (X-points are never at midplane due to physics)
-        mask = xpoints_z != 0
+        mask = xpoints_r > 0
 
         return filter_padding(xpoints_z, mask)
 
@@ -2035,10 +2049,10 @@ class EquilibriumMapper(IDSMapper):
         rvsou_cm = raw_data[rvsou_key]
 
         # Stack into (n_time, 4) array and convert to meters
-        strike_points_m = np.column_stack([rvsid_cm, rvsod_cm, rvsiu_cm, rvsou_cm]) / 100.0
+        strike_points_m = np.column_stack([rvsid_cm, rvsod_cm, rvsiu_cm, rvsou_cm])
 
         # Filter out invalid strike points (OMAS uses -0.89 cm as sentinel, which becomes -0.0089 m)
-        mask = strike_points_m != -0.0089
+        mask = strike_points_m > 0.0
         return filter_padding(strike_points_m, mask)
 
     def _compose_strike_point_z(self, shot: int, raw_data: dict) -> ak.Array:
@@ -2074,7 +2088,7 @@ class EquilibriumMapper(IDSMapper):
 
         # Use R coordinates as mask (R == -0.0089 m means invalid)
         strike_points_r_m = np.column_stack([rvsid_cm, rvsod_cm, rvsiu_cm, rvsou_cm]) / 100.0
-        mask = strike_points_r_m != -0.0089
+        mask = strike_points_r_m > 0.0
 
         return filter_padding(strike_points_z_m, mask)
 
