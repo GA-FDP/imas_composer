@@ -1952,7 +1952,7 @@ class EquilibriumMapper(IDSMapper):
 
         # Stack Z coordinates
         xpoints_r = np.column_stack([rxpt1, rxpt2])
-        xpoints_z = np.column_stack([zxpt1, zxpt2]) * 1.e-2
+        xpoints_z = np.column_stack([zxpt1, zxpt2])
 
         mask = xpoints_r > 0
 
