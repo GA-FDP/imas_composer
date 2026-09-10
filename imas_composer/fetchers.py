@@ -6,7 +6,7 @@ It is intentionally separate from composer.py so that ImasComposer itself has no
 dependency on any specific data backend (MDSplus, ptdata, etc.).
 
 Public API:
-    fetch_requirements: Fetch a list of Requirement objects via toksearch_d3d
+    fetch_requirements: Fetch a list of Requirement objects via toksearch
     simple_load: Convenience wrapper that runs the full resolve-fetch-compose loop
 """
 
@@ -27,7 +27,7 @@ def fetch_requirements(
     requirements: List[Requirement],
 ) -> Dict[Tuple[str, int, str], Any]:
     """
-    Fetch a list of requirements via toksearch_d3d.
+    Fetch a list of requirements via toksearch.
 
     Requirements with treename == "__ptdata__" are batched into a single
     tree-less getMany() of ptdata2/dim_of/pthead2 TDI, returning a dict with
@@ -43,15 +43,15 @@ def fetch_requirements(
         or to the Exception if fetching failed.
 
     Raises:
-        RuntimeError: If toksearch_d3d is not installed.
+        RuntimeError: If toksearch is not installed.
     """
     if not requirements:
         return {}
 
     if not TOKSEARCH_AVAILABLE:
         raise RuntimeError(
-            "toksearch_d3d is required for fetching requirements but is not "
-            "installed. Install it with: conda install -c ga-fdp toksearch_d3d"
+            "toksearch is required for fetching requirements but is not "
+            "installed. Install it with: conda install -c ga-fdp toksearch"
         )
 
     unique_requirements = []
@@ -82,7 +82,7 @@ def simple_load(
     """
     Simple utility function to resolve and compose IDS data in one call.
 
-    Runs the full resolve-fetch-compose loop, fetching through toksearch_d3d.
+    Runs the full resolve-fetch-compose loop, fetching through toksearch.
 
     Args:
         ids_paths: List of full IDS paths to compose (e.g., ['ece.channel.t_e.data'])
@@ -102,7 +102,7 @@ def simple_load(
         Dict mapping each ids_path -> composed IDS data
 
     Raises:
-        RuntimeError: If toksearch_d3d is not installed, or if requirements
+        RuntimeError: If toksearch is not installed, or if requirements
             cannot be resolved or any fetch fails.
 
     Example:

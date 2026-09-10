@@ -20,8 +20,15 @@ dependencies:
   - tqdm *
 
   # Default fetching backend
-  - toksearch_d3d *
+  # fdp requirements (fdp itself is pip-installed from fdp_submodule,
+  # not conda, to match the unreleased toksearch above)
+  - xrdcl-pelican-fdp
+  - fdp-schema >=0.2.1
+  - pelicanplatform >=7.24.3,<8 # also required by fdp
 
+   # mdsip-fdp with normal MDSplus
+  - mdsplus >=7.157
+  - mdsip-fdp
 
   # For pip install
   - pip *
