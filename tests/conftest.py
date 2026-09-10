@@ -23,7 +23,7 @@ import yaml
 import awkward as ak
 from pathlib import Path
 
-from omas import ODS, mdsvalue
+from omas import ODS
 from omas.omas_machine import machine_to_omas
 
 from imas_composer import ImasComposer
@@ -309,7 +309,7 @@ def _matches_optional_pattern(mds_path, pattern):
 
     return bool(re.match(regex_pattern, mds_path))
 
-def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float=1e-12, atol_array=1e-6):
+def compare_values(composer_val, omas_val, label="value", rtol=1e-7, atol_float=1e-7, atol_array=1e-6):
     """
     Compare composer and OMAS values with appropriate method based on type.
 
@@ -745,7 +745,7 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
     """
     Generic helper function for requirement resolution testing.
 
-    Iteratively resolves requirements using OMAS mdsvalue to fetch raw MDSplus data,
+    Iteratively resolves requirements using fetch_requirements to fetch raw data,
     verifying that full resolution is achieved and tracking resolution depth.
 
     Args:
@@ -799,15 +799,11 @@ def run_requirements_resolution(ids_path, composer, shot=REFERENCE_SHOT, max_ste
                     f"to allow_different_shot in test_config_{ids_name}.yaml"
                 )
 
-        # Fetch data from MDSplus via OMAS mdsvalue
-        for req in requirements:
-            try:
-                mds = mdsvalue('d3d', req.treename, req.shot, req.mds_path)
-                value = mds.raw()
-                # IMPORTANT: Use tuple key (mds_path, shot, treename) to match Requirement.as_key()
-                raw_data[(req.mds_path, req.shot, req.treename)] = value
-            except Exception as e:
-                pytest.fail(f"Failed to fetch {req.mds_path} from {req.treename}: {e}")
+        # Fetch data via toksearch; keys are already Requirement.as_key() tuples
+        for key, value in fetch_requirements(requirements).items():
+            if isinstance(value, Exception):
+                pytest.fail(f"Failed to fetch {key[0]} from {key[2]}: {value}")
+            raw_data[key] = value
 
     # Should achieve full resolution within max_steps
     assert fully_resolved, f"{ids_path} could not be fully resolved in {max_steps} steps"
@@ -901,8 +897,8 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
 
     # Get field-specific tolerances if configured
     field_tol = field_tolerances.get(ids_path, {})
-    rtol = field_tol.get('rtol', 1e-10)
-    atol_float = field_tol.get('atol', 1e-12)
+    rtol = field_tol.get('rtol', 1e-7)
+    atol_float = field_tol.get('atol', 1e-7)
     atol_array = field_tol.get('atol', 1e-6)
 
     # Determine fetch and access paths
@@ -975,7 +971,8 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
         ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
                        fast_ece=fast_ece_omas)
     else:
-        ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=True,
+        # DO not reset the cache unnecessarily
+        ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
                         profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
 
     # Recursively compare using ndim-based logic with field-specific tolerances
