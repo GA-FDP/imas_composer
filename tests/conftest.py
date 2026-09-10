@@ -23,6 +23,19 @@ import yaml
 import awkward as ak
 from pathlib import Path
 
+import os
+
+# Handle authentication
+
+if "BEARER_TOKEN" not in os.environ:
+    _token_file = Path.home() / ".fdp" / "token"
+    if _token_file.exists():
+        os.environ["BEARER_TOKEN"] = _token_file.read_text().strip()
+
+# Set omas to use toksearch
+from omas.utilities.omas_mds import set_default_mds_backend
+set_default_mds_backend("toksearch")
+
 from omas import ODS
 from omas.omas_machine import machine_to_omas
 
