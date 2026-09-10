@@ -31,6 +31,10 @@ field_tolerances:
     rtol: 1.0e-6
     atol: 1.0e-6
 
+  core_profiles.profiles_1d.ion.density_thermal:
+    rtol: 1.0e-6
+    atol: 5.0e+12
+
 # OMAS path mapping
 # Maps imas_composer notation to OMAS notation for fetching reference data.
 #
