@@ -1,9 +1,24 @@
 # NBI (Neutral Beam Injection) IDS Configuration for DIII-D
 
-# Static values (hardcoded, not from MDSplus)
-static_values:
-  # Default species mass number (deuterium)
-  default_species_a: 2.0
+# GAS string -> species. A fired beam reports one of these (see NB{beam_name}.FIRED);
+# an unfired beam reports an empty string.
+gas_species:
+  H1:
+    a: 1.0
+    z_n: 1.0
+    label: "H"
+  D2:
+    a: 2.0
+    z_n: 1.0
+    label: "D"
+  He3:
+    a: 3.0
+    z_n: 2.0
+    label: "He"
+  He4:
+    a: 4.0
+    z_n: 2.0
+    label: "He"
 
 # NBI configuration
 # DIII-D beam names
@@ -25,3 +40,5 @@ fields:
   - unit.energy.time
   - unit.energy.data
   - unit.species.a
+  - unit.species.z_n
+  - unit.species.label

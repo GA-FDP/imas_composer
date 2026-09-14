@@ -23,9 +23,10 @@ class NbiMapper(IDSMapper):
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
 
-        # Load beam names from config
+        # Load beam names and GAS -> species lookup from config
         config = self._load_config()
         self.beam_names = config.get('beam_names', [])
+        self.gas_species = config.get('gas_species', {})
 
         # Build IDS specs
         self._build_specs()
@@ -66,11 +67,19 @@ class NbiMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # Fetch FIRED (whether the beam actually injected) for all beams
+        self.specs["nbi._fired_data"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=self._create_beam_requirements("FIRED"),
+            ids_path="nbi._fired_data",
+            docs_file=self.DOCS_PATH
+        )
+
         # Public IDS fields - all COMPUTED stage
 
         self.specs["nbi.unit.name"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["nbi._pinj_time"],
+            depends_on=["nbi._pinj_time", "nbi._fired_data"],
             compose=self._compose_unit_name,
             ids_path="nbi.unit.name",
             docs_file=self.DOCS_PATH
@@ -78,7 +87,7 @@ class NbiMapper(IDSMapper):
 
         self.specs["nbi.unit.power_launched.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["nbi._pinj_time"],
+            depends_on=["nbi._pinj_time", "nbi._fired_data"],
             compose=self._compose_power_launched_time,
             ids_path="nbi.unit.power_launched.time",
             docs_file=self.DOCS_PATH
@@ -86,7 +95,7 @@ class NbiMapper(IDSMapper):
 
         self.specs["nbi.unit.power_launched.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["nbi._pinj_time", "nbi._pinj_data"],
+            depends_on=["nbi._pinj_time", "nbi._pinj_data", "nbi._fired_data"],
             compose=self._compose_power_launched_data,
             ids_path="nbi.unit.power_launched.data",
             docs_file=self.DOCS_PATH
@@ -94,7 +103,7 @@ class NbiMapper(IDSMapper):
 
         self.specs["nbi.unit.energy.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["nbi._pinj_time"],
+            depends_on=["nbi._pinj_time", "nbi._fired_data"],
             compose=self._compose_energy_time,
             ids_path="nbi.unit.energy.time",
             docs_file=self.DOCS_PATH
@@ -102,7 +111,7 @@ class NbiMapper(IDSMapper):
 
         self.specs["nbi.unit.energy.data"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["nbi._pinj_time", "nbi._vbeam_data"],
+            depends_on=["nbi._pinj_time", "nbi._vbeam_data", "nbi._fired_data"],
             compose=self._compose_energy_data,
             ids_path="nbi.unit.energy.data",
             docs_file=self.DOCS_PATH
@@ -110,9 +119,25 @@ class NbiMapper(IDSMapper):
 
         self.specs["nbi.unit.species.a"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["nbi._pinj_time", "nbi._gas_data"],
+            depends_on=["nbi._pinj_time", "nbi._gas_data", "nbi._fired_data"],
             compose=self._compose_species_a,
             ids_path="nbi.unit.species.a",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["nbi.unit.species.z_n"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["nbi._pinj_time", "nbi._gas_data", "nbi._fired_data"],
+            compose=self._compose_species_z_n,
+            ids_path="nbi.unit.species.z_n",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["nbi.unit.species.label"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["nbi._pinj_time", "nbi._gas_data", "nbi._fired_data"],
+            compose=self._compose_species_label,
+            ids_path="nbi.unit.species.label",
             docs_file=self.DOCS_PATH
         )
 
@@ -158,7 +183,7 @@ class NbiMapper(IDSMapper):
 
     def _get_active_beams(self, shot: int, raw_data: dict) -> List[str]:
         """
-        Get list of active beam names (beams with valid PINJ_time data).
+        Get list of active beam names (beams with FIRED == 1).
 
         Args:
             shot: Shot number
@@ -169,12 +194,13 @@ class NbiMapper(IDSMapper):
         """
         active_beams = []
         for beam_name in self.beam_names:
-            time_path = f'dim_of(\\NB::TOP.NB{beam_name}.PINJ_{beam_name}, 0)/1E3'
-            time_key = Requirement(time_path, shot, 'NB').as_key()
+            fired_path = f'\\NB::TOP.NB{beam_name}.FIRED'
+            fired_key = Requirement(fired_path, shot, 'NB').as_key()
 
-            # Check if beam has valid time data
-            if time_key in raw_data and not isinstance(raw_data[time_key], Exception):
-                active_beams.append(beam_name)
+            # Check if beam actually fired
+            if fired_key in raw_data and not isinstance(raw_data[fired_key], Exception):
+                if raw_data[fired_key]:
+                    active_beams.append(beam_name)
 
         return active_beams
 
@@ -258,30 +284,67 @@ class NbiMapper(IDSMapper):
         """
         Compose species mass number (A).
 
-        Note: Extracted from GAS string (e.g., 'D2' -> 2).
-        Defaults to value from config (deuterium A=2) if empty.
+        Note: Looked up from GAS string via config's gas_species (e.g., 'D2' -> 2).
+        Every active beam has FIRED, so GAS is expected to be non-empty.
         """
         active_beams = self._get_active_beams(shot, raw_data)
-        default_a = self.static_values["default_species_a"]
 
         species_a = []
         for beam_name in active_beams:
             gas_path = f'\\NB::TOP.NB{beam_name}.GAS'
             gas_key = Requirement(gas_path, shot, 'NB').as_key()
 
-            if gas_key in raw_data and not isinstance(raw_data[gas_key], Exception):
-                gas = raw_data[gas_key].strip()
-                if len(gas) > 1:
-                    # Extract mass number from gas string (e.g., 'D2' -> 2)
-                    species_a.append(float(int(gas[1])))
-                else:
-                    # Use default from config
-                    species_a.append(default_a)
-            else:
-                # Use default from config
-                species_a.append(default_a)
+            assert gas_key in raw_data and not isinstance(raw_data[gas_key], Exception), \
+                f"{beam_name}: fired but GAS data is missing"
+            gas = raw_data[gas_key].strip()
+            assert gas in self.gas_species, f"Unexpected NBI GAS value: {gas!r}"
+            species_a.append(self.gas_species[gas]['a'])
 
         return np.array(species_a)
+
+    def _compose_species_z_n(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose species nuclear charge (z_n).
+
+        Note: Looked up from GAS string via config's gas_species (e.g., 'D2' -> 1).
+        Every active beam has FIRED, so GAS is expected to be non-empty.
+        """
+        active_beams = self._get_active_beams(shot, raw_data)
+
+        species_z_n = []
+        for beam_name in active_beams:
+            gas_path = f'\\NB::TOP.NB{beam_name}.GAS'
+            gas_key = Requirement(gas_path, shot, 'NB').as_key()
+
+            assert gas_key in raw_data and not isinstance(raw_data[gas_key], Exception), \
+                f"{beam_name}: fired but GAS data is missing"
+            gas = raw_data[gas_key].strip()
+            assert gas in self.gas_species, f"Unexpected NBI GAS value: {gas!r}"
+            species_z_n.append(self.gas_species[gas]['z_n'])
+
+        return np.array(species_z_n)
+
+    def _compose_species_label(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose species label.
+
+        Note: Looked up from GAS string via config's gas_species (e.g., 'D2' -> 'D').
+        Every active beam has FIRED, so GAS is expected to be non-empty.
+        """
+        active_beams = self._get_active_beams(shot, raw_data)
+
+        species_label = []
+        for beam_name in active_beams:
+            gas_path = f'\\NB::TOP.NB{beam_name}.GAS'
+            gas_key = Requirement(gas_path, shot, 'NB').as_key()
+
+            assert gas_key in raw_data and not isinstance(raw_data[gas_key], Exception), \
+                f"{beam_name}: fired but GAS data is missing"
+            gas = raw_data[gas_key].strip()
+            assert gas in self.gas_species, f"Unexpected NBI GAS value: {gas!r}"
+            species_label.append(self.gas_species[gas]['label'])
+
+        return np.array(species_label)
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         return self.specs
