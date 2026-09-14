@@ -3,7 +3,7 @@
 # GAS string -> species. A fired beam reports one of these (see NB{beam_name}.FIRED);
 # an unfired beam reports an empty string.
 gas_species:
-  H1:
+  H2:
     a: 1.0
     z_n: 1.0
     label: "H"
@@ -11,11 +11,7 @@ gas_species:
     a: 2.0
     z_n: 1.0
     label: "D"
-  He3:
-    a: 3.0
-    z_n: 2.0
-    label: "He"
-  He4:
+  HE:
     a: 4.0
     z_n: 2.0
     label: "He"

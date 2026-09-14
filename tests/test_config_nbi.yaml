@@ -1,5 +1,5 @@
 # Test configuration for NBI IDS
-
+override_shots: [200000, 166885, 184000] # Deuterium, Helium, Hydrogen
 # Fields to skip OMAS comparison for (composer still tested)
 # Format: field_path: "reason for skipping"
 skip_fields:
