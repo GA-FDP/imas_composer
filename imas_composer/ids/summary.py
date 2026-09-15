@@ -49,7 +49,7 @@ class SummaryMapper(IDSMapper):
             stage=RequirementStage.DIRECT,
             static_requirements=[
                 Requirement(
-                    r"dim_of(\TRANSPORT::TOP.GLOBAL.TIMES.TAUE, 0) / 1e3",
+                    r"dim_of(\TRANSPORT::TOP.GLOBAL.TIMES.TAUE, 0) ",
                     0,
                     "TRANSPORT",
                 ),
@@ -74,7 +74,7 @@ class SummaryMapper(IDSMapper):
             compose=self._compose_tau_energy_time,
             ids_path="summary.global_quantities.tau_energy.time",
             docs_file=self.CONFIG_PATH,
-        )
+        )/1e3
 
     def _compose_tau_energy_value(self, shot: int, raw_data: dict) -> np.ndarray:
         """
