@@ -74,7 +74,7 @@ class SummaryMapper(IDSMapper):
             compose=self._compose_tau_energy_time,
             ids_path="summary.global_quantities.tau_energy.time",
             docs_file=self.CONFIG_PATH,
-        )/1e3
+        )
 
     def _compose_tau_energy_value(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -98,7 +98,8 @@ class SummaryMapper(IDSMapper):
             shot,
             "TRANSPORT",
         ).as_key()
-        return np.asarray(raw_data[key], dtype=float)
+        # The time is stored as ms; we need to convert to s
+        return np.asarray(raw_data[key], dtype=float)/1e3
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         return self.specs
