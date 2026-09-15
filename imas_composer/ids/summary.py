@@ -94,7 +94,7 @@ class SummaryMapper(IDSMapper):
         dim_of(..., 0) returns milliseconds; divide by 1e3 to convert to seconds.
         """
         key = Requirement(
-            r"dim_of(\TRANSPORT::TOP.GLOBAL.TIMES.TAUE, 0) / 1e3",
+            r"dim_of(\TRANSPORT::TOP.GLOBAL.TIMES.TAUE, 0)",
             shot,
             "TRANSPORT",
         ).as_key()
