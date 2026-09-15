@@ -1,7 +1,9 @@
 """
 Summary IDS Mapping for DIII-D
 
-Maps global scalar quantities from the DIII-D TRANSPORT MDSplus tree
+
+Maps the DIII-D one-line shot comment (\\D3D::TOP.COMMENTS:BRIEF) to the IMAS and
+global scalar quantities from the DIII-D TRANSPORT MDSplus tree
 to the IMAS summary IDS.
 
 The TRANSPORT tree stores time-traced global quantities computed by
@@ -19,13 +21,15 @@ from typing import Dict, List
 import numpy as np
 
 from ..core import IDSEntrySpec, Requirement, RequirementStage
+
 from .base import IDSMapper
 
 
 class SummaryMapper(IDSMapper):
-    """Maps DIII-D TRANSPORT tree data to the IMAS summary IDS."""
+    """Maps DIII-D COMMENTS/TRANSPORT tree data to the IMAS summary IDS."""
 
     CONFIG_PATH = "summary.yaml"
+    DOCS_PATH = "summary.yaml"
 
     def __init__(self, **kwargs):
         """Initialize Summary mapper."""
@@ -44,7 +48,7 @@ class SummaryMapper(IDSMapper):
             ids_path="summary._taue",
             docs_file=self.CONFIG_PATH,
         )
-
+        
         self.specs["summary._taue_time"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
@@ -56,6 +60,16 @@ class SummaryMapper(IDSMapper):
             ],
             ids_path="summary._taue_time",
             docs_file=self.CONFIG_PATH,
+        )
+
+        # Internal dependency - fetch the brief shot comment
+        self.specs["summary._description"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement('\\D3D::TOP.COMMENTS:BRIEF', 0, 'D3D')
+            ],
+            ids_path="summary._description",
+            docs_file=self.DOCS_PATH
         )
 
         # --- public: summary.global_quantities.tau_energy.value ---
@@ -74,6 +88,15 @@ class SummaryMapper(IDSMapper):
             compose=self._compose_tau_energy_time,
             ids_path="summary.global_quantities.tau_energy.time",
             docs_file=self.CONFIG_PATH,
+        )
+
+        # Public summary IDS field
+        self.specs["summary.description"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["summary._description"],
+            compose=self._compose_description,
+            ids_path="summary.description",
+            docs_file=self.DOCS_PATH
         )
 
     def _compose_tau_energy_value(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -100,6 +123,15 @@ class SummaryMapper(IDSMapper):
         ).as_key()
         # The time is stored as ms; we need to convert to s
         return np.asarray(raw_data[key], dtype=float)/1e3
+
+    def _compose_description(self, shot: int, raw_data: dict) -> str:
+        """Compose the brief shot comment as a string."""
+        key = Requirement('\\D3D::TOP.COMMENTS:BRIEF', shot, 'D3D').as_key()
+        value = raw_data[key]
+        if isinstance(value, bytes):
+            value = value.decode()
+        return str(value)
+
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
         return self.specs

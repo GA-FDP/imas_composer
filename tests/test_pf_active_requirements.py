@@ -8,8 +8,6 @@ for pf_active fields through the three-stage requirement system.
 import pytest
 from tests.conftest import load_ids_fields, run_requirements_resolution
 
-pytestmark = [pytest.mark.requirements]
-
 # Reference shot for requirement testing
 REFERENCE_SHOT = 202161
 

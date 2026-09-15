@@ -27,8 +27,6 @@ def fetch_requirements(requirements: List[Requirement]) -> Dict[Tuple[str, int, 
     Fetch a list of requirements from MDSplus via OMAS mdsvalue.
 
     Requirements are grouped by (treename, shot) for efficient batching.
-    treename=None is used for TDI expressions that do not require a named tree
-    (e.g. ptdata2("BT", shot)).
 
     Requirements with treename == "__ptdata__" are treated as ptdata signals:
     the mds_path is used as the signal name and three TDI expressions are built

@@ -6,6 +6,7 @@
 # than read directly from MDSplus.  The composition tests in
 # test_summary_composition.py verify the values directly instead.
 skip_fields:
+  description: "Simple string from shot summary. No mapping involved."
   global_quantities.tau_energy.value: "summary IDS is derived in OMAS, not read from MDSplus"
   global_quantities.tau_energy.time: "summary IDS is derived in OMAS, not read from MDSplus"
 

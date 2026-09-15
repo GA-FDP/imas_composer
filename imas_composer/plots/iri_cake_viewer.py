@@ -5,10 +5,9 @@ Replicates the functionality of OMFIT-source/scripts/fetch_IRI_CAKE.py without
 any dependency on omas or omfit_classes.  Data is fetched via imas_composer's
 simple_load function; IRI run metadata is queried from D3DRDB via d3drdb.py.
 
-Layout (3 × 4 grid of subplots; Eq. CX spans all three rows of column 0):
-  [        | ne (e)  | Te (e)  | j (current)       ]
-  [ Eq. CX | ni (ion)| Ti (ion)| convergence error ]
-  [ (tall) | v_tor   | Pressure| E_r (radial field)]
+Layout (2 × 6 grid of subplots; Eq. CX spans both rows of column 0):
+  [        | ne (e)  | Te (e)  | j (current)| Pressure | convergence error ]
+  [ Eq. CX | ni (ion)| Ti (ion)| v_tor      | E_r      | Zeff              ]
 
 Usage::
 
@@ -27,6 +26,8 @@ from typing import Any, Dict, Optional
 import numpy as np
 import awkward as ak
 
+import time
+
 # ---------------------------------------------------------------------------
 # pyqtgraph (and its Qt compatibility layer — uses PySide6 on this system)
 # ---------------------------------------------------------------------------
@@ -34,11 +35,12 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets
 
 import scipy.ndimage
+from scipy.interpolate import RegularGridInterpolator
 from contourpy import contour_generator
 
 from imas_composer.composer import ImasComposer
 from imas_composer.fetchers import simple_load
-from d3drdb import get_iri_upload_ids, list_shots_for_tag
+from imas_composer.rdb.d3drdb import get_iri_upload_ids, list_shots_for_tag, list_all_tags
 
 pg.setConfigOptions(antialias=True, background='w', foreground='k')
 
@@ -94,6 +96,10 @@ WALL_FIELDS = [
     'wall.description_2d.limiter.unit.outline.z',
 ]
 
+SUMMARY_FIELDS = [
+    'summary.description',
+]
+
 PROF_FIELDS = [
     'core_profiles.time',
     'core_profiles.profiles_1d.grid.rho_pol_norm',
@@ -131,6 +137,18 @@ PROF_FIELDS = [
     'core_profiles.profiles_1d.j_ohmic',
     'core_profiles.profiles_1d.j_bootstrap',
     'core_profiles.profiles_1d.e_field.radial',
+    'core_profiles.profiles_1d.zeff',
+    'core_profiles.profiles_1d.zeff_error_upper',
+]
+
+# CER Zeff overlay — fetched separately and optionally (see DataLoader.run)
+CX_ZEFF_FIELDS = [
+    'charge_exchange.channel.zeff.data',
+    'charge_exchange.channel.zeff.time',
+    'charge_exchange.channel.position.r.data',
+    'charge_exchange.channel.position.r.time',
+    'charge_exchange.channel.position.z.data',
+    'charge_exchange.channel.position.z.time',
 ]
 
 
@@ -180,6 +198,21 @@ class DataLoader(QtCore.QThread):
             self.status.emit("Fetching core profiles…")
             prof_data = simple_load(PROF_FIELDS, self.shot, composer=composer)
 
+            # CER Zeff overlay is optional: a failed charge_exchange fetch must
+            # not block the viewer, so its keys are simply absent on failure.
+            self.status.emit("Fetching CER Zeff (optional)…")
+            try:
+                cx_data = simple_load(CX_ZEFF_FIELDS, self.shot, composer=composer)
+            except RuntimeError:
+                cx_data = {}
+
+            # Shot comment is cosmetic (appended to the plot title); a missing
+            # \D3D::TOP.COMMENTS:BRIEF node must not block the science panels.
+            try:
+                summary_data = simple_load(SUMMARY_FIELDS, self.shot, composer=composer)
+            except RuntimeError:
+                summary_data = {'summary.description': None}
+
             eq_time = np.asarray(eq_data['equilibrium.time'])
             cp_time = np.asarray(prof_data['core_profiles.time'])
             assert len(eq_time) == len(cp_time), (
@@ -190,13 +223,13 @@ class DataLoader(QtCore.QThread):
                 "equilibrium and core_profiles time bases differ by more than 0.1 ms"
             )
 
-            self.loaded.emit({**eq_data, **wall_data, **prof_data})
+            self.loaded.emit({**eq_data, **wall_data, **prof_data, **cx_data, **summary_data})
 
         except Exception:
             self.error.emit(traceback.format_exc())
 
 
-RDB_TIMEOUT_MS = 10_000
+RDB_TIMEOUT_MS = 20_000
 
 
 class D3DrdbWorker(QtCore.QThread):
@@ -472,6 +505,79 @@ def plot_j_tor(p, data: Dict, t: int):
         line.setData(xk, y / 1e6) if y is not None else line.setData(EMPTY, EMPTY)
 
 
+def _cer_zeff_points(data: Dict, t: int):
+    """(psi_n, zeff) CER points nearest to eq time slice *t*, or empty arrays.
+
+    Channel (R, Z) positions are mapped to psi_n via the equilibrium 2D psi map.
+    The charge_exchange fetch is optional, so missing keys (or empty/ragged
+    channels) simply yield no points.
+    """
+    z_data = data.get('charge_exchange.channel.zeff.data')
+    z_time = data.get('charge_exchange.channel.zeff.time')
+    pos_r  = data.get('charge_exchange.channel.position.r.data')
+    pos_rt = data.get('charge_exchange.channel.position.r.time')
+    pos_z  = data.get('charge_exchange.channel.position.z.data')
+    pos_zt = data.get('charge_exchange.channel.position.z.time')
+    times  = data.get('equilibrium.time')
+    dim1   = data.get('equilibrium.time_slice.profiles_2d.grid.dim1')
+    dim2   = data.get('equilibrium.time_slice.profiles_2d.grid.dim2')
+    psi2d  = data.get('equilibrium.time_slice.profiles_2d.psi')
+    if any(v is None for v in (z_data, z_time, pos_r, pos_rt, pos_z, pos_zt,
+                               times, dim1, dim2, psi2d)):
+        return EMPTY, EMPTY
+
+    psi_ax  = float(data['equilibrium.time_slice.global_quantities.psi_axis'][t])
+    psi_bdy = float(data['equilibrium.time_slice.global_quantities.psi_boundary'][t])
+    psi_n = (np.asarray(psi2d[t, 0, :, :]) - psi_ax) / (psi_bdy - psi_ax)
+    interp = RegularGridInterpolator(
+        (np.asarray(dim1[t, 0, :]), np.asarray(dim2[t, 0, :])), psi_n,
+        bounds_error=False, fill_value=np.nan)
+
+    t_now = float(times[t])
+    # A CER sample "belongs" to this slice if it is closer than half a slice.
+    tol = 0.5 * float(np.median(np.diff(np.asarray(times))))
+
+    def nearest(values, time_axis):
+        """Sample of *values* nearest to t_now (a lone sample is time-independent)."""
+        vals = np.asarray(values)
+        if len(vals) == 0:
+            return None
+        if len(vals) == 1:
+            return float(vals[0])
+        return float(vals[np.argmin(np.abs(np.asarray(time_axis) - t_now))])
+
+    xs, ys = [], []
+    for i in range(len(z_data)):
+        zt = np.asarray(z_time[i])
+        zv = np.asarray(z_data[i])
+        if len(zv) == 0 or len(zt) != len(zv):
+            continue
+        j = int(np.argmin(np.abs(zt - t_now)))
+        if abs(zt[j] - t_now) > tol:
+            continue
+        r = nearest(pos_r[i], pos_rt[i])
+        z = nearest(pos_z[i], pos_zt[i])
+        if r is None or z is None:
+            continue
+        x = float(interp((r, z)))
+        if np.isfinite(x) and np.isfinite(zv[j]):
+            xs.append(x)
+            ys.append(float(zv[j]))
+    if not xs:
+        return EMPTY, EMPTY
+    return np.asarray(xs), np.asarray(ys)
+
+
+def plot_zeff(p, data: Dict, t: int):
+    """OMFIT_PROFS Zeff profile + CER (charge_exchange) point measurements."""
+    plot_profile_quantity(p, data, t, 'core_profiles.profiles_1d.zeff', None,
+                          COLORS['tab:blue'], label='Inferred profile')
+
+    pts = _cached(p, 'cer', lambda: pg.ScatterPlotItem(
+        symbol='o', size=5, brush=_mkcolor('r', 0.6), pen=None, name='CER (carbon only)'))
+    pts.setData(*_cer_zeff_points(data, t))
+
+
 def plot_convergence_error(p, data: Dict, t: int):
     """Convergence error vs. time (all slices), vertical line at current time."""
     line = _cached(p, 'line', lambda: pg.PlotDataItem(
@@ -650,7 +756,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
     def __init__(self, shot: int = -1, flavor: str = 'IRI_CAKE01'):
         super().__init__()
         self.setWindowTitle('IRI CAKE Viewer')
-        self.resize(1700, 1000)
+        self.resize(1920, 700)
 
         self._data: Optional[Dict[str, Any]] = None
         self._loader: Optional[DataLoader] = None
@@ -665,10 +771,12 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         # A CLI --shot N is the one auto-load path: fetch it once the shot list
         # has been queried (so the two D3DRDB calls never overlap).
         self._pending_autofetch = shot > 0
+        self.rdb_fetch_start = None
+        self.data_fetch_start = None
 
         self._build_ui()
 
-        QtCore.QTimer.singleShot(200, self._populate_shots)
+        QtCore.QTimer.singleShot(200, self._populate_tags)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -685,7 +793,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         row1 = QtWidgets.QHBoxLayout()
         row1.addWidget(QtWidgets.QLabel('Tag:'))
         self._flavor_combo = QtWidgets.QComboBox()
-        self._flavor_combo.addItems(['IRI_CAKE01', 'IRI_CAKE02', 'CAKE_FDP', 'CAKE_FDP_ida_lite', 'cake_nersc_testing', 'cake_nersc_testing_2'])
+        # Items are populated from D3DRDB by _populate_tags() so the list stays up to date.
         self._flavor_combo.setCurrentText(self._flavor)
         self._flavor_combo.setEditable(True)
         self._flavor_combo.setFixedWidth(180)
@@ -768,28 +876,30 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._build_axes()
 
     def _build_axes(self):
-        """Create the 3×4 plot grid (Eq. CX spans all rows of column 0)."""
+        """Create the 2×6 plot grid (Eq. CX spans both rows of column 0)."""
         self._glw.clear()
 
-        # Row 0: figure-level title spanning all four columns.
-        self._title_label = self._glw.addLabel('', row=0, col=0, colspan=4, size='11pt')
+        # Row 0: figure-level title spanning all six columns.
+        self._title_label = self._glw.addLabel('', row=0, col=0, colspan=6, size='11pt')
 
-        # Eq. CX spans all three rows in column 0.
-        self._ax_cx     = self._glw.addPlot(row=1, col=0, rowspan=3)
+        # Eq. CX spans both rows in column 0.
+        self._ax_cx     = self._glw.addPlot(row=1, col=0, rowspan=2)
         self._ax_ne     = self._glw.addPlot(row=1, col=1)
         self._ax_te     = self._glw.addPlot(row=1, col=2)
         self._ax_jtor   = self._glw.addPlot(row=1, col=3)
+        self._ax_pres   = self._glw.addPlot(row=1, col=4)
+        self._ax_conv   = self._glw.addPlot(row=1, col=5)
         self._ax_ni     = self._glw.addPlot(row=2, col=1)
         self._ax_ti     = self._glw.addPlot(row=2, col=2)
-        self._ax_conv   = self._glw.addPlot(row=2, col=3)
-        self._ax_vtor   = self._glw.addPlot(row=3, col=1)
-        self._ax_pres   = self._glw.addPlot(row=3, col=2)
-        self._ax_efield = self._glw.addPlot(row=3, col=3)
+        self._ax_vtor   = self._glw.addPlot(row=2, col=3)
+        self._ax_efield = self._glw.addPlot(row=2, col=4)
+        self._ax_zeff   = self._glw.addPlot(row=2, col=5)
 
         self._ax_cx.hideButtons()
 
         # Legends for the panels that overlay several named series.
-        for ax in (self._ax_jtor, self._ax_ni, self._ax_ti, self._ax_vtor, self._ax_pres):
+        for ax in (self._ax_jtor, self._ax_ni, self._ax_ti, self._ax_vtor,
+                   self._ax_pres, self._ax_zeff):
             ax.addLegend(offset=(-5, 5), labelTextSize='7pt')
 
         # Minority-ion density (×100) on a twin y-axis linked to the ni panel.
@@ -805,6 +915,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._plots = [
             self._ax_cx, self._ax_ne, self._ax_te, self._ax_jtor, self._ax_ni,
             self._ax_ti, self._ax_conv, self._ax_vtor, self._ax_pres, self._ax_efield,
+            self._ax_zeff,
         ]
 
         # Per-panel item cache: plot items are created once and updated via
@@ -830,6 +941,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             self._ax_vtor:   'v<sub>tor</sub> [km/s]',
             self._ax_pres:   'Pressure [kPa]',
             self._ax_efield: 'E<sub>r</sub> [kV/m]',
+            self._ax_zeff:   'Z<sub>eff</sub>',
         }
         for ax, title in titles.items():
             ax.setTitle(title, size='9pt')
@@ -927,8 +1039,32 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             self._status_label.setText(f'Invalid shot: {text!r}')
             return None
 
+    def _populate_tags(self):
+        """Query D3DRDB for the available tags to populate the tag combo."""
+        worker = self._start_rdb_worker(
+            list_all_tags,
+            status_msg='Querying D3DRDB for tags…',
+        )
+        worker.result.connect(self._on_tags_found)
+        worker.error.connect(self._on_rdb_error)
+        worker.start()
+
+    def _on_tags_found(self, tags):
+        self._cancel_rdb_worker()
+        self._set_buttons_enabled(True)
+        # Repopulate without firing the tag-changed handlers for each programmatic change.
+        current = self._flavor_combo.currentText()
+        self._flavor_combo.blockSignals(True)
+        self._flavor_combo.clear()
+        self._flavor_combo.addItems(tags)
+        self._flavor_combo.setCurrentText(current)
+        self._flavor_combo.blockSignals(False)
+        # Only one D3DRDB call runs at a time, so fetch shots now that tags are ready.
+        self._populate_shots()
+
     def _populate_shots(self):
         """Query D3DRDB for the shots available under the current tag."""
+        self.rdb_fetch_start = time.time()
         worker = self._start_rdb_worker(
             list_shots_for_tag, self._flavor_combo.currentText(),
             status_msg='Querying D3DRDB for shots…',
@@ -946,7 +1082,10 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._shot_combo.addItems([str(s) for s in shots])   # most-recent first
         self._shot_combo.blockSignals(False)
         self._status_label.setStyleSheet('color: grey; font-style: italic;')
-        self._status_label.setText(f'{len(shots)} shots for tag {self._flavor_combo.currentText()}')
+        time_elapsed = -1.0
+        if self.rdb_fetch_start is not None:
+            time_elapsed = time.time() - self.rdb_fetch_start
+        self._status_label.setText(f'{len(shots)} shots for tag {self._flavor_combo.currentText()} in {time_elapsed:1.2f} s')
 
         # A CLI --shot N auto-loads once, after the list is available.
         if self._pending_autofetch:
@@ -991,7 +1130,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         if not prof_id:
             prof_id = auto_prof
             self._prof_id_edit.setText(prof_id)
-
+        self.data_fetch_start = time.time()
         self._start_load(shot, efit_tree, eq_id, prof_tree, prof_id)
 
     def _start_load(self, shot, efit_tree, efit_run_id, profiles_tree, profiles_run_id):
@@ -1038,9 +1177,12 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             self._time_slider.setValue(0)
 
         self._status_label.setStyleSheet('color: grey; font-style: italic;')
+        time_elapsed = -1.0
+        if self.data_fetch_start is not None:
+            time_elapsed = time.time() - self.data_fetch_start
         self._status_label.setText(
             f'Loaded shot {self._shot_combo.currentText()}  —  '
-            f'{len(np.asarray(times)) if times is not None else 0} time slices'
+            f'{len(np.asarray(times)) if times is not None else 0} time slices in {time_elapsed:1.2f} s'
         )
         self._replot()
 
@@ -1154,6 +1296,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             (lambda ax: plot_pressure(ax, d, t),              self._ax_pres),
             (lambda ax: plot_profile_quantity(
                 ax, d, t, f'{cp}.e_field.radial', None, blue, 1e-3), self._ax_efield),
+            (lambda ax: plot_zeff(ax, d, t),                  self._ax_zeff),
         ]:
             try:
                 fn(ax)
@@ -1167,7 +1310,11 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         if times_eq is not None and t < len(times_eq):
             shot = self._shot_combo.currentText()
             t_s = float(times_eq[t])
-            self._title_label.setText(f'DIII-D #{shot}  @  {t_s*1e3:.1f} ms')
+            title = f'DIII-D #{shot}  @  {t_s*1e3:.1f} ms'
+            desc = str(d.get('summary.description') or '').strip()
+            if desc:
+                title += f'  —  {desc}'
+            self._title_label.setText(title)
 
 
 # ---------------------------------------------------------------------------

@@ -140,6 +140,16 @@ class PfActiveMapper(IDSMapper):
             docs_file=self.CONFIG_PATH
         )
 
+        for field in ['r', 'z']:
+            self.specs[f"pf_active.coil.element.geometry.outline.{field}"] = IDSEntrySpec(
+                stage=RequirementStage.COMPUTED,
+                depends_on=[],
+                compose=lambda shot, raw, fld=field:
+                    self._compose_outline_field(shot, raw, fld),
+                ids_path=f"pf_active.coil.element.geometry.outline.{field}",
+                docs_file=self.CONFIG_PATH
+            )
+
         for field in ['r', 'z', 'width', 'height']:
             self.specs[f"pf_active.coil.element.geometry.rectangle.{field}"] = IDSEntrySpec(
                 stage=RequirementStage.COMPUTED,
@@ -184,18 +194,18 @@ class PfActiveMapper(IDSMapper):
     # Requirement derivation functions
     def _derive_current_data_requirements(self, shot: int, _raw_data: dict,
                                          coil_name: str) -> List[Requirement]:
-        """Derive requirements for current data for a specific coil."""
-        return [Requirement(f'ptdata2("{coil_name}",{shot})', shot, None)]
+        """Derive requirements for a coil (data, time, and header bundled under __ptdata__ key)."""
+        return [Requirement(coil_name, shot, "__ptdata__")]
 
     def _derive_current_time_requirements(self, shot: int, _raw_data: dict,
                                          coil_name: str) -> List[Requirement]:
-        """Derive requirements for current time for a specific coil."""
-        return [Requirement(f'dim_of(ptdata2("{coil_name}",{shot}),0)', shot, None)]
+        """Derive requirements for current time (same key as data — deduplication handles it)."""
+        return [Requirement(coil_name, shot, "__ptdata__")]
 
     def _derive_current_header_requirements(self, shot: int, _raw_data: dict,
                                            coil_name: str) -> List[Requirement]:
-        """Derive requirements for current header for a specific coil."""
-        return [Requirement(f'pthead2("{coil_name}",{shot}), __rarray', shot, None)]
+        """Derive requirements for current header (same key as data — deduplication handles it)."""
+        return [Requirement(coil_name, shot, "__ptdata__")]
 
     # Compose functions - Hardware geometry
     def _compose_coil_field(self, shot: int, raw_data: dict, field: str) -> np.ndarray:
@@ -299,6 +309,31 @@ class PfActiveMapper(IDSMapper):
 
         return ak.Array(result)
 
+    def _compose_outline_field(self, shot: int, raw_data: dict, field: str) -> ak.Array:
+        """
+        Compose outline geometry field (r, z).
+
+        Returns awkward array: ragged array (different element counts per coil).
+        Note: Some coils use rectangle geometry (type 2) instead of outline (type 1).
+        For those elements, outline fields are empty arrays (not present).
+        """
+        coils = self._load_pf_coils(shot)
+
+        result = []
+        for coil in coils:
+            elements = coil.get('element', [])
+            coil_elements = []
+            for element in elements:
+                geometry = element.get('geometry', {})
+                # Only add outline field if outline geometry exists
+                if 'outline' in geometry:
+                    outline = geometry['outline']
+                    coil_elements.append(outline.get(field, 0.0))
+                # For other types of geometry, don't add anything - leave empty
+            result.append(coil_elements)
+
+        return ak.Array(result)
+
     # Compose functions - Current data
     def _compose_current_data(self, shot: int, raw_data: dict) -> ak.Array:
         """
@@ -313,14 +348,14 @@ class PfActiveMapper(IDSMapper):
         result = []
         for k, coil_name in enumerate(self._coil_names):
             # Get current data
-            data_key = Requirement(f'ptdata2("{coil_name}",{shot})', shot, None).as_key()
+            key = Requirement(coil_name, shot, "__ptdata__").as_key()
 
-            if data_key not in raw_data:
+            if key not in raw_data:
                 # Coil data not available
                 result.append([])
                 continue
 
-            current = raw_data[data_key]
+            current = raw_data[key]['data']
 
             # Apply F-coil correction (divide by turns_with_sign)
             if 'F' in coil_name:
@@ -346,16 +381,14 @@ class PfActiveMapper(IDSMapper):
         result = []
         for coil_name in self._coil_names:
             # Get time data
-            time_key = Requirement(
-                f'dim_of(ptdata2("{coil_name}",{shot}),0)', shot, None
-            ).as_key()
+            key = Requirement(coil_name, shot, "__ptdata__").as_key()
 
-            if time_key not in raw_data:
+            if key not in raw_data:
                 # Coil time not available
                 result.append([])
                 continue
 
-            time = raw_data[time_key] / 1000.0  # ms to s
+            time = raw_data[key]['times'] / 1000.0  # ms to s
             result.append(time)
 
         return ak.Array(result)
@@ -373,26 +406,15 @@ class PfActiveMapper(IDSMapper):
         result = []
         for k, coil_name in enumerate(self._coil_names):
             # Get data to determine time length
-            data_key = Requirement(f'ptdata2("{coil_name}",{shot})', shot, None).as_key()
+            key = Requirement(coil_name, shot, "__ptdata__").as_key()
 
-            if data_key not in raw_data:
+            if key not in raw_data:
                 # Coil data not available
                 result.append([])
                 continue
 
-            nt = len(raw_data[data_key])
-
-            # Get header information
-            header_key = Requirement(
-                f'pthead2("{coil_name}",{shot}), __rarray', shot, None
-            ).as_key()
-
-            if header_key not in raw_data:
-                # Header not available - use zeros
-                result.append(np.zeros(nt))
-                continue
-
-            header = raw_data[header_key]
+            nt = len(raw_data[key]['data'])
+            header = raw_data[key]['rarray']
 
             # OMAS formula: abs(header[3] * header[4]) * ones(nt) * 10.0
             error = np.abs(header[3] * header[4]) * np.ones(nt) * 10.0

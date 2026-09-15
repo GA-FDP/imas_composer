@@ -15,6 +15,8 @@ fields:
   - coil.element.name
   - coil.element.turns_with_sign
   - coil.element.geometry.geometry_type
+  - coil.element.geometry.outline.r
+  - coil.element.geometry.outline.z
   - coil.element.geometry.rectangle.r
   - coil.element.geometry.rectangle.z
   - coil.element.geometry.rectangle.width

@@ -1,0 +1,42 @@
+name: imas_composer
+
+channels:
+  - conda-forge
+
+dependencies:
+  # Core runtime deps
+  - python >=3.11
+  - numpy >=1.24
+  - pyyaml *
+  - awkward *
+  - scipy *
+
+  # Test tools
+  - pytest *
+  - pytest-benchmark *
+  - pytest-xdist *
+  - pexpect *
+  - tqdm *
+  - mdsplus =7.157.0
+
+  # For pip install
+  - pip *
+  - setuptools
+  - contourpy
+  - pyqtgraph
+  - pyodbc
+  - pyqt
+
+  # OMAS dependencies only
+  - boto3
+  - botocore
+  - cython
+  - dnspython
+  - matplotlib-base
+  - netcdf4
+  - pint
+  - pymongo
+  - pyro5
+  - uncertainties
+  - xarray
+  - xmltodict

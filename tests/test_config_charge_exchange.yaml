@@ -41,6 +41,12 @@ omas_path_map:
   charge_exchange.channel.position.phi.data: charge_exchange.channel.:.position.phi.data
   charge_exchange.channel.position.phi.time: charge_exchange.channel.:.position.phi.time
 
+  # Ion species identity (parsed from CALIBRATION LINEID)
+  charge_exchange.channel.ion.label: charge_exchange.channel.:.ion.:.label
+  charge_exchange.channel.ion.a: charge_exchange.channel.:.ion.:.a
+  charge_exchange.channel.ion.z_ion: charge_exchange.channel.:.ion.:.z_ion
+  charge_exchange.channel.ion.z_n: charge_exchange.channel.:.ion.:.z_n
+
   # Ion temperature
   charge_exchange.channel.ion.t_i.data: charge_exchange.channel.:.ion.:.t_i.data
   charge_exchange.channel.ion.t_i.error: charge_exchange.channel.:.ion.:.t_i.error

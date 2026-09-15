@@ -104,7 +104,7 @@ class D3DRDB:
             f"UID={self._username};"
             f"PWD={self._password};"
             "TDS_Version=7.0;"
-            "Login Timeout=30;"
+            "Login Timeout=60;"
         )
         self._cnxn = pyodbc.connect(conn_str)
         self._cursor = self._cnxn.cursor()
@@ -221,6 +221,17 @@ def list_available_tags(shot: int) -> List[str]:
     """Return all TAG values found for *shot* (ignoring the ignore flag)."""
     runs = available_iri_results(shot, tag=None, ignore_ignore=True)
     return sorted({r['TAG'] for r in runs.values()})
+
+
+def list_all_tags() -> List[str]:
+    """Return all IRI CAKE tags present in the run log, alphabetically."""
+    with D3DRDB() as db:
+        rows = db.query(
+            "SELECT DISTINCT tag FROM iri_run_log "
+            "WHERE experiment='DIII-D' AND ignore='False' "
+            "ORDER BY tag"
+        )
+    return [r['TAG'] for r in rows if r['TAG'] is not None]
 
 
 def list_shots_for_tag(tag: str = 'IRI_CAKE01') -> List[int]:
