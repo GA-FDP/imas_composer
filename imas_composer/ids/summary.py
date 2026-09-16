@@ -53,7 +53,7 @@ class SummaryMapper(IDSMapper):
             stage=RequirementStage.DIRECT,
             static_requirements=[
                 Requirement(
-                    r"dim_of(\TRANSPORT::TOP.GLOBAL.TIMES.TAUE, 0) ",
+                    r"dim_of(\TRANSPORT::TOP.GLOBAL.TIMES.TAUE, 0)",
                     0,
                     "TRANSPORT",
                 ),
@@ -82,9 +82,11 @@ class SummaryMapper(IDSMapper):
         )
 
         # --- public: summary.global_quantities.tau_energy.time ---
+        # Depends on both _taue_time (for the raw time array) and _taue (for
+        # the valid-point mask, so that value and time stay the same length).
         self.specs["summary.global_quantities.tau_energy.time"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["summary._taue_time"],
+            depends_on=["summary._taue_time", "summary._taue"],
             compose=self._compose_tau_energy_time,
             ids_path="summary.global_quantities.tau_energy.time",
             docs_file=self.CONFIG_PATH,
@@ -103,26 +105,38 @@ class SummaryMapper(IDSMapper):
         """
         Compose energy confinement time values (seconds).
 
-        TRANSPORT.GLOBAL.TIMES.TAUE is stored in seconds.
+        TRANSPORT.GLOBAL.TIMES.TAUE is stored in seconds.  Non-positive and
+        non-finite values (analysis artifacts or L-mode ramp sentinels) are
+        removed; the corresponding time points are also removed by
+        _compose_tau_energy_time via the same mask stored on this array.
         """
         key = Requirement(
             r"\TRANSPORT::TOP.GLOBAL.TIMES.TAUE", shot, "TRANSPORT"
         ).as_key()
-        return np.asarray(raw_data[key], dtype=float)
+        tau_e = np.asarray(raw_data[key], dtype=float)
+        mask = np.isfinite(tau_e) & (tau_e > 0)
+        return tau_e[mask]
 
     def _compose_tau_energy_time(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Compose time base for tau_energy (seconds).
 
         dim_of(..., 0) returns milliseconds; divide by 1e3 to convert to seconds.
+        Applies the same valid-point mask as _compose_tau_energy_value so that
+        value and time arrays have the same length.
         """
-        key = Requirement(
+        time_key = Requirement(
             r"dim_of(\TRANSPORT::TOP.GLOBAL.TIMES.TAUE, 0)",
             shot,
             "TRANSPORT",
         ).as_key()
-        # The time is stored as ms; we need to convert to s
-        return np.asarray(raw_data[key], dtype=float)/1e3
+        value_key = Requirement(
+            r"\TRANSPORT::TOP.GLOBAL.TIMES.TAUE", shot, "TRANSPORT"
+        ).as_key()
+        tau_e = np.asarray(raw_data[value_key], dtype=float)
+        mask = np.isfinite(tau_e) & (tau_e > 0)
+        t = np.asarray(raw_data[time_key], dtype=float) / 1e3
+        return t[mask]
 
     def _compose_description(self, shot: int, raw_data: dict) -> str:
         """Compose the brief shot comment as a string."""
