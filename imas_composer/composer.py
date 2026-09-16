@@ -390,36 +390,6 @@ class ImasComposer:
 
         return results
 
-    def simple_load(
-        self,
-        ids_paths: List[str],
-        shot: int,
-        max_iterations: int = 10,
-    ) -> Dict[str, Any]:
-        """
-        Convenience wrapper: resolve, fetch, and compose in one call.
-
-        Delegates to :func:`imas_composer.fetchers.simple_load` using this
-        composer instance.  Requires OMAS to be installed.
-
-        Args:
-            ids_paths: List of full IDS paths to load.
-            shot: Shot number.
-            max_iterations: Maximum resolve-fetch iterations (default 10).
-
-        Returns:
-            Dict mapping each ids_path -> composed value.
-
-        Example:
-            >>> composer = ImasComposer()
-            >>> result = composer.simple_load(
-            ...     ['summary.global_quantities.tau_energy.value'], 202161
-            ... )
-            >>> tau_e = result['summary.global_quantities.tau_energy.value']
-        """
-        from .fetchers import simple_load as _simple_load
-        return _simple_load(ids_paths, shot, composer=self, max_iterations=max_iterations)
-
     def get_supported_fields(self, ids_path: str) -> List[str]:
         """
         Get list of supported fields under an IDS path prefix.

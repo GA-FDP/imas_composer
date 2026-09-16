@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 from tests.conftest import REFERENCE_SHOT, load_ids_fields
-from imas_composer import ImasComposer
+from imas_composer.fetchers import simple_load
 
 
 @pytest.mark.parametrize('ids_path', load_ids_fields('summary'))
@@ -32,7 +32,7 @@ def test_can_resolve_requirements(ids_path, composer):
 
 def test_tau_energy_value_is_array(composer):
     """summary.global_quantities.tau_energy.value returns a numpy array."""
-    result = composer.simple_load(
+    result = simple_load(
         ['summary.global_quantities.tau_energy.value'], REFERENCE_SHOT
     )
     tau_e = result['summary.global_quantities.tau_energy.value']
@@ -42,7 +42,7 @@ def test_tau_energy_value_is_array(composer):
 
 def test_tau_energy_value_finite(composer):
     """tau_energy.value contains only finite values."""
-    result = composer.simple_load(
+    result = simple_load(
         ['summary.global_quantities.tau_energy.value'], REFERENCE_SHOT
     )
     tau_e = result['summary.global_quantities.tau_energy.value']
@@ -51,7 +51,7 @@ def test_tau_energy_value_finite(composer):
 
 def test_tau_energy_value_positive(composer):
     """tau_energy.value is strictly positive (confinement time cannot be negative)."""
-    result = composer.simple_load(
+    result = simple_load(
         ['summary.global_quantities.tau_energy.value'], REFERENCE_SHOT
     )
     tau_e = result['summary.global_quantities.tau_energy.value']
@@ -60,7 +60,7 @@ def test_tau_energy_value_positive(composer):
 
 def test_tau_energy_value_plausible_range(composer):
     """tau_energy mean is in the DIII-D range 0.01 – 1.0 s."""
-    result = composer.simple_load(
+    result = simple_load(
         ['summary.global_quantities.tau_energy.value'], REFERENCE_SHOT
     )
     tau_e = result['summary.global_quantities.tau_energy.value']
@@ -72,7 +72,7 @@ def test_tau_energy_value_plausible_range(composer):
 
 def test_tau_energy_time_is_seconds(composer):
     """tau_energy.time values are in seconds (not milliseconds)."""
-    result = composer.simple_load(
+    result = simple_load(
         ['summary.global_quantities.tau_energy.time'], REFERENCE_SHOT
     )
     t = result['summary.global_quantities.tau_energy.time']
@@ -85,7 +85,7 @@ def test_tau_energy_time_is_seconds(composer):
 
 def test_tau_energy_time_monotonic(composer):
     """tau_energy.time is monotonically increasing."""
-    result = composer.simple_load(
+    result = simple_load(
         ['summary.global_quantities.tau_energy.time'], REFERENCE_SHOT
     )
     t = result['summary.global_quantities.tau_energy.time']
@@ -94,7 +94,7 @@ def test_tau_energy_time_monotonic(composer):
 
 def test_tau_energy_value_and_time_same_length(composer):
     """tau_energy.value and .time have the same number of points."""
-    result = composer.simple_load(
+    result = simple_load(
         [
             'summary.global_quantities.tau_energy.value',
             'summary.global_quantities.tau_energy.time',
