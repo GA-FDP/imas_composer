@@ -1,6 +1,7 @@
 name: imas_composer
 
 channels:
+  - ga-fdp
   - conda-forge
 
 dependencies:
@@ -17,10 +18,10 @@ dependencies:
   - pytest-xdist *
   - pexpect *
   - tqdm *
-  - mdsplus =7.157.0
 
-  # OMAS - available on conda-forge since 0.95.2
-  - omas >=0.95.2
+  # Default fetching backend
+  - toksearch_d3d *
+
 
   # For pip install
   - pip *
