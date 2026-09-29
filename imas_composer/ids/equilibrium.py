@@ -1970,13 +1970,12 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_closest_wall_distance(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose closest wall point distance (convert cm to meters).
+        Compose closest wall point distance (metres).
 
-        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.SEPLIM) / 100.
+        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.SEPLIM)
         """
         seplim_key = Requirement(f'{self.aeqdsk_node}.SEPLIM', self.resolve_shot(shot), self.efit_tree).as_key()
-        seplim_cm = raw_data[seplim_key]
-        return seplim_cm / 100.0  # Convert cm to meters
+        return raw_data[seplim_key]
 
     def _compose_gap_names(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -1998,25 +1997,23 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_gap_values(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose gap values for all 4 gaps (convert cm to meters).
+        Compose gap values for all 4 gaps (metres).
 
         Returns (n_time, 4) array with [inboard, outboard, top, bottom] per time.
 
-        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.GAPIN/GAPOUT/GAPTOP/GAPBOT) / 100.
+        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.GAPIN/GAPOUT/GAPTOP/GAPBOT)
         """
         gapin_key = Requirement(f'{self.aeqdsk_node}.GAPIN', self.resolve_shot(shot), self.efit_tree).as_key()
         gapout_key = Requirement(f'{self.aeqdsk_node}.GAPOUT', self.resolve_shot(shot), self.efit_tree).as_key()
         gaptop_key = Requirement(f'{self.aeqdsk_node}.GAPTOP', self.resolve_shot(shot), self.efit_tree).as_key()
         gapbot_key = Requirement(f'{self.aeqdsk_node}.GAPBOT', self.resolve_shot(shot), self.efit_tree).as_key()
 
-        gapin_cm = raw_data[gapin_key]
-        gapout_cm = raw_data[gapout_key]
-        gaptop_cm = raw_data[gaptop_key]
-        gapbot_cm = raw_data[gapbot_key]
+        gapin = raw_data[gapin_key]
+        gapout = raw_data[gapout_key]
+        gaptop = raw_data[gaptop_key]
+        gapbot = raw_data[gapbot_key]
 
-        # Stack into (n_time, 4) array
-        gaps = np.column_stack([gapin_cm, gapout_cm, gaptop_cm, gapbot_cm])
-        return gaps / 100.0  # Convert cm to meters
+        return np.column_stack([gapin, gapout, gaptop, gapbot])
 
     def _compose_strike_point_r(self, shot: int, raw_data: dict) -> ak.Array:
         """
