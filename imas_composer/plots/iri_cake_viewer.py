@@ -40,7 +40,7 @@ from contourpy import contour_generator
 
 from imas_composer.composer import ImasComposer
 from imas_composer.fetchers import simple_load
-from imas_composer.rdb.d3drdb import get_iri_upload_ids, list_shots_for_tag, list_all_tags
+from imas_composer.plots.cake_selector import CakeSelector
 
 pg.setConfigOptions(antialias=True, background='w', foreground='k')
 
@@ -225,28 +225,6 @@ class DataLoader(QtCore.QThread):
 
             self.loaded.emit({**eq_data, **wall_data, **prof_data, **cx_data, **summary_data})
 
-        except Exception:
-            self.error.emit(traceback.format_exc())
-
-
-RDB_TIMEOUT_MS = 20_000
-
-
-class D3DrdbWorker(QtCore.QThread):
-    """Runs a single D3DRDB callable in a background thread."""
-
-    result = QtCore.Signal(object)  # emits the return value on success
-    error  = QtCore.Signal(str)     # emits formatted traceback on failure
-
-    def __init__(self, fn, *args, **kwargs):
-        super().__init__()
-        self._fn = fn
-        self._args = args
-        self._kwargs = kwargs
-
-    def run(self):
-        try:
-            self.result.emit(self._fn(*self._args, **self._kwargs))
         except Exception:
             self.error.emit(traceback.format_exc())
 
@@ -760,23 +738,14 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         self._data: Optional[Dict[str, Any]] = None
         self._loader: Optional[DataLoader] = None
-        self._rdb_worker: Optional[D3DrdbWorker] = None
         # Every started QThread lives here until its run() actually returns, so
         # Qt never destroys a still-running thread (which aborts the process).
         self._live_threads: list = []
-        self._rdb_timeout: Optional[QtCore.QTimer] = None
-        self._pending_load_params: Optional[tuple] = None
         self._shot = shot
         self._flavor = flavor
-        # A CLI --shot N is the one auto-load path: fetch it once the shot list
-        # has been queried (so the two D3DRDB calls never overlap).
-        self._pending_autofetch = shot > 0
-        self.rdb_fetch_start = None
         self.data_fetch_start = None
 
         self._build_ui()
-
-        QtCore.QTimer.singleShot(200, self._populate_tags)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -789,70 +758,10 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(4)
 
-        # ---- control row 1 ----
-        row1 = QtWidgets.QHBoxLayout()
-        row1.addWidget(QtWidgets.QLabel('Tag:'))
-        self._flavor_combo = QtWidgets.QComboBox()
-        # Items are populated from D3DRDB by _populate_tags() so the list stays up to date.
-        self._flavor_combo.setCurrentText(self._flavor)
-        self._flavor_combo.setEditable(True)
-        self._flavor_combo.setFixedWidth(180)
-        row1.addWidget(self._flavor_combo)
-
-        row1.addWidget(QtWidgets.QLabel('Shot:'))
-        self._shot_combo = QtWidgets.QComboBox()
-        self._shot_combo.setEditable(True)
-        self._shot_combo.setFixedWidth(100)
-        if self._shot > 0:
-            self._shot_combo.setCurrentText(str(self._shot))
-        row1.addWidget(self._shot_combo)
-
-        row1.addWidget(QtWidgets.QLabel('EFIT tree:'))
-        self._efit_combo = QtWidgets.QComboBox()
-        self._efit_combo.addItems(['EFIT'])
-        self._efit_combo.setEditable(True)
-        self._efit_combo.setFixedWidth(100)
-        row1.addWidget(self._efit_combo)
-
-        row1.addWidget(QtWidgets.QLabel('Run ID:'))
-        self._efit_id_edit = QtWidgets.QLineEdit()
-        self._efit_id_edit.setPlaceholderText('auto')
-        self._efit_id_edit.setFixedWidth(50)
-        row1.addWidget(self._efit_id_edit)
-
-        row1.addWidget(QtWidgets.QLabel('Profile tree:'))
-        self._prof_combo = QtWidgets.QComboBox()
-        self._prof_combo.addItems(['OMFIT_PROFS']) #, 'ZIPFIT01', 'ZIPFIT02'
-        self._prof_combo.setEditable(True)
-        self._prof_combo.setFixedWidth(130)
-        row1.addWidget(self._prof_combo)
-
-        row1.addWidget(QtWidgets.QLabel('Run ID:'))
-        self._prof_id_edit = QtWidgets.QLineEdit()
-        self._prof_id_edit.setPlaceholderText('auto')
-        self._prof_id_edit.setFixedWidth(50)
-        row1.addWidget(self._prof_id_edit)
-
-        self._fetch_btn = QtWidgets.QPushButton('Fetch Shot')
-        self._fetch_btn.setFixedWidth(90)
-        self._fetch_btn.clicked.connect(self._trigger_fetch_shot)
-        row1.addWidget(self._fetch_btn)
-
-        row1.addStretch()
-        root.addLayout(row1)
-
-        # Reset run IDs when the context that determined them changes
-        self._shot_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=True))
-        self._flavor_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=True))
-        # The available shots depend on the tag, so repopulate the shot list when it changes.
-        self._flavor_combo.currentTextChanged.connect(lambda _: self._populate_shots())
-        self._efit_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=False))
-        self._prof_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=False, prof=True))
-
-        # ---- status bar ----
-        self._status_label = QtWidgets.QLabel('Ready')
-        self._status_label.setStyleSheet('color: grey; font-style: italic;')
-        root.addWidget(self._status_label)
+        # ---- run selection and the shared status line ----
+        self._selector = CakeSelector(shot=self._shot, flavor=self._flavor)
+        self._selector.selected.connect(self._start_load)
+        root.addWidget(self._selector)
 
         # ---- time slider row ----
         row2 = QtWidgets.QHBoxLayout()
@@ -956,47 +865,8 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._replot_timer.timeout.connect(self._on_replot_timer)
 
     # ------------------------------------------------------------------
-    # Fetch logic
+    # Loading
     # ------------------------------------------------------------------
-
-    # ------------------------------------------------------------------
-    # D3DRDB helpers (non-blocking)
-    # ------------------------------------------------------------------
-
-    def _start_rdb_worker(self, fn, *args, status_msg: str = 'Querying D3DRDB…', **kwargs):
-        """Launch *fn* in a D3DrdbWorker with a 10-second timeout watchdog."""
-        self._cancel_rdb_worker()
-        self._set_buttons_enabled(False)
-        self._status_label.setStyleSheet('color: grey; font-style: italic;')
-        self._status_label.setText(status_msg)
-
-        self._rdb_worker = D3DrdbWorker(fn, *args, **kwargs)
-        self._live_threads.append(self._rdb_worker)
-        self._rdb_worker.finished.connect(lambda t=self._rdb_worker: self._reap_thread(t))
-
-        self._rdb_timeout = QtCore.QTimer(singleShot=True)
-        self._rdb_timeout.timeout.connect(self._on_rdb_timeout)
-        self._rdb_timeout.start(RDB_TIMEOUT_MS)
-
-        return self._rdb_worker
-
-    def _cancel_rdb_worker(self):
-        """Stop the timeout and stop listening to the in-flight rdb worker.
-
-        The worker is *not* deleted here: it stays in ``_live_threads`` and
-        self-reaps once its (possibly still-running) call returns, so Qt never
-        destroys a running QThread.
-        """
-        if self._rdb_timeout is not None:
-            self._rdb_timeout.stop()
-            self._rdb_timeout = None
-        if self._rdb_worker is not None:
-            for sig in (self._rdb_worker.result, self._rdb_worker.error):
-                try:
-                    sig.disconnect()
-                except RuntimeError:
-                    pass
-            self._rdb_worker = None
 
     def _reap_thread(self, thread):
         """Drop our reference to a thread once it has truly finished."""
@@ -1004,134 +874,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             self._live_threads.remove(thread)
         if thread is self._loader:
             self._loader = None
-        if thread is self._rdb_worker:
-            self._rdb_worker = None
         thread.deleteLater()
-
-    def _on_rdb_timeout(self):
-        self._cancel_rdb_worker()
-        self._set_buttons_enabled(True)
-        self._status_label.setStyleSheet('color: orange; font-weight: bold;')
-        self._status_label.setText(
-            'D3DRDB connection timed out (10 s). '
-            'Check network, or enter EFIT / profile run IDs manually.'
-        )
-
-    def _on_rdb_error(self, msg: str):
-        self._cancel_rdb_worker()
-        self._set_buttons_enabled(True)
-        last_line = msg.strip().splitlines()[-1]
-        self._status_label.setStyleSheet('color: red; font-style: italic;')
-        self._status_label.setText(f'D3DRDB error: {last_line}')
-        print(msg, file=sys.stderr)
-
-    # ------------------------------------------------------------------
-    # Fetch actions
-    # ------------------------------------------------------------------
-
-    def _selected_shot(self) -> Optional[int]:
-        """Parse the shot combo's current text, or flag a bad entry and return None."""
-        text = self._shot_combo.currentText().strip()
-        try:
-            return int(text)
-        except ValueError:
-            self._status_label.setStyleSheet('color: red; font-style: italic;')
-            self._status_label.setText(f'Invalid shot: {text!r}')
-            return None
-
-    def _populate_tags(self):
-        """Query D3DRDB for the available tags to populate the tag combo."""
-        worker = self._start_rdb_worker(
-            list_all_tags,
-            status_msg='Querying D3DRDB for tags…',
-        )
-        worker.result.connect(self._on_tags_found)
-        worker.error.connect(self._on_rdb_error)
-        worker.start()
-
-    def _on_tags_found(self, tags):
-        self._cancel_rdb_worker()
-        self._set_buttons_enabled(True)
-        # Repopulate without firing the tag-changed handlers for each programmatic change.
-        current = self._flavor_combo.currentText()
-        self._flavor_combo.blockSignals(True)
-        self._flavor_combo.clear()
-        self._flavor_combo.addItems(tags)
-        self._flavor_combo.setCurrentText(current)
-        self._flavor_combo.blockSignals(False)
-        # Only one D3DRDB call runs at a time, so fetch shots now that tags are ready.
-        self._populate_shots()
-
-    def _populate_shots(self):
-        """Query D3DRDB for the shots available under the current tag."""
-        self.rdb_fetch_start = time.time()
-        worker = self._start_rdb_worker(
-            list_shots_for_tag, self._flavor_combo.currentText(),
-            status_msg='Querying D3DRDB for shots…',
-        )
-        worker.result.connect(self._on_shots_found)
-        worker.error.connect(self._on_rdb_error)
-        worker.start()
-
-    def _on_shots_found(self, shots):
-        self._cancel_rdb_worker()
-        self._set_buttons_enabled(True)
-        # Repopulate without firing the run-id reset for each programmatic change.
-        self._shot_combo.blockSignals(True)
-        self._shot_combo.clear()
-        self._shot_combo.addItems([str(s) for s in shots])   # most-recent first
-        self._shot_combo.blockSignals(False)
-        self._status_label.setStyleSheet('color: grey; font-style: italic;')
-        time_elapsed = -1.0
-        if self.rdb_fetch_start is not None:
-            time_elapsed = time.time() - self.rdb_fetch_start
-        self._status_label.setText(f'{len(shots)} shots for tag {self._flavor_combo.currentText()} in {time_elapsed:1.2f} s')
-
-        # A CLI --shot N auto-loads once, after the list is available.
-        if self._pending_autofetch:
-            self._pending_autofetch = False
-            self._shot_combo.setCurrentText(str(self._shot))
-            self._trigger_fetch_shot()
-
-    def _trigger_fetch_shot(self):
-        shot = self._selected_shot()
-        if shot is None:
-            return
-        flavor    = self._flavor_combo.currentText()
-        eq_id     = self._efit_id_edit.text().strip()
-        prof_id   = self._prof_id_edit.text().strip()
-        efit_tree = self._efit_combo.currentText().strip() or 'EFIT'
-        prof_tree = self._prof_combo.currentText().strip() or 'OMFIT_PROFS'
-
-        if eq_id and prof_id:
-            # Both IDs already provided — skip D3DRDB entirely
-            self._start_load(shot, efit_tree, eq_id, prof_tree, prof_id)
-            return
-
-        # Save the non-ID params so _on_ids_found can complete the load
-        self._pending_load_params = (shot, efit_tree, prof_tree, eq_id, prof_id)
-        worker = self._start_rdb_worker(
-            get_iri_upload_ids, shot, flavor,
-            status_msg=f'Querying D3DRDB for shot {shot}…',
-        )
-        worker.result.connect(self._on_ids_found)
-        worker.error.connect(self._on_rdb_error)
-        worker.start()
-
-    def _on_ids_found(self, result):
-        self._cancel_rdb_worker()
-        auto_prof, auto_eq = result
-        shot, efit_tree, prof_tree, eq_id, prof_id = self._pending_load_params
-        self._pending_load_params = None
-
-        if not eq_id:
-            eq_id = auto_eq
-            self._efit_id_edit.setText(eq_id)
-        if not prof_id:
-            prof_id = auto_prof
-            self._prof_id_edit.setText(prof_id)
-        self.data_fetch_start = time.time()
-        self._start_load(shot, efit_tree, eq_id, prof_tree, prof_id)
 
     def _start_load(self, shot, efit_tree, efit_run_id, profiles_tree, profiles_run_id):
         if self._loader is not None and self._loader.isRunning():
@@ -1145,9 +888,10 @@ class IriCakeViewer(QtWidgets.QMainWindow):
                     pass
             self._loader = None
 
-        self._set_buttons_enabled(False)
-        self._status_label.setStyleSheet('color: grey; font-style: italic;')
-        self._status_label.setText(
+        self._shot = shot
+        self.data_fetch_start = time.time()
+        self._selector.set_busy(True)
+        self._selector.set_status(
             f'Loading shot {shot}  EFIT={efit_tree}{efit_run_id}  '
             f'PROFS={profiles_tree}{profiles_run_id}…'
         )
@@ -1158,14 +902,14 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         self._loader = DataLoader(shot, efit_tree, efit_run_id, profiles_tree, profiles_run_id)
         self._live_threads.append(self._loader)
         self._loader.finished.connect(lambda t=self._loader: self._reap_thread(t))
-        self._loader.status.connect(self._status_label.setText)
+        self._loader.status.connect(self._selector.set_status)
         self._loader.loaded.connect(self._on_load_finished)
         self._loader.error.connect(self._on_load_error)
         self._loader.start()
 
     def _on_load_finished(self, data: Dict):
         self._data = data
-        self._set_buttons_enabled(True)
+        self._selector.set_busy(False)
 
         times = data.get('equilibrium.time')
         if times is not None:
@@ -1176,25 +920,23 @@ class IriCakeViewer(QtWidgets.QMainWindow):
             self._time_slider.setMaximum(0)
             self._time_slider.setValue(0)
 
-        self._status_label.setStyleSheet('color: grey; font-style: italic;')
         time_elapsed = -1.0
         if self.data_fetch_start is not None:
             time_elapsed = time.time() - self.data_fetch_start
-        self._status_label.setText(
-            f'Loaded shot {self._shot_combo.currentText()}  —  '
+        self._selector.set_status(
+            f'Loaded shot {self._shot}  —  '
             f'{len(np.asarray(times)) if times is not None else 0} time slices in {time_elapsed:1.2f} s'
         )
         self._replot()
 
     def _on_load_error(self, msg: str):
-        self._set_buttons_enabled(True)
+        self._selector.set_busy(False)
         print(msg, file=sys.stderr)
         self._show_fetch_error(msg)
 
     def _show_fetch_error(self, msg: str):
         """Clear all plots and show a concise error in the status bar."""
-        self._status_label.setStyleSheet('color: red; font-style: italic;')
-        self._status_label.setText('Load error - see console')
+        self._selector.set_status('Load error - see console', 'error')
 
         self._ax_ni2.clear()
         self._ax_ni2._cache.clear()
@@ -1205,15 +947,6 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         self._title_label.setText('Load error - see console')
 
-    def _reset_run_ids(self, *, efit: bool, prof: bool):
-        if efit:
-            self._efit_id_edit.clear()
-        if prof:
-            self._prof_id_edit.clear()
-
-    def _set_buttons_enabled(self, enabled: bool):
-        self._fetch_btn.setEnabled(enabled)
-
     def closeEvent(self, event):
         """Wait for in-flight threads so none is destroyed while still running."""
         for thread in list(self._live_threads):
@@ -1221,6 +954,7 @@ class IriCakeViewer(QtWidgets.QMainWindow):
                 thread.wait(5000)
             except RuntimeError:
                 pass
+        self._selector.wait_for_threads()
         super().closeEvent(event)
 
     # ------------------------------------------------------------------
@@ -1308,9 +1042,8 @@ class IriCakeViewer(QtWidgets.QMainWindow):
 
         # Title
         if times_eq is not None and t < len(times_eq):
-            shot = self._shot_combo.currentText()
             t_s = float(times_eq[t])
-            title = f'DIII-D #{shot}  @  {t_s*1e3:.1f} ms'
+            title = f'DIII-D #{self._shot}  @  {t_s*1e3:.1f} ms'
             desc = str(d.get('summary.description') or '').strip()
             if desc:
                 title += f'  —  {desc}'
