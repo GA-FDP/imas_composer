@@ -33,14 +33,6 @@ field_tolerances:
   # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
     rtol: 1.0e-8
     atol: 1.0e-8
-  equilibrium.time_slice.boundary_separatrix.closest_wall_point.distance:
-  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-8
-    atol: 1.0e-8
-  equilibrium.time_slice.boundary_separatrix.gap.value:
-  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-8
-    atol: 1.0e-8
   equilibrium.time_slice.boundary_separatrix.strike_point.r:
   # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
     rtol: 1.0e-8
