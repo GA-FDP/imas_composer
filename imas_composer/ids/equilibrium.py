@@ -1950,23 +1950,23 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_geometric_axis_r(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose geometric axis R coordinate (convert cm to meters).
+        Compose geometric axis R coordinate.
 
-        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.RSURF) / 100.
+        AEQDSK.RSURF is stored in metres in DIII-D MDSplus (confirmed; no conversion needed).
+        Note: OMAS applies an erroneous /100 — see GA-FDP/imas_composer#112.
         """
         rsurf_key = Requirement(f'{self.aeqdsk_node}.RSURF', self.resolve_shot(shot), self.efit_tree).as_key()
-        rsurf_cm = raw_data[rsurf_key]
-        return rsurf_cm / 100.0  # Convert cm to meters
+        return raw_data[rsurf_key]
 
     def _compose_geometric_axis_z(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose geometric axis Z coordinate (convert cm to meters).
+        Compose geometric axis Z coordinate.
 
-        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.ZSURF) / 100.
+        AEQDSK.ZSURF is stored in metres in DIII-D MDSplus (confirmed; no conversion needed).
+        Note: OMAS applies an erroneous /100 — see GA-FDP/imas_composer#112.
         """
         zsurf_key = Requirement(f'{self.aeqdsk_node}.ZSURF', self.resolve_shot(shot), self.efit_tree).as_key()
-        zsurf_cm = raw_data[zsurf_key]
-        return zsurf_cm / 100.0  # Convert cm to meters
+        return raw_data[zsurf_key]
 
     def _compose_closest_wall_distance(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -2084,13 +2084,13 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_minor_radius(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose minor radius (convert cm to meters).
+        Compose minor radius.
 
-        OMAS: \\EFIT::TOP.RESULTS.AEQDSK.AMINOR / 100.
+        AEQDSK.AMINOR is stored in metres in DIII-D MDSplus (confirmed; no conversion needed).
+        Note: OMAS applies an erroneous /100 — see GA-FDP/imas_composer#112.
         """
         aminor_key = Requirement(f'{self.aeqdsk_node}.AMINOR', self.resolve_shot(shot), self.efit_tree).as_key()
-        aminor_cm = raw_data[aminor_key]
-        return aminor_cm / 100.0  # Convert cm to meters
+        return raw_data[aminor_key]
 
     def _compose_mse_measured(self, shot: int, raw_data: dict) -> np.ndarray:
         """
