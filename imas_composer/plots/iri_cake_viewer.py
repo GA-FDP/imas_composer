@@ -39,6 +39,7 @@ from scipy.interpolate import RegularGridInterpolator
 from contourpy import contour_generator
 
 from imas_composer.composer import ImasComposer
+from imas_composer.core import NoData
 from imas_composer.fetchers import simple_load
 from imas_composer.plots.cake_selector import CakeSelector
 
@@ -191,12 +192,19 @@ class DataLoader(QtCore.QThread):
 
             self.status.emit("Fetching equilibrium data…")
             eq_data = simple_load(EQ_FIELDS, self.shot, composer=composer)
+            if isinstance(eq_data['equilibrium.time'], NoData):
+                raise eq_data['equilibrium.time']
 
             self.status.emit("Fetching wall data…")
             wall_data = simple_load(WALL_FIELDS, self.shot, composer=composer)
 
-            self.status.emit("Fetching core profiles…")
-            prof_data = simple_load(PROF_FIELDS, self.shot, composer=composer)
+            # Standard EFITs come without a profiles run: draw the equilibrium only.
+            if self.profiles_run_id:
+                self.status.emit("Fetching core profiles…")
+                prof_data = simple_load(PROF_FIELDS, self.shot, composer=composer)
+            else:
+                self.status.emit("No profiles run — equilibrium only")
+                prof_data = {}
 
             # CER Zeff overlay is optional: a failed charge_exchange fetch must
             # not block the viewer, so its keys are simply absent on failure.
@@ -213,17 +221,22 @@ class DataLoader(QtCore.QThread):
             except RuntimeError:
                 summary_data = {'summary.description': None}
 
-            eq_time = np.asarray(eq_data['equilibrium.time'])
-            cp_time = np.asarray(prof_data['core_profiles.time'])
-            assert len(eq_time) == len(cp_time), (
-                f"equilibrium has {len(eq_time)} time slices but "
-                f"core_profiles has {len(cp_time)}"
-            )
-            assert np.max(np.abs(eq_time - cp_time)) <= 1e-4, (
-                "equilibrium and core_profiles time bases differ by more than 0.1 ms"
-            )
+            # Missing fields are dropped so the plot helpers see them as absent (None).
+            merged = {**eq_data, **wall_data, **prof_data, **cx_data, **summary_data}
+            data = {k: v for k, v in merged.items() if not isinstance(v, NoData)}
 
-            self.loaded.emit({**eq_data, **wall_data, **prof_data, **cx_data, **summary_data})
+            if 'core_profiles.time' in data:
+                eq_time = np.asarray(data['equilibrium.time'])
+                cp_time = np.asarray(data['core_profiles.time'])
+                assert len(eq_time) == len(cp_time), (
+                    f"equilibrium has {len(eq_time)} time slices but "
+                    f"core_profiles has {len(cp_time)}"
+                )
+                assert np.max(np.abs(eq_time - cp_time)) <= 1e-4, (
+                    "equilibrium and core_profiles time bases differ by more than 0.1 ms"
+                )
+
+            self.loaded.emit(data)
 
         except Exception:
             self.error.emit(traceback.format_exc())
@@ -923,9 +936,11 @@ class IriCakeViewer(QtWidgets.QMainWindow):
         time_elapsed = -1.0
         if self.data_fetch_start is not None:
             time_elapsed = time.time() - self.data_fetch_start
+        eq_only = '' if 'core_profiles.time' in data else '  (equilibrium only)'
         self._selector.set_status(
             f'Loaded shot {self._shot}  —  '
             f'{len(np.asarray(times)) if times is not None else 0} time slices in {time_elapsed:1.2f} s'
+            f'{eq_only}'
         )
         self._replot()
 
