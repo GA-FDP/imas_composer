@@ -105,8 +105,15 @@ def _compose_position_r(self, shot: int, raw_data: dict) -> np.ndarray:
 def _compose_time(self, shot: int, raw_data: dict) -> np.ndarray:
     """Time in seconds (MDSplus stores milliseconds)."""
     time_ms = raw_data[('\\TS_BEST:TIME', shot, 'ELECTRONS')]
-    return time_ms / 1000.0  # Convert ms → s
+    return time_ms / 1000.0  # Convert ms → s here, NOT in the TDI string
 ```
+
+> **Rule: never put arithmetic in TDI strings.**
+> The TDI expression is the cache key for `raw_data`. `'\TS_BEST:TIME/1e3'` and
+> `'\TS_BEST:TIME'` are *different keys* — fetching one and looking up the other
+> causes a silent `KeyError` at compose time. Do all unit conversions and
+> transformations in the compose function. See *No Arithmetic in TDI Expressions*
+> in `DEVELOPMENT_PRINCIPLES.md` for details.
 
 ### Handling Uncertainty
 

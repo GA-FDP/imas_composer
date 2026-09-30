@@ -224,7 +224,6 @@ The system automatically resolves dependencies:
 
 ## Requirement Keys
 
-
 Always use tuple keys matching `Requirement.as_key()`:
 
 ```python
@@ -237,6 +236,47 @@ raw_data[req.mds_path] = value
 ```
 
 **Why:** Multiple requests can have same path but different shot/tree.
+
+## No Arithmetic in TDI Expressions
+
+**TDI expressions in `Requirement` objects must be plain MDSplus path fetches — no arithmetic, no unit conversions, no function calls that transform values.**
+
+The TDI string is used verbatim as the cache key (`Requirement.as_key()`) for `raw_data`. Any whitespace difference, trailing character, or added operator produces a **different key**, causing a silent `KeyError` in the compose function even though the data was fetched successfully.
+
+```python
+# CORRECT — plain path fetch; the key is exactly what gets stored
+Requirement(r'\TRANSPORT::TOP.GLOBAL.TIMES.TAUE', shot, 'TRANSPORT')
+
+# WRONG — arithmetic in TDI; the fetched value is stored under
+# ('\\TRANSPORT::TOP.GLOBAL.TIMES.TAUE/1e3', shot, 'TRANSPORT')
+# but the compose function looks up the bare path key → KeyError
+Requirement(r'\TRANSPORT::TOP.GLOBAL.TIMES.TAUE/1e3', shot, 'TRANSPORT')
+
+# WRONG — trailing whitespace creates a different key
+Requirement(r'dim_of(\TRANSPORT::TOP.GLOBAL.TIMES.TAUE, 0) ', shot, 'TRANSPORT')
+#                                                           ^ causes key mismatch
+```
+
+**Do all arithmetic in the compose function**, which receives `raw_data` after fetching:
+
+```python
+# Fetch raw milliseconds
+self.specs["summary._taue_time"] = IDSEntrySpec(
+    stage=RequirementStage.DIRECT,
+    static_requirements=[
+        Requirement(r'dim_of(\TRANSPORT::TOP.GLOBAL.TIMES.TAUE, 0)', shot, 'TRANSPORT')
+    ],
+)
+
+# Convert ms → s in the compose function, not in the TDI string
+def _compose_tau_energy_time(self, shot, raw_data):
+    key = Requirement(r'dim_of(\TRANSPORT::TOP.GLOBAL.TIMES.TAUE, 0)', shot, 'TRANSPORT').as_key()
+    return np.asarray(raw_data[key], dtype=float) / 1e3  # ms → s here
+```
+
+**`dim_of(...)` and `getnci(...)` are acceptable** because they fetch a different physical quantity (the time dimension or node attribute), not a transformed version of the signal. The rule is specifically against arithmetic operators (`/`, `*`, `+`, `-`) and value-transforming functions applied to a signal.
+
+**How this bug manifests:** The requirement appears resolved (it's in `raw_data` under the arithmetic key), but `compose()` raises `RuntimeError: Missing required data` because it looks up the plain path key. Always construct the lookup key in a compose function using the same `Requirement(...)` constructor used in the spec, not a hand-written string.
 
 ## Test Configuration System
 
