@@ -1,23 +1,22 @@
 """
 Test handling of missing MDSplus data.
 
-Pins down how MDSplus/OMAS report the "no data" failure modes we map to NoData:
-missing trees, empty (e.g. rejected) nodes, and nodes that did not exist yet
-on old shots.
+Pins down how toksearch reports the "no data" failure modes we map to NoData:
+missing trees, empty (e.g. rejected) nodes, nodes that did not exist yet
+on old shots, and ptdata points without data.
 """
 import re
 
-import awkward as ak
+import numpy as np
 import pytest
-from omas import mdsvalue
 
 from imas_composer import ImasComposer, NoData, Requirement, fetch_requirements, simple_load
-from imas_composer.fetchers import _as_no_data
+from imas_composer.fetchers import _as_no_data, fetch_many_from_req
 
 
 # (treename, shot, mds_path, expected MDSplus status code)
 FAILURE_MODES = [
-    # Missing tree: the whole mdsvalue call raises
+    # Missing tree: openTree fails for the whole group
     pytest.param("OMFIT_PROFS", 118162, "\\TOP.PROFILES.ITEMPFIT", "FOPENR", id="missing_tree"),
     # Empty node: actively rejected CER channel
     pytest.param("IONS", 200000, "\\IONS::TOP.CER.CERQUICK.VERTICAL.CHANNEL08.ROTC", "NODATA",
@@ -33,21 +32,41 @@ FAILURE_MODES = [
 ]
 
 
+# (pointname, shot) of ptdata points without data
+MISSING_PTDATA = [
+    pytest.param("NOSUCHPOINT", 200000, id="nonexistent_point"),
+    pytest.param("ECSDENSF", 118162, id="old_shot_point"),
+]
+
+
 @pytest.mark.integration
 @pytest.mark.requires_mdsplus
+@pytest.mark.requires_toksearch
 @pytest.mark.parametrize("treename, shot, mds_path, code", FAILURE_MODES)
-def test_raw_mdsvalue_failure_mode(treename, shot, mds_path, code):
-    """MDSplus/OMAS report the failure mode with the expected status code."""
-    try:
-        error = mdsvalue("d3d", treename=treename, pulse=shot, TDI={mds_path: mds_path}).raw()[mds_path]
-    except Exception as e:
-        error = e
+def test_raw_toksearch_failure_mode(treename, shot, mds_path, code):
+    """toksearch stores the failure mode in-band with the expected MDSplus status code."""
+    req = Requirement(mds_path, shot, treename)
+    error = fetch_many_from_req([req])[req.as_key()]
     assert isinstance(error, Exception), f"Expected an error, got data: {error!r}"
     assert re.search(rf"%TREE-[A-Z]-{code}\b", str(error)), str(error)
 
 
 @pytest.mark.integration
 @pytest.mark.requires_mdsplus
+@pytest.mark.requires_toksearch
+@pytest.mark.parametrize("pointname, shot", MISSING_PTDATA)
+def test_raw_toksearch_missing_ptdata(pointname, shot):
+    """ptdata reports a point without data through an all-zero pthead2 header, not an error."""
+    req = Requirement(pointname, shot, "__ptdata__")
+    value = fetch_many_from_req([req])[req.as_key()]
+    assert not isinstance(value, Exception), value
+    assert len(value['rarray']) > 0
+    assert not np.any(value['rarray'])
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+@pytest.mark.requires_toksearch
 @pytest.mark.parametrize("treename, shot, mds_path, code", FAILURE_MODES)
 def test_fetch_requirements_returns_no_data(treename, shot, mds_path, code):
     """fetch_requirements stores missing data as NoData with the original MDSplus message."""
@@ -57,6 +76,18 @@ def test_fetch_requirements_returns_no_data(treename, shot, mds_path, code):
     assert re.search(rf"%TREE-[A-Z]-{code}\b", str(value)), str(value)
 
 
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+@pytest.mark.requires_toksearch
+@pytest.mark.parametrize("pointname, shot", MISSING_PTDATA)
+def test_fetch_requirements_missing_ptdata(pointname, shot):
+    """fetch_requirements stores a ptdata point without data as NoData."""
+    req = Requirement(pointname, shot, "__ptdata__")
+    value = fetch_requirements([req])[req.as_key()]
+    assert isinstance(value, NoData), repr(value)
+    assert pointname in str(value)
+
+
 @pytest.mark.parametrize("error, is_no_data", [
     (Exception("%TREE-E-FOPENR, Error opening file read-only."), True),
     (Exception("%TREE-E-NODATA, No data available for this node"), True),
@@ -64,6 +95,8 @@ def test_fetch_requirements_returns_no_data(treename, shot, mds_path, code):
     (Exception("%TREE-E-INVTREE, Invalid tree identification structure"), True),
     (Exception("%TDI-E-SYNTAX, Bad punctuation or misspelled word or number"), False),
     (ConnectionError("Error connecting to atlas.gat.com:8000"), False),
+    (Exception("%MDSPLUS-E-Unknown, Error connecting to fdp://fdp-d3d-origin.nationalresearchplatform.org:8443/mdsip"),
+     False),
 ])
 def test_as_no_data_classification(error, is_no_data):
     """Only MDSplus "no data" status codes are converted to NoData."""
@@ -110,6 +143,7 @@ OLD_SHOT_CASES = [
 
 @pytest.mark.integration
 @pytest.mark.requires_mdsplus
+@pytest.mark.requires_toksearch
 @pytest.mark.parametrize("ids_name, shot, composer_kwargs, expected", OLD_SHOT_CASES)
 def test_simple_load_old_shot(ids_name, shot, composer_kwargs, expected):
     """simple_load populates fields without data with NoData instead of crashing."""
@@ -125,31 +159,12 @@ def test_simple_load_old_shot(ids_name, shot, composer_kwargs, expected):
         assert missing, f"Expected at least one NoData field for {ids_name} #{shot}"
 
 
-RIP_MEASUREMENT_FIELDS = [
-    "interferometer.channel.n_e_line.time",
-    "interferometer.channel.n_e_line.data",
-    "interferometer.channel.n_e_line.validity_timed",
-    "interferometer.channel.n_e_line.data_error_upper",
-]
-
-
 @pytest.mark.integration
 @pytest.mark.requires_mdsplus
-@pytest.mark.parametrize("shot, has_rip", [
-    pytest.param(190000, True, id="co2_and_rip"),
-    pytest.param(175000, False, id="rip_nodata"),
-    pytest.param(150000, False, id="no_rip_tree"),
-])
-def test_interferometer_rip_channels_without_data(shot, has_rip):
-    """RIP channels are always present with include_rip; channels without data are empty."""
-    composer = ImasComposer(include_rip=True)
-    results = simple_load(composer.get_supported_fields("interferometer"), shot, composer=composer)
-    assert not [path for path, value in results.items() if isinstance(value, NoData)]
-    n_co2 = composer._mappers["interferometer"].N_CO2_CHANNELS
-    n_channels = len(results["interferometer.channel.identifier"])
-    assert n_channels > n_co2
-    for path in RIP_MEASUREMENT_FIELDS:
-        lengths = ak.num(results[path], axis=1).tolist()
-        assert len(lengths) == n_channels, path
-        assert all(n > 0 for n in lengths[:n_co2]), path
-        assert all((n > 0) == has_rip for n in lengths[n_co2:]), path
+@pytest.mark.requires_toksearch
+def test_simple_load_missing_ptdata():
+    """Fields composed from a ptdata point without data are NoData."""
+    paths = ["interferometer.interlock_signal.time", "interferometer.interlock_signal.data"]
+    results = simple_load(paths, 118162)
+    for path in paths:
+        assert isinstance(results[path], NoData), f"{path}: {results[path]!r}"

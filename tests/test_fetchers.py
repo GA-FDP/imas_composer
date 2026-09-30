@@ -11,7 +11,9 @@ import importlib.util
 import pytest
 import numpy as np
 
-from imas_composer import ImasComposer, simple_load
+from MDSplus.connection import MdsIpException
+
+from imas_composer import ImasComposer, NoData, simple_load
 from imas_composer.core import Requirement
 from imas_composer.fetchers import fetch_requirements
 
@@ -32,7 +34,8 @@ def recorded_fetch(monkeypatch):
 
     def _record(reqs):
         calls.append(reqs)
-        return {req.as_key(): np.zeros(3) for req in reqs}
+        return {req.as_key(): {'data': np.ones(3), 'times': np.arange(3), 'rarray': np.ones(20)}
+                for req in reqs}
 
     monkeypatch.setattr("imas_composer.fetchers.TOKSEARCH_AVAILABLE", True)
     monkeypatch.setattr("imas_composer.fetchers.fetch_many_from_req", _record)
@@ -60,18 +63,24 @@ def test_duplicate_requirements_fetched_once(recorded_fetch):
     assert len(result) == 1
 
 
-def test_failure_is_stored_in_band(monkeypatch):
-    """An in-band Exception from fetch_many_from_req passes straight through."""
+@pytest.mark.parametrize("error, expected_type", [
+    (ValueError("%TREE-E-NODATA, No data available for this node"), NoData),
+    (MdsIpException("%MDSPLUS-E-Unknown, Error connecting to atlas.gat.com"), MdsIpException),
+])
+def test_failure_is_stored_in_band(monkeypatch, error, expected_type):
+    """An in-band Exception from fetch_many_from_req is stored as NoData for missing data,
+    other errors pass straight through."""
     def _fake_fetch_many(reqs):
-        return {req.as_key(): ValueError("%TREE-E-NODATA") for req in reqs}
+        return {req.as_key(): error for req in reqs}
 
     monkeypatch.setattr("imas_composer.fetchers.TOKSEARCH_AVAILABLE", True)
     monkeypatch.setattr("imas_composer.fetchers.fetch_many_from_req", _fake_fetch_many)
 
-    req = Requirement("NOSUCHPOINT", REFERENCE_SHOT, "__ptdata__")
+    req = Requirement("\\EFIT01::TOP.MEASUREMENTS.SIGPASMA", REFERENCE_SHOT, "EFIT01")
     result = fetch_requirements([req])
 
-    assert isinstance(result[req.as_key()], ValueError)
+    assert type(result[req.as_key()]) is expected_type
+    assert str(result[req.as_key()]) == str(error)
 
 
 def test_empty_requirements_returns_empty():
@@ -98,22 +107,16 @@ class TestAgainstRealData:
         assert len(value['times']) == len(value['data'])
         assert len(value['rarray']) > 4
 
-    def test_bad_pointname_returns_degenerate_data(self):
-        """A nonexistent pointname is not an error: ptdata2() TDI returns a
-        degenerate result rather than raising.  ptdata2 is legacy and deeply
-        embedded, so we cannot make it signal a missing point; instead a bad
-        point comes back as a single-sample zero 'data'/'times' (a real point
-        has many samples), which callers must treat as "no data".
+    def test_bad_pointname_returns_no_data(self):
+        """A nonexistent pointname is not an error in ptdata2() TDI: ptdata
+        signals it through an all-zero pthead2 header.  fetch_requirements
+        stores it as NoData.
         """
         req = Requirement("NOSUCHPOINT", REFERENCE_SHOT, "__ptdata__")
 
         value = fetch_requirements([req])[req.as_key()]
 
-        assert not isinstance(value, Exception), value
-        assert set(value) == {'data', 'times', 'rarray'}
-        assert len(value['data']) == 1
-        assert np.all(np.asarray(value['data']) == 0)
-        assert len(value['times']) == len(value['data'])
+        assert isinstance(value, NoData), value
 
     def test_tree_requirement(self):
         """A named-tree requirement returns an array."""
