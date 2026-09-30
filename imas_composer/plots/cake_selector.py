@@ -6,6 +6,10 @@ shot together with the EFIT and profile trees and run IDs of the chosen CAKE run
 queries (tag list, shot list, upload IDs) run in background threads with a timeout watchdog, so the
 host never blocks on the database.
 
+The pseudo-tag :data:`STANDARD_EFIT_TAG` selects one of the standard per-shot EFIT runs (EFIT01,
+EFIT02, ...) instead: the tree alone identifies the run, so the EFIT run ID is emitted empty.  A host
+that only needs the equilibrium hides the profile fields with ``show_profiles=False``.
+
 The widget also owns the shared status line: the host reports its own progress through
 :meth:`CakeSelector.set_status` so that everything the user sees appears in one place.
 """
@@ -19,9 +23,15 @@ from typing import List, Optional
 
 from pyqtgraph.Qt import QtCore, QtWidgets
 
-from imas_composer.rdb.d3drdb import get_iri_upload_ids, list_shots_for_tag, list_all_tags
+from imas_composer.rdb.d3drdb import (
+    get_iri_upload_ids, list_all_tags, list_shots_for_tag, list_standard_efit_trees,
+)
 
 RDB_TIMEOUT_MS = 20_000
+# Tag entry that selects a standard per-shot EFIT tree instead of an IRI CAKE run.
+STANDARD_EFIT_TAG = 'standard EFIT'
+# Tree of the IRI CAKE EFIT runs, restored when leaving STANDARD_EFIT_TAG.
+CAKE_EFIT_TREE = 'EFIT'
 
 # Status line styles, keyed by the level passed to CakeSelector.set_status().
 STATUS_STYLES = {
@@ -55,7 +65,12 @@ class CakeSelector(QtWidgets.QWidget):
 
     Emits ``selected(shot, efit_tree, efit_run_id, profiles_tree, profiles_run_id)`` once every
     field of a run is known — either because the user filled both run IDs in by hand, or because
-    D3DRDB resolved them from the shot and the tag.
+    D3DRDB resolved them from the shot and the tag.  With :data:`STANDARD_EFIT_TAG` it emits once
+    D3DRDB has listed the standard EFIT trees of the shot, with an empty EFIT run ID.
+
+    With ``show_profiles=False`` the profile tree and run-ID fields are not shown, a hand-entered
+    EFIT run ID alone skips D3DRDB, and the profile entries of ``selected`` are the constructor
+    arguments or whatever D3DRDB resolved.
     """
 
     selected = QtCore.Signal(int, str, str, str, str)
@@ -63,7 +78,7 @@ class CakeSelector(QtWidgets.QWidget):
     def __init__(self, shot: int = -1, flavor: str = 'IRI_CAKE01',
                  efit_tree: str = 'EFIT', efit_run_id: str = '',
                  profiles_tree: str = 'OMFIT_PROFS', profiles_run_id: str = '',
-                 parent=None):
+                 show_profiles: bool = True, parent=None):
         super().__init__(parent)
 
         self._rdb_worker: Optional[D3DrdbWorker] = None
@@ -74,6 +89,10 @@ class CakeSelector(QtWidgets.QWidget):
         self._pending_load_params: Optional[tuple] = None
         self._shot = shot
         self._flavor = flavor
+        self._show_profiles = show_profiles
+        # Profile tree and run ID emitted when the profile fields are hidden.
+        self._profiles_tree = profiles_tree
+        self._profiles_run_id = profiles_run_id
         # A preselected shot is the one auto-load path: fetch it once the shot list
         # has been queried (so the two D3DRDB calls never overlap).
         self._pending_autofetch = shot > 0
@@ -83,7 +102,7 @@ class CakeSelector(QtWidgets.QWidget):
 
         QtCore.QTimer.singleShot(200, self._populate_tags)
         # A run whose IDs are already known needs no D3DRDB, so it must not wait for the shot list either.
-        if self._pending_autofetch and efit_run_id and profiles_run_id:
+        if self._pending_autofetch and efit_run_id and (profiles_run_id or not show_profiles):
             self._pending_autofetch = False
             QtCore.QTimer.singleShot(0, self.fetch_shot)
 
@@ -126,18 +145,19 @@ class CakeSelector(QtWidgets.QWidget):
         self._efit_id_edit.setFixedWidth(50)
         row1.addWidget(self._efit_id_edit)
 
-        row1.addWidget(QtWidgets.QLabel('Profile tree:'))
-        self._prof_combo = QtWidgets.QComboBox()
-        self._prof_combo.addItems([profiles_tree])
-        self._prof_combo.setEditable(True)
-        self._prof_combo.setFixedWidth(130)
-        row1.addWidget(self._prof_combo)
+        if self._show_profiles:
+            row1.addWidget(QtWidgets.QLabel('Profile tree:'))
+            self._prof_combo = QtWidgets.QComboBox()
+            self._prof_combo.addItems([profiles_tree])
+            self._prof_combo.setEditable(True)
+            self._prof_combo.setFixedWidth(130)
+            row1.addWidget(self._prof_combo)
 
-        row1.addWidget(QtWidgets.QLabel('Run ID:'))
-        self._prof_id_edit = QtWidgets.QLineEdit(profiles_run_id)
-        self._prof_id_edit.setPlaceholderText('auto')
-        self._prof_id_edit.setFixedWidth(50)
-        row1.addWidget(self._prof_id_edit)
+            row1.addWidget(QtWidgets.QLabel('Run ID:'))
+            self._prof_id_edit = QtWidgets.QLineEdit(profiles_run_id)
+            self._prof_id_edit.setPlaceholderText('auto')
+            self._prof_id_edit.setFixedWidth(50)
+            row1.addWidget(self._prof_id_edit)
 
         self._fetch_btn = QtWidgets.QPushButton('Fetch Shot')
         self._fetch_btn.setFixedWidth(90)
@@ -150,10 +170,14 @@ class CakeSelector(QtWidgets.QWidget):
         # Reset run IDs when the context that determined them changes
         self._shot_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=True))
         self._flavor_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=True))
+        self._flavor_combo.currentTextChanged.connect(self._on_tag_changed)
         # The available shots depend on the tag, so repopulate the shot list when it changes.
         self._flavor_combo.currentTextChanged.connect(lambda _: self._populate_shots())
         self._efit_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=True, prof=False))
-        self._prof_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=False, prof=True))
+        # A standard EFIT tree picked from the list is a new run; fetch_shot keeps it if the shot has it.
+        self._efit_combo.activated.connect(lambda _: self._is_standard_efit() and self.fetch_shot())
+        if self._show_profiles:
+            self._prof_combo.currentTextChanged.connect(lambda _: self._reset_run_ids(efit=False, prof=True))
         # Committing a shot fetches it right away. currentTextChanged fires per keystroke of the
         # editable combo and must not reach D3DRDB, so only these two commit.
         self._shot_combo.activated.connect(lambda _: self.fetch_shot())
@@ -162,6 +186,8 @@ class CakeSelector(QtWidgets.QWidget):
         self._status_label = QtWidgets.QLabel('Ready')
         self._status_label.setStyleSheet(STATUS_STYLES['info'])
         root.addWidget(self._status_label)
+
+        self._efit_id_edit.setEnabled(not self._is_standard_efit())
 
     # ------------------------------------------------------------------
     # Host interface
@@ -278,7 +304,7 @@ class CakeSelector(QtWidgets.QWidget):
         current = self._flavor_combo.currentText()
         self._flavor_combo.blockSignals(True)
         self._flavor_combo.clear()
-        self._flavor_combo.addItems(tags)
+        self._flavor_combo.addItems([STANDARD_EFIT_TAG, *tags])
         self._flavor_combo.setCurrentText(current)
         self._flavor_combo.blockSignals(False)
         # Only one D3DRDB call runs at a time, so fetch shots now that tags are ready.
@@ -286,6 +312,18 @@ class CakeSelector(QtWidgets.QWidget):
 
     def _populate_shots(self):
         """Query D3DRDB for the shots available under the current tag."""
+        if self._is_standard_efit():
+            # Nearly every shot has a standard EFIT, so there is no list to offer: the shot is typed.
+            self._shot_combo.blockSignals(True)
+            self._shot_combo.clear()
+            if self._shot > 0:
+                self._shot_combo.setCurrentText(str(self._shot))
+            self._shot_combo.blockSignals(False)
+            self.set_status('Type a shot to list its standard EFIT trees')
+            if self._pending_autofetch:
+                self._pending_autofetch = False
+                self.fetch_shot()
+            return
         self.rdb_fetch_start = time.time()
         worker = self._start_rdb_worker(
             list_shots_for_tag, self._flavor_combo.currentText(),
@@ -324,13 +362,23 @@ class CakeSelector(QtWidgets.QWidget):
         shot = self._selected_shot()
         if shot is None:
             return
+        if self._is_standard_efit():
+            self._pending_load_params = shot
+            worker = self._start_rdb_worker(
+                list_standard_efit_trees, shot,
+                status_msg=f'Querying D3DRDB for the standard EFIT trees of shot {shot}…',
+            )
+            worker.result.connect(self._on_trees_found)
+            worker.error.connect(self._on_rdb_error)
+            worker.start()
+            return
+
         flavor    = self._flavor_combo.currentText()
         eq_id     = self._efit_id_edit.text().strip()
-        prof_id   = self._prof_id_edit.text().strip()
-        efit_tree = self._efit_combo.currentText().strip() or 'EFIT'
-        prof_tree = self._prof_combo.currentText().strip() or 'OMFIT_PROFS'
+        efit_tree = self._efit_combo.currentText().strip() or CAKE_EFIT_TREE
+        prof_tree, prof_id = self._profile_selection()
 
-        if eq_id and prof_id:
+        if eq_id and (prof_id or not self._show_profiles):
             # Both IDs already provided — skip D3DRDB entirely
             self.selected.emit(shot, efit_tree, eq_id, prof_tree, prof_id)
             return
@@ -356,11 +404,46 @@ class CakeSelector(QtWidgets.QWidget):
             self._efit_id_edit.setText(eq_id)
         if not prof_id:
             prof_id = auto_prof
-            self._prof_id_edit.setText(prof_id)
+            if self._show_profiles:
+                self._prof_id_edit.setText(prof_id)
         self.selected.emit(shot, efit_tree, eq_id, prof_tree, prof_id)
+
+    def _on_trees_found(self, trees: List[str]):
+        self._cancel_rdb_worker()
+        shot = self._pending_load_params
+        self._pending_load_params = None
+
+        # Keep the tree on display if this shot has it, so that stepping through shots stays on one tree.
+        current = self._efit_combo.currentText().strip()
+        tree = current if current in trees else ('EFIT01' if 'EFIT01' in trees else trees[0])
+        self._efit_combo.blockSignals(True)
+        self._efit_combo.clear()
+        self._efit_combo.addItems(trees)
+        self._efit_combo.setCurrentText(tree)
+        self._efit_combo.blockSignals(False)
+        self.selected.emit(shot, tree, '', *self._profile_selection())
+
+    def _on_tag_changed(self, tag: str):
+        """The EFIT run ID only exists for IRI CAKE runs; a standard EFIT is identified by its tree."""
+        standard = tag == STANDARD_EFIT_TAG
+        self._efit_id_edit.setEnabled(not standard)
+        if not standard and self._efit_combo.currentText() != CAKE_EFIT_TREE:
+            self._efit_combo.blockSignals(True)
+            self._efit_combo.clear()
+            self._efit_combo.addItems([CAKE_EFIT_TREE])
+            self._efit_combo.blockSignals(False)
+
+    def _is_standard_efit(self) -> bool:
+        return self._flavor_combo.currentText() == STANDARD_EFIT_TAG
+
+    def _profile_selection(self) -> tuple:
+        """Profile tree and run ID, from the fields or, when they are hidden, from the constructor."""
+        if not self._show_profiles:
+            return self._profiles_tree, self._profiles_run_id
+        return self._prof_combo.currentText().strip() or 'OMFIT_PROFS', self._prof_id_edit.text().strip()
 
     def _reset_run_ids(self, *, efit: bool, prof: bool):
         if efit:
             self._efit_id_edit.clear()
-        if prof:
+        if prof and self._show_profiles:
             self._prof_id_edit.clear()
