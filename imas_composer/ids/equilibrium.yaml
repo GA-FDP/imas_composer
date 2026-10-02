@@ -17,6 +17,7 @@ fields:
   # Code metadata
   - code.name
   - code.version
+  - code.parameters
 
   # IDS properties
   - ids_properties.homogeneous_time
@@ -122,6 +123,7 @@ fields:
   - time_slice.profiles_2d.b_field_tor
   - time_slice.profiles_2d.b_field_r
   - time_slice.profiles_2d.b_field_z
+  - time_slice.profiles_2d.j_tor
   - vacuum_toroidal_field.b0
   - vacuum_toroidal_field.r0
   - time_slice.convergence.iterations_n
