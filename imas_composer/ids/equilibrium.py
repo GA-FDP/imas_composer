@@ -8,10 +8,11 @@ Implements EFIT equilibrium reconstruction data mapping.
 
 from typing import Dict, Any, Optional
 import xml.etree.ElementTree as ET
+import f90nml
 import numpy as np
 import awkward as ak
 
-from ..core import RequirementStage, Requirement, IDSEntrySpec
+from ..core import RequirementStage, Requirement, IDSEntrySpec, NoData
 from .base import IDSMapper
 from ..cocos import (
     COCOSTransform,
@@ -24,6 +25,11 @@ from scipy.interpolate import interp1d
 
 # XRSP entries beyond kppcur + kffcur hold the netCDF fill value 9.97e36
 XRSP_FILL_THRESHOLD = 1e30
+# defaults of EFIT's rigid vertical shift settings (&INWANT) when a k-file does not set them (set_defaults.f90)
+FITDELZ_DEFAULT = False
+IFITDELZ_DEFAULT = 1
+# a k-file belongs to the equilibrium slice at the same time (KTIME and GTIME in ms)
+KTIME_TOLERANCE = 1e-3
 
 
 def filter_padding(arr: np.ndarray, mask: np.ndarray) -> ak.Array:
@@ -78,6 +84,7 @@ class EquilibriumMapper(IDSMapper):
         self.geqdsk_node = f'\\{efit_tree}::TOP.RESULTS.GEQDSK'
         self.aeqdsk_node = f'\\{efit_tree}::TOP.RESULTS.AEQDSK'
         self.measurements_node = f'\\{efit_tree}::TOP.MEASUREMENTS'
+        self.namelists_node = f'\\{efit_tree}::TOP.NAMELISTS'
 
         # COCOS transformer
         self.cocos = COCOSTransform()
@@ -253,9 +260,23 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # Internal dependency: the k-file namelists EFIT ran with, one per KTIME. Only some runs store them
+        # (CAKE runs do, the standard EFIT01/EFIT02 trees do not).
+        self.specs["equilibrium._keqdsks"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'{self.namelists_node}:KEQDSKS', 0, self.efit_tree),
+                Requirement(f'{self.namelists_node}:KEQDSKS:KTIME', 0, self.efit_tree),
+            ],
+            ids_path="equilibrium._keqdsks",
+            docs_file=self.DOCS_PATH
+        )
+
         self.specs["equilibrium.code.parameters"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._xrsp", "equilibrium._constraint_time_indices"],
+            depends_on=[
+                "equilibrium._xrsp", "equilibrium._constraint_time_indices", "equilibrium._keqdsks", "equilibrium._gtime"
+            ],
             compose=self._compose_code_parameters,
             ids_path="equilibrium.code.parameters",
             docs_file=self.DOCS_PATH
@@ -1864,7 +1885,8 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_code_parameters(self, shot: int, raw_data: dict) -> str:
         """
-        Compose the EFIT code parameters as XML: the basis function coefficients of p' and FF' (XRSP).
+        Compose the EFIT code parameters as XML: the basis function coefficients of p' and FF' (XRSP) and, for runs
+        that store their k-file namelists, EFIT's rigid vertical shift settings (fitdelz, ifitdelz).
 
         XRSP is brsp/darea of the last EFIT iteration (write_m.F90), the kppcur coefficients of p' followed by
         the kffcur coefficients of FF'. With the profile basis functions of the run they give the profiles
@@ -1875,6 +1897,12 @@ class EquilibriumMapper(IDSMapper):
         in g-file units. The basis (kppfnc, kfffnc, knots, tensions) is an EFIT input and not stored.
         One <time_slice> per equilibrium time slice (XRSP is on the MEASUREMENTS time base), the unused
         entries (netCDF fill values) are dropped and the float32 values written in their shortest exact form.
+
+        With fitdelz EFIT fits a rigid vertical shift of the plasma: ifitdelz = 1 translates the total flux by it
+        (pflux.F90), ifitdelz = 3 the plasma current (current.f90). The settings come from the k-file of the slice
+        (NAMELISTS:KEQDSKS, &INWANT), EFIT's defaults where it does not set them. <fitdelz> and <ifitdelz> hold
+        one <time_slice> per equilibrium time slice with a stored k-file at its time and are absent for runs that
+        store none.
 
         Returns:
             XML string
@@ -1888,7 +1916,34 @@ class EquilibriumMapper(IDSMapper):
             used = coefficients[np.abs(coefficients) < XRSP_FILL_THRESHOLD]
             element = ET.SubElement(xrsp_element, "time_slice", index=str(index))
             element.text = " ".join(np.format_float_scientific(value, unique=True) for value in used)
+
+        keqdsks = raw_data[Requirement(f'{self.namelists_node}:KEQDSKS', self.resolve_shot(shot), self.efit_tree).as_key()]
+        ktime = raw_data[Requirement(f'{self.namelists_node}:KEQDSKS:KTIME', self.resolve_shot(shot), self.efit_tree).as_key()]
+        if not isinstance(keqdsks, NoData) and not isinstance(ktime, NoData):
+            gtime = raw_data[Requirement(f'{self.geqdsk_node}.GTIME', self.resolve_shot(shot), self.efit_tree).as_key()]
+            namelists = np.asarray(keqdsks).astype(str)
+            ktime = np.asarray(ktime, dtype=np.float64)
+            if namelists.ndim != 2 or len(namelists) != len(ktime):
+                raise ValueError(
+                    f"KEQDSKS holds {namelists.shape} namelist lines for {len(ktime)} KTIME entries, expected one row "
+                    "of lines per k-file. A batched (getMany) fetch truncates this string array to its first row."
+                )
+            fitdelz_element = ET.SubElement(root, "fitdelz")
+            ifitdelz_element = ET.SubElement(root, "ifitdelz")
+            for index, time in enumerate(np.asarray(gtime, dtype=np.float64)):
+                matches = np.flatnonzero(np.abs(ktime - time) < KTIME_TOLERANCE)
+                if not len(matches):
+                    continue
+                fitdelz, ifitdelz = self._parse_fitdelz("\n".join(namelists[matches[0]]))
+                ET.SubElement(fitdelz_element, "time_slice", index=str(index)).text = str(fitdelz).lower()
+                ET.SubElement(ifitdelz_element, "time_slice", index=str(index)).text = str(ifitdelz)
         return ET.tostring(root, encoding="unicode")
+
+    @staticmethod
+    def _parse_fitdelz(namelist: str) -> tuple[bool, int]:
+        """fitdelz and ifitdelz of a k-file (one line per record), EFIT's defaults where it does not set them."""
+        inwant = f90nml.reads(namelist).get("inwant", {})
+        return bool(inwant.get("fitdelz", FITDELZ_DEFAULT)), int(inwant.get("ifitdelz", IFITDELZ_DEFAULT))
 
     def _compose_constraint_time_indices(self, shot: int, raw_data: dict) -> np.ndarray:
         """
