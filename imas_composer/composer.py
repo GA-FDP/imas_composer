@@ -306,7 +306,7 @@ class ImasComposer:
                     # Use mapper's resolve_shot to allow IDS-specific shot transformations
                     resolved_shot = mapper.resolve_shot(shot)
                     requirements_by_path[original_path].append(
-                        Requirement(req.mds_path, resolved_shot, req.treename)
+                        Requirement(req.mds_path, resolved_shot, req.treename, req.isolated)
                     )
 
             elif spec.stage == RequirementStage.DERIVED:

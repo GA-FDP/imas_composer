@@ -39,6 +39,7 @@ def fetch_requirements(requirements: List[Requirement]) -> Dict[Tuple[str, int, 
     Fetch a list of requirements from MDSplus via OMAS mdsvalue.
 
     Requirements are grouped by (treename, shot) for efficient batching.
+    Requirements with isolated=True are fetched one by one instead of in the getMany batch.
 
     Requirements with treename == "__ptdata__" are treated as ptdata signals:
     the mds_path is used as the signal name and three TDI expressions are built
@@ -106,15 +107,25 @@ def fetch_requirements(requirements: List[Requirement]) -> Dict[Tuple[str, int, 
             by_tree_shot[key].append(req)
 
         for (treename, shot), reqs in by_tree_shot.items():
-            tdi_query = {req.mds_path: req.mds_path for req in reqs}
+            # getMany truncates multi-dimensional string arrays to their first row; a plain TDI string uses get
+            for req in [r for r in reqs if r.isolated]:
+                try:
+                    raw_data[req.as_key()] = mdsvalue('d3d', treename=treename, pulse=shot, TDI=req.mds_path).raw()
+                except Exception as e:
+                    raw_data[req.as_key()] = _as_no_data(e)
+
+            batched = [r for r in reqs if not r.isolated]
+            if not batched:
+                continue
+            tdi_query = {req.mds_path: req.mds_path for req in batched}
             try:
                 result = mdsvalue('d3d', treename=treename, pulse=shot, TDI=tdi_query)
                 tree_data = result.raw()
-                for req in reqs:
+                for req in batched:
                     value = tree_data[req.mds_path]
                     raw_data[req.as_key()] = _as_no_data(value) if isinstance(value, Exception) else value
             except Exception as e:
-                for req in reqs:
+                for req in batched:
                     raw_data[req.as_key()] = _as_no_data(e)
 
     return raw_data

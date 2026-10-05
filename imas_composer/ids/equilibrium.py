@@ -25,9 +25,6 @@ from scipy.interpolate import interp1d
 
 # XRSP entries beyond kppcur + kffcur hold the netCDF fill value 9.97e36
 XRSP_FILL_THRESHOLD = 1e30
-# defaults of EFIT's rigid vertical shift settings (&INWANT) when a k-file does not set them (set_defaults.f90)
-FITDELZ_DEFAULT = False
-IFITDELZ_DEFAULT = 1
 # a k-file belongs to the equilibrium slice at the same time (KTIME and GTIME in ms)
 KTIME_TOLERANCE = 1e-3
 
@@ -265,7 +262,7 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium._keqdsks"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement(f'{self.namelists_node}:KEQDSKS', 0, self.efit_tree),
+                Requirement(f'{self.namelists_node}:KEQDSKS', 0, self.efit_tree, isolated=True),
                 Requirement(f'{self.namelists_node}:KEQDSKS:KTIME', 0, self.efit_tree),
             ],
             ids_path="equilibrium._keqdsks",
@@ -1900,9 +1897,8 @@ class EquilibriumMapper(IDSMapper):
 
         With fitdelz EFIT fits a rigid vertical shift of the plasma: ifitdelz = 1 translates the total flux by it
         (pflux.F90), ifitdelz = 3 the plasma current (current.f90). The settings come from the k-file of the slice
-        (NAMELISTS:KEQDSKS, &INWANT), EFIT's defaults where it does not set them. <fitdelz> and <ifitdelz> hold
-        one <time_slice> per equilibrium time slice with a stored k-file at its time and are absent for runs that
-        store none.
+        (NAMELISTS:KEQDSKS, &INWANT). <fitdelz> and <ifitdelz> hold one <time_slice> per equilibrium time slice
+        with a stored k-file at its time that sets the value and are absent for runs that store none.
 
         Returns:
             XML string
@@ -1926,24 +1922,22 @@ class EquilibriumMapper(IDSMapper):
             if namelists.ndim != 2 or len(namelists) != len(ktime):
                 raise ValueError(
                     f"KEQDSKS holds {namelists.shape} namelist lines for {len(ktime)} KTIME entries, expected one row "
-                    "of lines per k-file. A batched (getMany) fetch truncates this string array to its first row."
+                    "of lines per k-file"
                 )
-            fitdelz_element = ET.SubElement(root, "fitdelz")
-            ifitdelz_element = ET.SubElement(root, "ifitdelz")
+            elements = {key: ET.SubElement(root, key) for key in ("fitdelz", "ifitdelz")}
             for index, time in enumerate(np.asarray(gtime, dtype=np.float64)):
                 matches = np.flatnonzero(np.abs(ktime - time) < KTIME_TOLERANCE)
                 if not len(matches):
                     continue
-                fitdelz, ifitdelz = self._parse_fitdelz("\n".join(namelists[matches[0]]))
-                ET.SubElement(fitdelz_element, "time_slice", index=str(index)).text = str(fitdelz).lower()
-                ET.SubElement(ifitdelz_element, "time_slice", index=str(index)).text = str(ifitdelz)
+                for key, value in self._parse_fitdelz("\n".join(namelists[matches[0]])).items():
+                    ET.SubElement(elements[key], "time_slice", index=str(index)).text = str(value).lower()
         return ET.tostring(root, encoding="unicode")
 
     @staticmethod
-    def _parse_fitdelz(namelist: str) -> tuple[bool, int]:
-        """fitdelz and ifitdelz of a k-file (one line per record), EFIT's defaults where it does not set them."""
+    def _parse_fitdelz(namelist: str) -> dict:
+        """The fitdelz and ifitdelz settings a k-file (one line per record) sets in &INWANT."""
         inwant = f90nml.reads(namelist).get("inwant", {})
-        return bool(inwant.get("fitdelz", FITDELZ_DEFAULT)), int(inwant.get("ifitdelz", IFITDELZ_DEFAULT))
+        return {key: inwant[key] for key in ("fitdelz", "ifitdelz") if key in inwant}
 
     def _compose_constraint_time_indices(self, shot: int, raw_data: dict) -> np.ndarray:
         """

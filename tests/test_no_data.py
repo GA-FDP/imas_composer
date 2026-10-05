@@ -57,6 +57,22 @@ def test_fetch_requirements_returns_no_data(treename, shot, mds_path, code):
     assert re.search(rf"%TREE-[A-Z]-{code}\b", str(value)), str(value)
 
 
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+@pytest.mark.parametrize("treename, shot, mds_path, code", [
+    # Standard EFIT tree without stored k-files
+    pytest.param("EFIT01", 155151, "\\EFIT01::TOP.NAMELISTS:KEQDSKS", "NODATA", id="empty_node"),
+    # EFIT run that does not exist
+    pytest.param("EFIT", 15515199, "\\EFIT::TOP.NAMELISTS:KEQDSKS", "FOPENR", id="missing_tree"),
+])
+def test_isolated_fetch_returns_no_data(treename, shot, mds_path, code):
+    """An isolated requirement (fetched without getMany) stores missing data as NoData as well."""
+    req = Requirement(mds_path, shot, treename, isolated=True)
+    value = fetch_requirements([req])[req.as_key()]
+    assert isinstance(value, NoData), repr(value)
+    assert re.search(rf"%TREE-[A-Z]-{code}\b", str(value)), str(value)
+
+
 @pytest.mark.parametrize("error, is_no_data", [
     (Exception("%TREE-E-FOPENR, Error opening file read-only."), True),
     (Exception("%TREE-E-NODATA, No data available for this node"), True),
