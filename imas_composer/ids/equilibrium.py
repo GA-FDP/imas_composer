@@ -269,10 +269,22 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # Internal dependency: the snap file (&EFITIN) the run was set up with. The standard EFIT01/EFIT02 trees
+        # store it, and their slices have no k-files.
+        self.specs["equilibrium._snap"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'\\{self.efit_tree}::TOP:NAMELIST', 0, self.efit_tree),
+            ],
+            ids_path="equilibrium._snap",
+            docs_file=self.DOCS_PATH
+        )
+
         self.specs["equilibrium.code.parameters"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
-                "equilibrium._xrsp", "equilibrium._constraint_time_indices", "equilibrium._keqdsks", "equilibrium._gtime"
+                "equilibrium._xrsp", "equilibrium._constraint_time_indices", "equilibrium._keqdsks", "equilibrium._snap",
+                "equilibrium._gtime",
             ],
             compose=self._compose_code_parameters,
             ids_path="equilibrium.code.parameters",
@@ -1883,7 +1895,7 @@ class EquilibriumMapper(IDSMapper):
     def _compose_code_parameters(self, shot: int, raw_data: dict) -> str:
         """
         Compose the EFIT code parameters as XML: the basis function coefficients of p' and FF' (XRSP) and, for runs
-        that store their k-file namelists, EFIT's rigid vertical shift settings (fitdelz, ifitdelz).
+        that store their k-file or snap file namelists, EFIT's rigid vertical shift settings (fitdelz, ifitdelz).
 
         XRSP is brsp/darea of the last EFIT iteration (write_m.F90), the kppcur coefficients of p' followed by
         the kffcur coefficients of FF'. With the profile basis functions of the run they give the profiles
@@ -1897,8 +1909,11 @@ class EquilibriumMapper(IDSMapper):
 
         With fitdelz EFIT fits a rigid vertical shift of the plasma: ifitdelz = 1 translates the total flux by it
         (pflux.F90), ifitdelz = 3 the plasma current (current.f90). The settings come from the k-file of the slice
-        (NAMELISTS:KEQDSKS, &INWANT). <fitdelz> and <ifitdelz> hold one <time_slice> per equilibrium time slice
-        with a stored k-file at its time that sets the value and are absent for runs that store none.
+        (NAMELISTS:KEQDSKS, &INWANT) for runs that store k-files (CAKE runs), otherwise from the snap file of the run
+        (TOP:NAMELIST, &EFITIN), which the standard EFIT01/EFIT02 trees store and which holds for every slice.
+        <fitdelz> and <ifitdelz> hold one <time_slice> per equilibrium time slice whose namelist sets the value. A
+        value the namelist does not set is left out (EFIT's default applies, set_defaults.f90: fitdelz = .false.,
+        ifitdelz = 1), and both are absent for runs that store neither namelist.
 
         Returns:
             XML string
@@ -1915,8 +1930,13 @@ class EquilibriumMapper(IDSMapper):
 
         keqdsks = raw_data[Requirement(f'{self.namelists_node}:KEQDSKS', self.resolve_shot(shot), self.efit_tree).as_key()]
         ktime = raw_data[Requirement(f'{self.namelists_node}:KEQDSKS:KTIME', self.resolve_shot(shot), self.efit_tree).as_key()]
+        snap = raw_data[Requirement(f'\\{self.efit_tree}::TOP:NAMELIST', self.resolve_shot(shot), self.efit_tree).as_key()]
+        gtime = np.asarray(
+            raw_data[Requirement(f'{self.geqdsk_node}.GTIME', self.resolve_shot(shot), self.efit_tree).as_key()],
+            dtype=np.float64,
+        )
+        settings = {}  # fitdelz and ifitdelz by equilibrium time slice index
         if not isinstance(keqdsks, NoData) and not isinstance(ktime, NoData):
-            gtime = raw_data[Requirement(f'{self.geqdsk_node}.GTIME', self.resolve_shot(shot), self.efit_tree).as_key()]
             namelists = np.asarray(keqdsks).astype(str)
             ktime = np.asarray(ktime, dtype=np.float64)
             if namelists.ndim != 2 or len(namelists) != len(ktime):
@@ -1924,20 +1944,28 @@ class EquilibriumMapper(IDSMapper):
                     f"KEQDSKS holds {namelists.shape} namelist lines for {len(ktime)} KTIME entries, expected one row "
                     "of lines per k-file"
                 )
-            elements = {key: ET.SubElement(root, key) for key in ("fitdelz", "ifitdelz")}
-            for index, time in enumerate(np.asarray(gtime, dtype=np.float64)):
+            for index, time in enumerate(gtime):
                 matches = np.flatnonzero(np.abs(ktime - time) < KTIME_TOLERANCE)
-                if not len(matches):
-                    continue
-                for key, value in self._parse_fitdelz("\n".join(namelists[matches[0]])).items():
+                if len(matches):
+                    settings[index] = self._parse_fitdelz("\n".join(namelists[matches[0]]), "inwant")
+        elif not isinstance(snap, NoData):
+            run_settings = self._parse_fitdelz(str(np.asarray(snap)), "efitin")
+            settings = {index: run_settings for index in range(len(gtime))}
+
+        if settings:
+            elements = {key: ET.SubElement(root, key) for key in ("fitdelz", "ifitdelz")}
+            for index, values in settings.items():
+                for key, value in values.items():
                     ET.SubElement(elements[key], "time_slice", index=str(index)).text = str(value).lower()
         return ET.tostring(root, encoding="unicode")
 
     @staticmethod
-    def _parse_fitdelz(namelist: str) -> dict:
-        """The fitdelz and ifitdelz settings a k-file (one line per record) sets in &INWANT."""
-        inwant = f90nml.reads(namelist).get("inwant", {})
-        return {key: inwant[key] for key in ("fitdelz", "ifitdelz") if key in inwant}
+    def _parse_fitdelz(namelist: str, group: str) -> dict:
+        """The fitdelz and ifitdelz settings a namelist sets in `group`: &INWANT of a k-file (one line per record) or
+        &EFITIN of a snap file. f90nml skips the text around the groups, such as the comments that follow the
+        &EFITIN group of the stored snap files."""
+        values = f90nml.reads(namelist).get(group, {})
+        return {key: values[key] for key in ("fitdelz", "ifitdelz") if key in values}
 
     def _compose_constraint_time_indices(self, shot: int, raw_data: dict) -> np.ndarray:
         """

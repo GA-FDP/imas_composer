@@ -1,6 +1,6 @@
 """
-Test equilibrium.code.parameters, the XML holding EFIT's p' and FF' basis function coefficients (XRSP) and, for runs
-that store their k-files, EFIT's rigid vertical shift settings (fitdelz, ifitdelz).
+Test equilibrium.code.parameters, the XML holding EFIT's p' and FF' basis function coefficients (XRSP) and EFIT's rigid
+vertical shift settings (fitdelz, ifitdelz) from the k-files or the snap file of the run.
 
 OMAS has no mapping for it. The coefficients are checked against the p' profile: every basis function EFIT
 offers for p' (polynomial or spline, ppbasisfunc.f90) vanishes on the magnetic axis except the first one,
@@ -28,6 +28,15 @@ KEQDSKS_SHOT = 155151
 KEQDSKS_RUN_ID = "04"
 KEQDSKS = Requirement("\\EFIT::TOP.NAMELISTS:KEQDSKS", int(f"{KEQDSKS_SHOT}{KEQDSKS_RUN_ID}"), "EFIT")
 KEQDSKS_SHAPE = (229, 630)
+# Standard EFIT01 runs store no k-files, only their snap file (TOP:NAMELIST). That of 203877 sets FITDELZ = .T. and
+# IFITDELZ = 3, that of 155151 FITDELZ = .T. and leaves IFITDELZ at EFIT's default.
+SNAP_SETTINGS = [
+    pytest.param(203877, {"fitdelz": "true", "ifitdelz": "3"}, id="203877"),
+    pytest.param(KEQDSKS_SHOT, {"fitdelz": "true"}, id="155151_default_ifitdelz"),
+]
+# The stored snap files hold a title line, the &EFITIN group and a description of its parameters
+SNAP_TITLE = "EFIT_SNAP.DAT_JTA_F  (rename to EFIT_SNAP.DAT for EFITD)\n"
+SNAP_DESCRIPTION = "\n  NAMELIST input parameters               03/07/91\n  kffcur : number of fitting parameters in FF'\n"
 
 
 def compose(composer, shot: int) -> tuple[dict, dict]:
@@ -131,21 +140,41 @@ def test_fitdelz_per_time_slice(key, value):
 
 @pytest.mark.integration
 @pytest.mark.requires_mdsplus
-def test_no_fitdelz_without_keqdsks():
-    """Standard EFIT trees store no k-files: code.parameters holds XRSP only."""
-    data, _ = compose(ImasComposer(), KEQDSKS_SHOT)
-    root = ET.fromstring(data[CODE_PARAMETERS])
-    assert root.find("fitdelz") is None and root.find("ifitdelz") is None
+@pytest.mark.parametrize("shot, expected", SNAP_SETTINGS)
+def test_fitdelz_from_snap_file(shot, expected):
+    """Standard EFIT trees store no k-files, the settings of their snap file hold for every slice. A setting the snap
+    file leaves out is left out of the XML too."""
+    data, _ = compose(ImasComposer(), shot)
+    all_slices = range(len(data[TIME]))
+    for key in ("fitdelz", "ifitdelz"):
+        settings = parse_settings(data[CODE_PARAMETERS], key)
+        assert settings == ({index: expected[key] for index in all_slices} if key in expected else {}), key
     assert len(parse_coefficients(data[CODE_PARAMETERS])) == len(data[TIME])
 
 
-@pytest.mark.parametrize("namelist, expected", [
-    pytest.param("&IN1\n ISHOT = 155151\n/", {}, id="no_inwant"),
-    pytest.param("&INWANT\n NITERA = 8\n/", {}, id="neither"),
-    pytest.param("&INWANT\n FITDELZ = .true.\n/", {"fitdelz": True}, id="fitdelz"),
-    pytest.param("&INWANT\n IFITDELZ = 3\n/", {"ifitdelz": 3}, id="ifitdelz"),
-    pytest.param("&INWANT\n FITDELZ = .false.\n IFITDELZ = 3\n/", {"fitdelz": False, "ifitdelz": 3}, id="both"),
+@pytest.mark.parametrize("namelist, group, expected", [
+    pytest.param("&IN1\n ISHOT = 155151\n/", "inwant", {}, id="no_inwant"),
+    pytest.param("&INWANT\n NITERA = 8\n/", "inwant", {}, id="neither"),
+    pytest.param("&INWANT\n FITDELZ = .true.\n/", "inwant", {"fitdelz": True}, id="fitdelz"),
+    pytest.param("&INWANT\n IFITDELZ = 3\n/", "inwant", {"ifitdelz": 3}, id="ifitdelz"),
+    pytest.param(
+        "&INWANT\n FITDELZ = .false.\n IFITDELZ = 3\n/", "inwant", {"fitdelz": False, "ifitdelz": 3}, id="both"
+    ),
+    pytest.param("&INWANT\n FITDELZ = .true.\n/", "efitin", {}, id="other_group"),
+    pytest.param(
+        SNAP_TITLE + " &efitin\n  kffcur=3  kppcur=2\n  fwtcur=  1.     fitdelz = .T. kersil=3 ifitdelz=3\n /"
+        + SNAP_DESCRIPTION,
+        "efitin",
+        {"fitdelz": True, "ifitdelz": 3},
+        id="snap",
+    ),
+    pytest.param(
+        SNAP_TITLE + " &efitin\n  kffcur=2  kppcur=2\n  fitdelz=T\n  relax=0.5\n /" + SNAP_DESCRIPTION,
+        "efitin",
+        {"fitdelz": True},
+        id="snap_without_ifitdelz",
+    ),
 ])
-def test_parse_fitdelz(namelist, expected):
-    """Only the settings the k-file sets, no EFIT defaults."""
-    assert EquilibriumMapper._parse_fitdelz(namelist) == expected
+def test_parse_fitdelz(namelist, group, expected):
+    """Only the settings the namelist sets in its group, no EFIT defaults."""
+    assert EquilibriumMapper._parse_fitdelz(namelist, group) == expected
