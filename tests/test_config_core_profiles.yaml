@@ -1,11 +1,20 @@
 # Test configuration for Core Profiles IDS
 
-# Fields to skip OMAS comparison for (composer still tested for requirements resolution)
+# Fields to skip OMAS comparison for (composer still tested for requirements resolution).
+# A value is either a reason string (skip on every tree) or a mapping of tree name
+# to reason, for fields OMAS maps on some trees but not others.
 skip_fields:
-  # psi_norm is imas_composer-only (not mapped in OMAS). The composer value is
-  # still resolved/composed here; a dedicated test in test_core_profiles_composition.py
-  # validates it against the OMAS-validated rho_pol_norm (rho_pol_norm == sqrt(psi_norm)).
+  # psi_norm is imas_composer-only (not mapped in OMAS for either tree). The composer
+  # value is still resolved/composed here.
   core_profiles.profiles_1d.grid.psi_norm: "imas_composer-only field, no OMAS reference"
+
+  # OMAS's ZIPFIT branch (d3d.py::core_profiles_profile_1d) writes no grid field
+  # except rho_tor_norm, so there is nothing to compare against for ZIPFIT. The
+  # OMFIT_PROFS comparison below is unaffected.
+  core_profiles.profiles_1d.grid.psi:
+    ZIPFIT: "OMAS does not map grid.psi for ZIPFIT; covered by tests/test_zipfit_grid_axes.py"
+  core_profiles.profiles_1d.grid.rho_pol_norm:
+    ZIPFIT: "OMAS does not map grid.rho_pol_norm for ZIPFIT; covered by tests/test_zipfit_grid_axes.py"
 
 # Requirement validation settings
 requirement_validation:

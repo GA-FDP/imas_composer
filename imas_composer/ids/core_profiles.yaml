@@ -35,19 +35,22 @@ fields:
   # Grid - all trees
   - profiles_1d.grid.rho_tor_norm
 
-  # Grid - OMFIT_PROFS only
+  # Grid - poloidal flux coordinates.
+  # OMFIT_PROFS reads these from the tree; ZIPFIT reconstructs them from EFIT01.
+  # OMAS maps them for OMFIT_PROFS only, so the ZIPFIT variants skip the OMAS
+  # comparison (see test_config_core_profiles.yaml) and are instead validated
+  # against the equilibrium IDS in tests/test_zipfit_grid_axes.py.
   - field: profiles_1d.grid.rho_pol_norm
-    trees: [OMFIT_PROFS]
+    trees: [OMFIT_PROFS, ZIPFIT]
   - field: profiles_1d.grid.psi
-    trees: [OMFIT_PROFS]
+    trees: [OMFIT_PROFS, ZIPFIT]
   - field: profiles_1d.grid.psi_magnetic_axis
     trees: [OMFIT_PROFS]
   - field: profiles_1d.grid.psi_boundary
     trees: [OMFIT_PROFS]
-  # psi_norm is imas_composer-only (no OMAS reference); OMAS comparison is
-  # skipped in test_config_core_profiles.yaml and covered by a dedicated test.
+  # psi_norm is imas_composer-only (no OMAS reference for either tree)
   - field: profiles_1d.grid.psi_norm
-    trees: [OMFIT_PROFS]
+    trees: [OMFIT_PROFS, ZIPFIT]
 
   # Electrons - all trees
   - profiles_1d.electrons.density
