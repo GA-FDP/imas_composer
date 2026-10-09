@@ -8,9 +8,10 @@ See OMAS: omas/machine_mappings/d3d.py::core_profiles_profile_1d (lines 1664-171
 from typing import Dict, Any
 import numpy as np
 import awkward as ak
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, PchipInterpolator
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
+from ..cocos import COCOSTransform, apply_cocos_transform
 from .base import IDSMapper
 
 
@@ -31,6 +32,15 @@ class CoreProfilesZipfitMapper(IDSMapper):
             zipfit_tree: ZIPFIT tree to use (default: 'ZIPFIT01')
         """
         self.profiles_tree = zipfit_tree
+
+        # ZIPFIT has no poloidal flux coordinate of its own: the time base and the
+        # psi grid axes are both taken from EFIT01. Hardcoded (rather than taken from
+        # the composer's efit_tree) because the GEQDSK arrays are index-aligned with
+        # GTIME — psi data and time base must come from the same tree.
+        self.efit_tree = 'EFIT01'
+        self._geqdsk_node = f'\\{self.efit_tree}::TOP.RESULTS.GEQDSK'
+        self.cocos = COCOSTransform()
+        self._cocos_cache: Dict[int, int] = {}  # shot -> source COCOS
 
         # Initialize base class (loads config, static_values, supported_fields)
         super().__init__()
@@ -139,11 +149,32 @@ class CoreProfilesZipfitMapper(IDSMapper):
         self.specs["core_profiles._gtime"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
-                Requirement('\\EFIT01::TOP.RESULTS.GEQDSK.GTIME/1000.', 0, 'EFIT01')
+                Requirement(f'{self._geqdsk_node}.GTIME/1000.', 0, self.efit_tree)
             ],
             ids_path="core_profiles._gtime",
             docs_file=self.DOCS_PATH
         )
+
+        # EFIT01 flux geometry, all on the GTIME basis. PSIN is the normalized
+        # poloidal flux grid RHOVN is sampled on; inverting RHOVN gives
+        # psi_norm(rho_tor_norm) on the ZIPFIT rho axis. SSIMAG/SSIBRY denormalize it
+        # and BCENTR/CPASMA identify the source COCOS (see _compose_psi).
+        for name, node in (
+            ('_psin', 'PSIN'),
+            ('_rhovn', 'RHOVN'),
+            ('_ssimag', 'SSIMAG'),
+            ('_ssibry', 'SSIBRY'),
+            ('_cocos_bcentr', 'BCENTR'),
+            ('_cocos_cpasma', 'CPASMA'),
+        ):
+            self.specs[f"core_profiles.{name}"] = IDSEntrySpec(
+                stage=RequirementStage.DIRECT,
+                static_requirements=[
+                    Requirement(f'{self._geqdsk_node}.{node}', 0, self.efit_tree)
+                ],
+                ids_path=f"core_profiles.{name}",
+                docs_file=self.DOCS_PATH
+            )
 
         # Electron density - data, time, and rho dimensions
         self.specs["core_profiles.profiles_1d._density_data"] = self._create_profile_field_spec(
@@ -212,6 +243,44 @@ class CoreProfilesZipfitMapper(IDSMapper):
             ],
             compose=self._compose_rho_tor_norm,
             ids_path="core_profiles.profiles_1d.grid.rho_tor_norm",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Grid: poloidal flux coordinates, reconstructed from the EFIT01 equilibrium
+        # since ZIPFIT stores nothing in poloidal flux.
+        psi_norm_deps = [
+            "core_profiles._gtime",
+            "core_profiles._psin",
+            "core_profiles._rhovn",
+            "core_profiles.profiles_1d._density_rho",
+        ]
+
+        self.specs["core_profiles.profiles_1d.grid.psi_norm"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=psi_norm_deps,
+            compose=self._compose_psi_norm,
+            ids_path="core_profiles.profiles_1d.grid.psi_norm",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["core_profiles.profiles_1d.grid.rho_pol_norm"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=psi_norm_deps,
+            compose=self._compose_rho_pol_norm,
+            ids_path="core_profiles.profiles_1d.grid.rho_pol_norm",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["core_profiles.profiles_1d.grid.psi"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=psi_norm_deps + [
+                "core_profiles._ssimag",
+                "core_profiles._ssibry",
+                "core_profiles._cocos_bcentr",
+                "core_profiles._cocos_cpasma",
+            ],
+            compose=self._compose_psi,
+            ids_path="core_profiles.profiles_1d.grid.psi",
             docs_file=self.DOCS_PATH
         )
 
@@ -524,21 +593,117 @@ class CoreProfilesZipfitMapper(IDSMapper):
                 result.append(np.array([]))
         return ak.Array(result)
 
-    def _compose_rho_tor_norm(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+    def _zipfit_rho_grid(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
-        Compose grid.rho_tor_norm broadcast to all GTIME points.
+        The ZIPFIT rho_tor_norm axis, cropped to rho <= 1.0.
 
-        All ZIPFIT signals share the same rho grid; density's rho axis is used
-        as the representative. Values above 1.0 are excluded.
+        All ZIPFIT signals share the same rho grid; density's rho axis is used as
+        the representative. Every grid.* field is defined on this axis, so they
+        stay index-aligned with each other.
 
         Returns:
-            ak.Array of shape (n_gtime, n_rho)
+            1-D array of length n_rho
         """
         rho_key = self._get_requirement_key('density', shot, dim=0)
         rho = raw_data[rho_key]
         rho = rho[rho <= 1.0]
+        assert np.all(np.diff(rho) > 0), (
+            f"ZIPFIT rho_tor_norm axis is not strictly increasing for shot {shot}"
+        )
+        return rho
+
+    def _compose_rho_tor_norm(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose grid.rho_tor_norm broadcast to all GTIME points.
+
+        Returns:
+            ak.Array of shape (n_gtime, n_rho)
+        """
+        rho = self._zipfit_rho_grid(shot, raw_data)
         gtime = self._get_unified_time(shot, raw_data)
         return ak.Array([rho for _ in gtime])
+
+    def _psi_norm_grid(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
+        """
+        Normalized poloidal flux on the ZIPFIT rho axis, for every GTIME point.
+
+        ZIPFIT has no poloidal flux coordinate, so psi_norm(rho_tor_norm) is
+        obtained by inverting EFIT01 RHOVN, which samples rho_tor_norm on the PSIN
+        grid. No time interpolation is needed: the ZIPFIT time base is EFIT01 GTIME,
+        so the RHOVN slices are already index-aligned with core_profiles.time.
+
+        The interpolation is shape-preserving (PCHIP) rather than a cubic spline.
+        PSIN is uniform while RHOVN is bunched towards the separatrix — near the
+        magnetic axis RHOVN's first interval is ~5x wider than PSIN's — so
+        psi_norm(rho_tor_norm) has near-zero slope and large curvature at the axis.
+        A cubic spline undershoots there and emits psi_norm < 0, which then makes
+        rho_pol_norm = sqrt(psi_norm) undefined. PCHIP cannot overshoot monotone
+        data, so psi_norm stays in [0, 1] and strictly increasing.
+
+        Slices where RHOVN is not strictly increasing have no inverse and would
+        silently produce garbage, so they raise instead.
+
+        Returns:
+            2-D array of shape (n_gtime, n_rho)
+        """
+        psin = raw_data[Requirement(f'{self._geqdsk_node}.PSIN', shot, self.efit_tree).as_key()]
+        rhovn = raw_data[Requirement(f'{self._geqdsk_node}.RHOVN', shot, self.efit_tree).as_key()]
+
+        degenerate = [i for i in range(rhovn.shape[0]) if not np.all(np.diff(rhovn[i]) > 0)]
+        assert not degenerate, (
+            f"{self.efit_tree} RHOVN is not strictly increasing for shot {shot} at GTIME "
+            f"slices {degenerate}; psi_norm(rho_tor_norm) cannot be inverted there."
+        )
+
+        rho = self._zipfit_rho_grid(shot, raw_data)
+        return np.array([
+            PchipInterpolator(rhovn[i], psin)(rho)
+            for i in range(rhovn.shape[0])
+        ])
+
+    def _compose_psi_norm(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose grid.psi_norm (normalized poloidal flux) on the ZIPFIT rho axis.
+
+        Returns:
+            ak.Array of shape (n_gtime, n_rho)
+        """
+        return ak.Array(self._psi_norm_grid(shot, raw_data))
+
+    def _compose_rho_pol_norm(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose grid.rho_pol_norm = sqrt(psi_norm) on the ZIPFIT rho axis.
+
+        Returns:
+            ak.Array of shape (n_gtime, n_rho)
+        """
+        return ak.Array(np.sqrt(self._psi_norm_grid(shot, raw_data)))
+
+    def _compose_psi(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
+        """
+        Compose grid.psi (absolute poloidal flux) on the ZIPFIT rho axis.
+
+        Denormalization mirrors the equilibrium IDS
+        (equilibrium.py::_compose_profiles_1d_psi):
+            psi = psi_norm * (SSIBRY - SSIMAG) + SSIMAG
+        COCOS PSI is applied once, here — psi_norm and rho_pol_norm are normalized
+        and therefore COCOS-invariant.
+
+        Returns:
+            ak.Array of shape (n_gtime, n_rho)
+        """
+        ssimag = raw_data[Requirement(f'{self._geqdsk_node}.SSIMAG', shot, self.efit_tree).as_key()]
+        ssibry = raw_data[Requirement(f'{self._geqdsk_node}.SSIBRY', shot, self.efit_tree).as_key()]
+        bcentr = raw_data[Requirement(f'{self._geqdsk_node}.BCENTR', shot, self.efit_tree).as_key()]
+        cpasma = raw_data[Requirement(f'{self._geqdsk_node}.CPASMA', shot, self.efit_tree).as_key()]
+
+        psi_norm = self._psi_norm_grid(shot, raw_data)
+        psi = psi_norm * (ssibry[:, None] - ssimag[:, None]) + ssimag[:, None]
+
+        return ak.Array(apply_cocos_transform(
+            psi, bcentr, cpasma, "core_profiles.profiles_1d.grid.psi",
+            cocos=self.cocos, cache=self._cocos_cache, cache_key=shot,
+        ))
 
     def _compose_density_thermal(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
         """
@@ -563,7 +728,7 @@ class CoreProfilesZipfitMapper(IDSMapper):
         GTIME is fetched as \\EFIT01::TOP.RESULTS.GEQDSK.GTIME/1000. so no
         unit conversion is needed here.
         """
-        gtime_key = Requirement('\\EFIT01::TOP.RESULTS.GEQDSK.GTIME/1000.', shot, 'EFIT01').as_key()
+        gtime_key = Requirement(f'{self._geqdsk_node}.GTIME/1000.', shot, self.efit_tree).as_key()
         return raw_data[gtime_key]
 
     def _compose_ion_temperature(self, shot: int, raw_data: Dict[str, Any]) -> ak.Array:
