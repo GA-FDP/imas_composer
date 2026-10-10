@@ -1,0 +1,103 @@
+name: tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# Supersede in-flight runs for the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # Login shell so the micromamba environment is activated
+    shell: bash -el {0}
+
+jobs:
+  # Fast, mostly-offline signal: fails in ~a minute if the wiring is broken,
+  # rather than after the slow per-IDS jobs.
+  quick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Use HTTPS for submodules
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # versioneer resolves toksearch_d3d's version from git tags
+          fetch-depth: 0
+
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: environment_dev.yaml
+          cache-environment: true
+
+      - name: Install packages
+        run: |
+          pip install --no-deps --no-build-isolation -e ./omas_submodule
+          pip install --no-deps --no-build-isolation -e ./toksearch_submodule
+          pip install --no-deps --no-build-isolation -e ./fdp_submodule
+          pip install --no-deps --no-build-isolation -e ./toksearch_d3d_submodule
+          pip install --no-deps --no-build-isolation -e .
+
+      - name: Run quick tests
+        env:
+          BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
+          TOKSEARCH_D3D_NO_ATLAS: "1"
+        run: pytest tests/test_fetchers.py tests/test_get_supported_fields.py -n auto --maxfail=0
+
+  ids:
+    needs: quick
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      # One failing IDS should not cancel the others
+      fail-fast: false
+      matrix:
+        ids:
+          - charge_exchange
+          - core_profiles
+          - ec_launchers
+          - ece
+          - equilibrium
+          - gas_injection
+          - interferometer
+          - magnetics
+          - nbi
+          - pf_active
+          - reflectometer_profile
+          - tf
+          - thomson_scattering
+          - wall
+    steps:
+      - name: Use HTTPS for submodules
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: environment_dev.yaml
+          cache-environment: true
+
+      - name: Install packages
+        run: |
+          pip install --no-deps --no-build-isolation -e ./omas_submodule
+          pip install --no-deps --no-build-isolation -e ./toksearch_submodule
+          pip install --no-deps --no-build-isolation -e ./fdp_submodule
+          pip install --no-deps --no-build-isolation -e ./toksearch_d3d_submodule
+          pip install --no-deps --no-build-isolation -e .
+
+      - name: Run ${{ matrix.ids }} tests
+        env:
+          BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
+          TOKSEARCH_D3D_NO_ATLAS: "1"
+        # --maxfail=0 overrides the -x in pyproject addopts so a job reports
+        # every failure in its IDS rather than stopping at the first.
+        run: pytest tests/test_${{ matrix.ids }}_*.py -n auto --maxfail=0
