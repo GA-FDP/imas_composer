@@ -25,27 +25,41 @@ def filter_padding(arr: np.ndarray, mask: np.ndarray) -> ak.Array:
     """
     Remove padding from 2D array using boolean mask, returning ragged awkward array.
 
-    Directly filters using mask without intermediate NaN conversion.
+    Each row is truncated after its last valid entry. Invalid entries before
+    that point are kept as None rather than dropped, so every valid value stays
+    at its original inner index (e.g. a missing first X-point does not shift
+    the second X-point into slot 0). The inner type is only an option type
+    (``?float64``) when such interior gaps exist.
 
     Args:
         arr: 2D numpy array with shape (n_outer, n_max_inner) - data to filter
         mask: 2D boolean array - True where data is valid, False where padding
 
     Returns:
-        Awkward array with ragged inner dimension where mask is True
+        Awkward array with ragged inner dimension
 
     Example:
         >>> arr = np.array([[1, 2, 0, 0], [3, 0, 0, 0], [4, 5, 6, 0]])
-        >>> mask = arr != 0
-        >>> filter_padding(arr, mask)
-        <Array [[1, 2], [3], [4, 5, 6]] type='3 * var * float64'>
+        >>> filter_padding(arr, arr != 0)
+        <Array [[1, 2], [3], [4, 5, 6]] type='3 * var * int64'>
+        >>> arr = np.array([[0, 2], [3, 0], [0, 0]])
+        >>> filter_padding(arr, arr != 0)
+        <Array [[None, 2], [3], []] type='3 * var * ?int64'>
     """
-    filtered_rows = []
-    for row, row_mask in zip(arr, mask):
-        filtered_row = row[row_mask]
-        filtered_rows.append(filtered_row)
+    arr = np.asarray(arr)
+    mask = np.asarray(mask, dtype=bool)
+    n_inner = mask.shape[1]
 
-    return ak.Array(filtered_rows)
+    # Row length = index of the last valid entry + 1 (0 for rows with no valid entries)
+    lengths = np.where(mask.any(axis=1), n_inner - np.argmax(mask[:, ::-1], axis=1), 0)
+    keep = np.arange(n_inner) < lengths[:, None]
+
+    content = ak.Array(arr[keep])
+    valid = mask[keep]
+    if not valid.all():
+        content = ak.mask(content, valid)
+
+    return ak.unflatten(content, lengths)
 
 
 class EquilibriumMapper(IDSMapper):
@@ -590,7 +604,7 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # Internal dependency: AMINOR (minor radius, needs cm to m conversion)
+        # Internal dependency: AMINOR (minor radius)
         self.specs["equilibrium._aminor"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
@@ -1335,7 +1349,7 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # area - plasma cross-sectional area (unit conversion cm²→m²)
+        # area - plasma cross-sectional area
         self.specs["equilibrium._area"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[Requirement(f'{self.aeqdsk_node}.AREA', 0, self.efit_tree)],
@@ -1878,7 +1892,7 @@ class EquilibriumMapper(IDSMapper):
         rbbbs = raw_data[rbbbs_key]
 
         # Filter out padding (where R==0)
-        mask = rbbbs != 0
+        mask = ~np.isclose(rbbbs, 0)
         return filter_padding(rbbbs, mask)
 
     def _compose_boundary_outline_z(self, shot: int, raw_data: dict) -> ak.Array:
@@ -1898,7 +1912,7 @@ class EquilibriumMapper(IDSMapper):
         zbbbs = raw_data[zbbbs_key]
 
         # Filter using R as mask: where R==0 indicates padding, not valid data
-        mask = rbbbs != 0
+        mask = ~np.isclose(rbbbs, 0)
         return filter_padding(zbbbs, mask)
 
     def _compose_xpoint_r(self, shot: int, raw_data: dict) -> ak.Array:
@@ -1920,7 +1934,7 @@ class EquilibriumMapper(IDSMapper):
         xpoints = np.column_stack([rxpt1, rxpt2])
 
         # Filter out padding (where X-point R==0)
-        mask = xpoints != 0
+        mask = ~np.isclose(xpoints, 0)
         return filter_padding(xpoints, mask)
 
     def _compose_xpoint_z(self, shot: int, raw_data: dict) -> ak.Array:
@@ -1944,16 +1958,14 @@ class EquilibriumMapper(IDSMapper):
         xpoints_z = np.column_stack([zxpt1, zxpt2])
 
         # Z==0 means padding (X-points are never at midplane due to physics)
-        mask = xpoints_z != 0
-
+        mask = ~np.isclose(xpoints_z, 0)
         return filter_padding(xpoints_z, mask)
 
     def _compose_geometric_axis_r(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Compose geometric axis R coordinate.
 
-        AEQDSK.RSURF is stored in metres in DIII-D MDSplus (confirmed; no conversion needed).
-        Note: OMAS applies an erroneous /100 — see GA-FDP/imas_composer#112.
+        All equilibrium lenghts are stored in meters in DIII-D MDSplus (unlike EFIT output files)
         """
         rsurf_key = Requirement(f'{self.aeqdsk_node}.RSURF', self.resolve_shot(shot), self.efit_tree).as_key()
         return raw_data[rsurf_key]
@@ -1962,15 +1974,14 @@ class EquilibriumMapper(IDSMapper):
         """
         Compose geometric axis Z coordinate.
 
-        AEQDSK.ZSURF is stored in metres in DIII-D MDSplus (confirmed; no conversion needed).
-        Note: OMAS applies an erroneous /100 — see GA-FDP/imas_composer#112.
+        All equilibrium lenghts are stored in meters in DIII-D MDSplus (unlike EFIT output files)
         """
         zsurf_key = Requirement(f'{self.aeqdsk_node}.ZSURF', self.resolve_shot(shot), self.efit_tree).as_key()
         return raw_data[zsurf_key]
 
     def _compose_closest_wall_distance(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose closest wall point distance (metres).
+        Compose closest wall point distance (meters).
 
         OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.SEPLIM)
         """
@@ -1997,7 +2008,7 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_gap_values(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose gap values for all 4 gaps (metres).
+        Compose gap values for all 4 gaps (meters).
 
         Returns (n_time, 4) array with [inboard, outboard, top, bottom] per time.
 
@@ -2017,7 +2028,9 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_strike_point_r(self, shot: int, raw_data: dict) -> ak.Array:
         """
-        Compose strike point R coordinates for all 4 strike points (convert cm to meters).
+        Compose strike point R coordinates for all 4 strike points.
+
+        All equilibrium lenghts are stored in meters in DIII-D MDSplus (unlike EFIT output files).
 
         Removes invalid strike points (R == -0.89 in OMAS convention).
         Result can have 0-4 strike points per time.
@@ -2030,21 +2043,23 @@ class EquilibriumMapper(IDSMapper):
         rvsiu_key = Requirement(f'{self.aeqdsk_node}.RVSIU', self.resolve_shot(shot), self.efit_tree).as_key()
         rvsou_key = Requirement(f'{self.aeqdsk_node}.RVSOU', self.resolve_shot(shot), self.efit_tree).as_key()
 
-        rvsid_cm = raw_data[rvsid_key]
-        rvsod_cm = raw_data[rvsod_key]
-        rvsiu_cm = raw_data[rvsiu_key]
-        rvsou_cm = raw_data[rvsou_key]
+        rvsid = raw_data[rvsid_key]
+        rvsod = raw_data[rvsod_key]
+        rvsiu = raw_data[rvsiu_key]
+        rvsou = raw_data[rvsou_key]
 
-        # Stack into (n_time, 4) array and convert to meters
-        strike_points_m = np.column_stack([rvsid_cm, rvsod_cm, rvsiu_cm, rvsou_cm]) / 100.0
+        # Stack into (n_time, 4) array
+        strike_points = np.column_stack([rvsid, rvsod, rvsiu, rvsou])
 
-        # Filter out invalid strike points (OMAS uses -0.89 cm as sentinel, which becomes -0.0089 m)
-        mask = strike_points_m != -0.0089
-        return filter_padding(strike_points_m, mask)
+        # Filter out invalid strike points (EFIT uses -0.89m as sentinel)
+        mask = ~np.isclose(strike_points, -0.89)
+        return filter_padding(strike_points, mask)
 
     def _compose_strike_point_z(self, shot: int, raw_data: dict) -> ak.Array:
         """
-        Compose strike point Z coordinates for all 4 strike points (convert cm to meters).
+        Compose strike point Z coordinates for all 4 strike points.
+
+        All equilibrium lenghts are stored in meters in DIII-D MDSplus (unlike EFIT output files).
 
         Uses corresponding R coordinates as mask to handle Z=0 correctly.
         Result can have 0-4 strike points per time.
@@ -2061,30 +2076,28 @@ class EquilibriumMapper(IDSMapper):
         zvsiu_key = Requirement(f'{self.aeqdsk_node}.ZVSIU', self.resolve_shot(shot), self.efit_tree).as_key()
         zvsou_key = Requirement(f'{self.aeqdsk_node}.ZVSOU', self.resolve_shot(shot), self.efit_tree).as_key()
 
-        rvsid_cm = raw_data[rvsid_key]
-        rvsod_cm = raw_data[rvsod_key]
-        rvsiu_cm = raw_data[rvsiu_key]
-        rvsou_cm = raw_data[rvsou_key]
-        zvsid_cm = raw_data[zvsid_key]
-        zvsod_cm = raw_data[zvsod_key]
-        zvsiu_cm = raw_data[zvsiu_key]
-        zvsou_cm = raw_data[zvsou_key]
+        rvsid = raw_data[rvsid_key]
+        rvsod = raw_data[rvsod_key]
+        rvsiu = raw_data[rvsiu_key]
+        rvsou = raw_data[rvsou_key]
+        zvsid = raw_data[zvsid_key]
+        zvsod = raw_data[zvsod_key]
+        zvsiu = raw_data[zvsiu_key]
+        zvsou = raw_data[zvsou_key]
 
-        # Stack Z coordinates and convert to meters
-        strike_points_z_m = np.column_stack([zvsid_cm, zvsod_cm, zvsiu_cm, zvsou_cm]) / 100.0
+        # Stack Z coordinates
+        strike_points_z = np.column_stack([zvsid, zvsod, zvsiu, zvsou])
 
-        # Use R coordinates as mask (R == -0.0089 m means invalid)
-        strike_points_r_m = np.column_stack([rvsid_cm, rvsod_cm, rvsiu_cm, rvsou_cm]) / 100.0
-        mask = strike_points_r_m != -0.0089
-
-        return filter_padding(strike_points_z_m, mask)
+        # Use R coordinates as mask (R == -0.89 m means invalid)
+        strike_points_r = np.column_stack([rvsid, rvsod, rvsiu, rvsou])
+        mask = ~np.isclose(strike_points_r, -0.89)
+        return filter_padding(strike_points_z, mask)
 
     def _compose_minor_radius(self, shot: int, raw_data: dict) -> np.ndarray:
         """
         Compose minor radius.
 
-        AEQDSK.AMINOR is stored in metres in DIII-D MDSplus (confirmed; no conversion needed).
-        Note: OMAS applies an erroneous /100 — see GA-FDP/imas_composer#112.
+        All equilibrium lenghts are stored in meters in DIII-D MDSplus (unlike EFIT output files).
         """
         aminor_key = Requirement(f'{self.aeqdsk_node}.AMINOR', self.resolve_shot(shot), self.efit_tree).as_key()
         return raw_data[aminor_key]
@@ -2665,14 +2678,12 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_global_area(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose plasma cross-sectional area with unit conversion.
+        Compose plasma cross-sectional area.
 
-        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.AREA)/10000.
-        Transform: cm² to m² (divide by 10000)
+        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.AREA)
         """
         area_key = Requirement(f'{self.aeqdsk_node}.AREA', self.resolve_shot(shot), self.efit_tree).as_key()
-        area_cm2 = raw_data[area_key]
-        return area_cm2 / 10000.0
+        return raw_data[area_key]
 
     def _compose_global_li_3(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for li_3."""

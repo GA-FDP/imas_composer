@@ -25,17 +25,6 @@ field_tolerances:
   # OMAS does the ms -> s conversion on the MDSplus side where everything is 32 bit
     rtol: 1.0e-7
     atol: 1.0e-7
-  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-8
-    atol: 1.0e-8
-  equilibrium.time_slice.boundary_separatrix.strike_point.r:
-  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-8
-    atol: 1.0e-8
-  equilibrium.time_slice.boundary_separatrix.strike_point.z:
-  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-8
-    atol: 1.0e-8
   equilibrium.time_slice.constraints.pressure.position.psi:
   # IMAS_composer uses the actual psi entries from MDSpus while OMAS recreates the grid
     rtol: 1.0e-10
@@ -52,10 +41,6 @@ field_tolerances:
   # Uses arctan
     rtol: 1.0e-7
     atol: 1.0e-7
-  equilibrium.time_slice.global_quantities.area:
-  # OMAS does the cm^2 -> m^2 conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-6
-    atol: 1.0e-6
   equilibrium.time_slice.profiles_2d.b_field_tor:
     # Uses interpolation and gradient calculations
     rtol: 1.0e-5
