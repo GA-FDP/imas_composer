@@ -13,6 +13,7 @@ EXCLUDED_FIELDS = [
     'equilibrium.time_slice.profiles_2d.b_field_tor',
     'equilibrium.time_slice.profiles_2d.b_field_r',
     'equilibrium.time_slice.profiles_2d.b_field_z',
+    'equilibrium.time_slice.profiles_1d.volume'
 ]
 
 # Filter out excluded fields from parametrization
