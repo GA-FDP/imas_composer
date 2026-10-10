@@ -1834,19 +1834,15 @@ class EquilibriumMapper(IDSMapper):
         than the equilibrium time base (GTIME). This is because between-shot EFIT filters
         are applied to RESULTS.GEQDSK but not to MEASUREMENTS.
 
-        This function creates an index array that maps each GTIME to the corresponding MTIME index.
-
-        OMAS reference: _common.py lines 322-326
-        ```python
-        ntimes = len(all_data['time'])
-        if ntimes == len(all_data['mtime']):
-            it = np.arange(ntimes)
-        else:
-            it = np.minimum(all_data['mtime'].searchsorted(all_data['time']), ntimes-1)
-        ```
+        GTIME is therefore a subset of MTIME. Each GTIME is matched to the MTIME at the same time,
+        and a GTIME without a matching MTIME raises. OMAS (_common.py) instead clamps searchsorted
+        to len(GTIME) - 1, which maps late slices to the wrong MEASUREMENTS row when MTIME is longer.
 
         Returns:
             Array of indices into MTIME for each GTIME value
+
+        Raises:
+            ValueError: If a GTIME has no MTIME within 0.1 ms
         """
         gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', self.resolve_shot(shot), self.efit_tree).as_key()
         mtime_key = Requirement(f'{self.measurements_node}.MTIME', self.resolve_shot(shot), self.efit_tree).as_key()
@@ -1854,16 +1850,14 @@ class EquilibriumMapper(IDSMapper):
         gtime = raw_data[gtime_key]
         mtime = raw_data[mtime_key]
 
-        ntimes = len(gtime)
-
-        # If time dimensions match, use identity mapping
-        if ntimes == len(mtime):
-            return np.arange(ntimes)
-
-        # Otherwise, find closest MTIME index for each GTIME
-        # searchsorted returns index where GTIME would be inserted to maintain sorted order
-        # np.minimum caps at ntimes-1 to avoid out-of-bounds indexing
-        return np.minimum(mtime.searchsorted(gtime), ntimes - 1)
+        indices = np.abs(mtime[:, None] - gtime[None, :]).argmin(axis=0)
+        # Times are in ms and MTIME is spaced by >= 20 ms
+        unmatched = ~np.isclose(mtime[indices], gtime, rtol=0, atol=0.1)
+        if unmatched.any():
+            raise ValueError(
+                f"GTIME {gtime[unmatched]} ms of shot {shot} have no matching MTIME in {self.measurements_node}"
+            )
+        return indices
 
     def _compose_boundary_outline_r(self, shot: int, raw_data: dict) -> ak.Array:
         """
