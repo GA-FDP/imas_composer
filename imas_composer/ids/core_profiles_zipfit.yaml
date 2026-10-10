@@ -46,6 +46,3 @@ fields:
   - profiles_1d.ion.label
   - profiles_1d.ion.element.z_n
   - profiles_1d.ion.element.a
-
-  # Global quantities
-  - global_quantities.v_loop
