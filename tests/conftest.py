@@ -196,23 +196,36 @@ def check_field_shot_exclusion(ids_name, ids_path, shot):
             pytest.skip(f"Shot {shot} excluded for {ids_path} (no data available)")
 
 
-def check_skip_field(ids_name, ids_path):
+def check_skip_field(ids_name, ids_path, tree=None):
     """
     Check if OMAS comparison should be skipped for a specific field.
+
+    A skip_fields entry is either a reason string (skip for every tree) or a
+    mapping of tree name to reason, for fields OMAS maps on some trees but not
+    others (e.g. core_profiles grid.psi, mapped for OMFIT_PROFS but not ZIPFIT).
 
     Args:
         ids_name: IDS identifier (e.g., 'ece')
         ids_path: Full IDS path (e.g., 'ece.channel.t_e.data')
+        tree: Tree name the composer is configured for, in the same vocabulary as
+              the `trees:` key of the IDS YAML (e.g. 'ZIPFIT', 'OMFIT_PROFS')
 
     Raises:
-        pytest.skip: If the field is in the skip_fields dict
+        pytest.skip: If the field is in the skip_fields dict for this tree
     """
     config = load_test_config(ids_name)
     skip_fields = config.get('skip_fields', {})
 
-    if ids_path in skip_fields:
-        reason = skip_fields[ids_path]
-        pytest.skip(f"OMAS comparison skipped for {ids_path}: {reason}")
+    if ids_path not in skip_fields:
+        return
+
+    reason = skip_fields[ids_path]
+    if isinstance(reason, dict):
+        if tree not in reason:
+            return
+        reason = reason[tree]
+
+    pytest.skip(f"OMAS comparison skipped for {ids_path}: {reason}")
 
 
 def get_ndim(arr):
@@ -890,8 +903,12 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
     # Compose using imas_composer
     composer_value = resolve_and_compose(composer, ids_path, shot)
 
-    # Check if OMAS comparison should be skipped
-    check_skip_field(ids_name, ids_path)
+    # Check if OMAS comparison should be skipped (possibly only for this tree).
+    # Normalize to the `trees:` vocabulary of the IDS YAML: ZIPFIT01 -> ZIPFIT.
+    composer_tree = getattr(composer, 'profiles_tree', 'ZIPFIT01')
+    if composer_tree.startswith('ZIPFIT'):
+        composer_tree = 'ZIPFIT'
+    check_skip_field(ids_name, ids_path, tree=composer_tree)
 
     # Load test config to get OMAS path mapping
     test_config = load_test_config(ids_name)
