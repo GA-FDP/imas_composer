@@ -157,6 +157,3 @@ fields:
     trees: [OMFIT_PROFS]
   - field: profiles_1d.j_bootstrap
     trees: [OMFIT_PROFS]
-
-  # Global quantities - all trees
-  - global_quantities.v_loop
