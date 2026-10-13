@@ -322,6 +322,39 @@ def _matches_optional_pattern(mds_path, pattern):
 
     return bool(re.match(regex_pattern, mds_path))
 
+
+def _missing_to_nan(value):
+    """Replace missing (None) composer entries with NaN, the OMAS representation."""
+    if value is None:
+        return np.nan
+    if isinstance(value, ak.Array):
+        return ak.fill_none(value, np.nan)
+    return value
+
+
+def _is_all_nan(value):
+    """True if every element of an OMAS value is NaN (i.e. OMAS padding)."""
+    try:
+        flat = np.asarray(ak.flatten(ak.Array([value]), axis=None), dtype=float)
+    except (TypeError, ValueError):
+        return False
+    return bool(np.all(np.isnan(flat)))
+
+
+def _drop_missing_for_nanfilter(composer_value, omas_value):
+    """
+    Align a 1D composer leaf containing None with a NANFILTER-compacted OMAS leaf.
+
+    OMAS NANFILTER drops NaNs from whole-array leaves (e.g. boundary.outline.r),
+    so it loses the original indexing that composer keeps by storing None.
+    """
+    if (isinstance(composer_value, ak.Array) and composer_value.ndim == 1
+            and np.ndim(omas_value) == 1 and len(omas_value) != len(composer_value)
+            and len(omas_value) == ak.count(composer_value)):
+        return composer_value[~ak.is_none(composer_value)]
+    return composer_value
+
+
 def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float=1e-12, atol_array=1e-6):
     """
     Compare composer and OMAS values with appropriate method based on type.
@@ -337,6 +370,9 @@ def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float
     Raises:
         AssertionError: If values don't match
     """
+    # Missing entries (None) in composer output are stored as NaN by OMAS
+    composer_val = _missing_to_nan(composer_val)
+
     # Handle awkward arrays first (before other checks)
     if isinstance(composer_val, ak.Array) or isinstance(omas_val, ak.Array):
         # For awkward arrays, use awkward's comparison utilities
@@ -833,8 +869,10 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
     """
     Recursively compare composer value with OMAS data.
 
-    Uses ndim to determine when to stop recursion and compare 1D arrays.
-    Handles ragged arrays by slicing OMAS NaN-padded data to match composer length.
+    Recurses over each ':' in the OMAS path, indexing OMAS element by element so
+    ragged inner dimensions are compared at their own lengths. Missing composer
+    entries (None) must be NaN in OMAS, and OMAS entries beyond the composer
+    length (trailing padding that composer trims) must be NaN or absent.
 
     Args:
         composer_value: Value from imas_composer
@@ -849,7 +887,8 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
     if ":" not in omas_path:
         # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
         # Flatten and check length - if zero, verify OMAS is also empty
-        if not np.isscalar(composer_value) and len(ak.flatten(composer_value, axis=None)) == 0:
+        if (composer_value is not None and not np.isscalar(composer_value)
+                and len(ak.flatten(composer_value, axis=None)) == 0):
             try:
                 flat_omas = ak.flatten( ods[omas_path], axis=None)
                 assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
@@ -862,7 +901,9 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
                     return
     
         # Compare
-        compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol, 
+        omas_value = ods[omas_path]
+        composer_value = _drop_missing_for_nanfilter(composer_value, omas_value)
+        compare_values(composer_value, omas_value, omas_path, rtol=rtol,
                        atol_float=atol_float, atol_array=atol_array)
 
     else:
@@ -878,6 +919,23 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
             new_omas_path = omas_path.replace(':', str(i), 1)
 
             _compare_recursive(composer_elem, ods, new_omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
+
+
+        # Composer trims trailing missing entries that OMAS keeps as NaN, 
+        # so any OMAS entries beyond the composer length must be NaN.
+        aos_path = omas_path[:omas_path.index(':')].rstrip('.')
+        try:
+            n_omas = len(ods[aos_path])
+        except (ValueError, LookupError, IndexError):
+            n_omas = n_outer
+        for i in range(n_outer, n_omas):
+            extra_path = omas_path.replace(':', str(i), 1)
+            try:
+                extra_value = ods[extra_path]
+            except (ValueError, LookupError, IndexError):
+                continue  # No data stored for this entry
+            assert _is_all_nan(extra_value), \
+                f"OMAS has data at {extra_path} beyond composer length {n_outer}"
 
 
 def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
