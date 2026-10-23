@@ -20,11 +20,10 @@ dependencies:
   - tqdm *
 
   # Default fetching backend
-  # fdp requirements (fdp itself is pip-installed from fdp_submodule,
-  # not conda, to match the unreleased toksearch above)
+  # FDP data access: Pelican/XRootD transport and the store schema used by toksearch
   - xrdcl-pelican-fdp
   - fdp-schema >=0.2.1
-  - pelicanplatform >=7.24.3,<8 # also required by fdp
+  - pelicanplatform >=7.24.3,<8
 
    # mdsip-fdp with normal MDSplus
   - mdsplus >=7.157
