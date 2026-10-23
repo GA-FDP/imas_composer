@@ -53,6 +53,8 @@ def fetch_requirements(
     keys 'data', 'times' (ms), and 'rarray'.  Everything else is batched per
     (treename, shot) and evaluated as TDI against an MDSplus tree.  Every group
     is tried first against the FDP thin client and then atlas.
+    Requirements with isolated=True are fetched one by one with get() instead
+    of in their group's getMany batch.
 
     Args:
         requirements: List of Requirement objects to fetch.
