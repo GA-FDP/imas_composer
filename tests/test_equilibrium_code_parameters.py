@@ -120,6 +120,7 @@ def test_late_slices_map_to_their_own_measurements():
     assert np.all(mismatch < AXIS_TOLERANCE), f"{np.sum(mismatch >= AXIS_TOLERANCE)} slices read another slice's XRSP"
 
 
+@pytest.mark.requires_atlas  # the EFIT run KEQDSKS_RUN_ID is not on FDP
 @pytest.mark.integration
 @pytest.mark.requires_mdsplus
 @pytest.mark.parametrize("isolated, shape", [(True, KEQDSKS_SHAPE), (False, KEQDSKS_SHAPE[1:])])
@@ -129,6 +130,7 @@ def test_getmany_truncates_keqdsks(isolated, shape):
     assert np.asarray(fetch_requirements([req])[req.as_key()]).shape == shape
 
 
+@pytest.mark.requires_atlas  # the EFIT run KEQDSKS_RUN_ID is not on FDP
 @pytest.mark.integration
 @pytest.mark.requires_mdsplus
 @pytest.mark.parametrize("key, value", [("fitdelz", "true"), ("ifitdelz", "1")])

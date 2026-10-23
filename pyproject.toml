@@ -112,6 +112,7 @@ markers = [
     "integration: marks tests as integration tests that require external services",
     "requires_mdsplus: marks tests that require MDSplus access to DIII-D data servers",
     "requires_toksearch: marks tests that require toksearch",
+    "requires_atlas: marks tests whose data only atlas serves, skipped when TOKSEARCH_D3D_NO_ATLAS is set",
 ]
 addopts = [
     "-v",
