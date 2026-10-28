@@ -8,7 +8,7 @@ See OMAS: omas/machine_mappings/d3d.py::core_profiles_profile_1d (lines 1664-171
 from typing import Dict, Any
 import numpy as np
 import awkward as ak
-from scipy.interpolate import interp1d, PchipInterpolator
+from scipy.interpolate import PchipInterpolator
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 from ..cocos import COCOSTransform, apply_cocos_transform
