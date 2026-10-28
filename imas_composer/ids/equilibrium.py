@@ -1964,13 +1964,12 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_closest_wall_distance(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose closest wall point distance (convert cm to meters).
+        Compose closest wall point distance.
 
-        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.SEPLIM) / 100.
+        AEQDSK.SEPLIM is stored in metres in DIII-D MDSplus (no conversion needed).
         """
         seplim_key = Requirement(f'{self.aeqdsk_node}.SEPLIM', self.resolve_shot(shot), self.efit_tree).as_key()
-        seplim_cm = raw_data[seplim_key]
-        return seplim_cm / 100.0  # Convert cm to meters
+        return raw_data[seplim_key]
 
     def _compose_gap_names(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -1992,30 +1991,25 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_gap_values(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose gap values for all 4 gaps (convert cm to meters).
+        Compose gap values for all 4 gaps.
 
         Returns (n_time, 4) array with [inboard, outboard, top, bottom] per time.
 
-        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.GAPIN/GAPOUT/GAPTOP/GAPBOT) / 100.
+        AEQDSK.GAPIN/GAPOUT/GAPTOP/GAPBOT are stored in metres in DIII-D MDSplus (no conversion needed).
         """
         gapin_key = Requirement(f'{self.aeqdsk_node}.GAPIN', self.resolve_shot(shot), self.efit_tree).as_key()
         gapout_key = Requirement(f'{self.aeqdsk_node}.GAPOUT', self.resolve_shot(shot), self.efit_tree).as_key()
         gaptop_key = Requirement(f'{self.aeqdsk_node}.GAPTOP', self.resolve_shot(shot), self.efit_tree).as_key()
         gapbot_key = Requirement(f'{self.aeqdsk_node}.GAPBOT', self.resolve_shot(shot), self.efit_tree).as_key()
 
-        gapin_cm = raw_data[gapin_key]
-        gapout_cm = raw_data[gapout_key]
-        gaptop_cm = raw_data[gaptop_key]
-        gapbot_cm = raw_data[gapbot_key]
-
         # Stack into (n_time, 4) array
-        gaps = np.column_stack([gapin_cm, gapout_cm, gaptop_cm, gapbot_cm])
-        return gaps / 100.0  # Convert cm to meters
+        return np.column_stack([raw_data[gapin_key], raw_data[gapout_key], raw_data[gaptop_key], raw_data[gapbot_key]])
 
     def _compose_strike_point_r(self, shot: int, raw_data: dict) -> ak.Array:
         """
-        Compose strike point R coordinates for all 4 strike points (convert cm to meters).
+        Compose strike point R coordinates for all 4 strike points.
 
+        AEQDSK.RVS* are stored in metres in DIII-D MDSplus (no conversion needed).
         Removes invalid strike points (R == -0.89 in OMAS convention).
         Result can have 0-4 strike points per time.
 
@@ -2027,22 +2021,18 @@ class EquilibriumMapper(IDSMapper):
         rvsiu_key = Requirement(f'{self.aeqdsk_node}.RVSIU', self.resolve_shot(shot), self.efit_tree).as_key()
         rvsou_key = Requirement(f'{self.aeqdsk_node}.RVSOU', self.resolve_shot(shot), self.efit_tree).as_key()
 
-        rvsid_cm = raw_data[rvsid_key]
-        rvsod_cm = raw_data[rvsod_key]
-        rvsiu_cm = raw_data[rvsiu_key]
-        rvsou_cm = raw_data[rvsou_key]
+        # Stack into (n_time, 4) array
+        strike_points_r = np.column_stack([raw_data[rvsid_key], raw_data[rvsod_key], raw_data[rvsiu_key], raw_data[rvsou_key]])
 
-        # Stack into (n_time, 4) array and convert to meters
-        strike_points_m = np.column_stack([rvsid_cm, rvsod_cm, rvsiu_cm, rvsou_cm]) / 100.0
-
-        # Filter out invalid strike points (OMAS uses -0.89 cm as sentinel, which becomes -0.0089 m)
-        mask = strike_points_m != -0.0089
-        return filter_padding(strike_points_m, mask)
+        # Filter out invalid strike points (OMAS uses -0.89 as sentinel)
+        mask = strike_points_r != -0.89
+        return filter_padding(strike_points_r, mask)
 
     def _compose_strike_point_z(self, shot: int, raw_data: dict) -> ak.Array:
         """
-        Compose strike point Z coordinates for all 4 strike points (convert cm to meters).
+        Compose strike point Z coordinates for all 4 strike points.
 
+        AEQDSK.ZVS* are stored in metres in DIII-D MDSplus (no conversion needed).
         Uses corresponding R coordinates as mask to handle Z=0 correctly.
         Result can have 0-4 strike points per time.
 
@@ -2058,23 +2048,14 @@ class EquilibriumMapper(IDSMapper):
         zvsiu_key = Requirement(f'{self.aeqdsk_node}.ZVSIU', self.resolve_shot(shot), self.efit_tree).as_key()
         zvsou_key = Requirement(f'{self.aeqdsk_node}.ZVSOU', self.resolve_shot(shot), self.efit_tree).as_key()
 
-        rvsid_cm = raw_data[rvsid_key]
-        rvsod_cm = raw_data[rvsod_key]
-        rvsiu_cm = raw_data[rvsiu_key]
-        rvsou_cm = raw_data[rvsou_key]
-        zvsid_cm = raw_data[zvsid_key]
-        zvsod_cm = raw_data[zvsod_key]
-        zvsiu_cm = raw_data[zvsiu_key]
-        zvsou_cm = raw_data[zvsou_key]
+        # Stack Z coordinates
+        strike_points_z = np.column_stack([raw_data[zvsid_key], raw_data[zvsod_key], raw_data[zvsiu_key], raw_data[zvsou_key]])
 
-        # Stack Z coordinates and convert to meters
-        strike_points_z_m = np.column_stack([zvsid_cm, zvsod_cm, zvsiu_cm, zvsou_cm]) / 100.0
+        # Use R coordinates as mask (R == -0.89 means invalid)
+        strike_points_r = np.column_stack([raw_data[rvsid_key], raw_data[rvsod_key], raw_data[rvsiu_key], raw_data[rvsou_key]])
+        mask = strike_points_r != -0.89
 
-        # Use R coordinates as mask (R == -0.0089 m means invalid)
-        strike_points_r_m = np.column_stack([rvsid_cm, rvsod_cm, rvsiu_cm, rvsou_cm]) / 100.0
-        mask = strike_points_r_m != -0.0089
-
-        return filter_padding(strike_points_z_m, mask)
+        return filter_padding(strike_points_z, mask)
 
     def _compose_minor_radius(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -2662,14 +2643,12 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_global_area(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose plasma cross-sectional area with unit conversion.
+        Compose plasma cross-sectional area.
 
-        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.AREA)/10000.
-        Transform: cm² to m² (divide by 10000)
+        AEQDSK.AREA is stored in m² in DIII-D MDSplus (no conversion needed).
         """
         area_key = Requirement(f'{self.aeqdsk_node}.AREA', self.resolve_shot(shot), self.efit_tree).as_key()
-        area_cm2 = raw_data[area_key]
-        return area_cm2 / 10000.0
+        return raw_data[area_key]
 
     def _compose_global_li_3(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for li_3."""
