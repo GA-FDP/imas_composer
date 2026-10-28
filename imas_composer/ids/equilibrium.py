@@ -309,7 +309,8 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.boundary.x_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._zxpt1", "equilibrium._zxpt2"],
+            depends_on=["equilibrium._rxpt1", "equilibrium._rxpt2",
+                        "equilibrium._zxpt1", "equilibrium._zxpt2"],
             compose=self._compose_xpoint_z,
             ids_path="equilibrium.time_slice.boundary.x_point.z",
             docs_file=self.DOCS_PATH
@@ -343,7 +344,8 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.boundary_separatrix.x_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._zxpt1", "equilibrium._zxpt2"],
+            depends_on=["equilibrium._zxpt1", "equilibrium._zxpt2",
+                        "equilibrium._rxpt1", "equilibrium._rxpt2"],
             compose=self._compose_xpoint_z,
             ids_path="equilibrium.time_slice.boundary_separatrix.x_point.z",
             docs_file=self.DOCS_PATH
@@ -536,7 +538,8 @@ class EquilibriumMapper(IDSMapper):
         # Boundary separatrix strike points (4 points: vsid, vsod, vsiu, vsou)
         self.specs["equilibrium.time_slice.boundary_separatrix.strike_point.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._rvsid", "equilibrium._rvsod", "equilibrium._rvsiu", "equilibrium._rvsou"],
+            depends_on=["equilibrium._rvsid", "equilibrium._rvsod", 
+                        "equilibrium._rvsiu", "equilibrium._rvsou"],
             compose=self._compose_strike_point_r,
             ids_path="equilibrium.time_slice.boundary_separatrix.strike_point.r",
             docs_file=self.DOCS_PATH
@@ -544,8 +547,10 @@ class EquilibriumMapper(IDSMapper):
 
         self.specs["equilibrium.time_slice.boundary_separatrix.strike_point.z"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
-            depends_on=["equilibrium._rvsid", "equilibrium._zvsid", "equilibrium._rvsod", "equilibrium._zvsod",
-                       "equilibrium._rvsiu", "equilibrium._zvsiu", "equilibrium._rvsou", "equilibrium._zvsou"],
+            depends_on=["equilibrium._rvsid", "equilibrium._zvsid", 
+                        "equilibrium._rvsod", "equilibrium._zvsod",
+                       "equilibrium._rvsiu", "equilibrium._zvsiu", 
+                       "equilibrium._rvsou", "equilibrium._zvsou"],
             compose=self._compose_strike_point_z,
             ids_path="equilibrium.time_slice.boundary_separatrix.strike_point.z",
             docs_file=self.DOCS_PATH
@@ -1928,7 +1933,7 @@ class EquilibriumMapper(IDSMapper):
         xpoints = np.column_stack([rxpt1, rxpt2])
 
         # Filter out padding (where X-point R==0)
-        mask = ~np.isclose(xpoints, 0)
+        mask = xpoints > 0
         return filter_padding(xpoints, mask)
 
     def _compose_xpoint_z(self, shot: int, raw_data: dict) -> ak.Array:
@@ -1942,17 +1947,27 @@ class EquilibriumMapper(IDSMapper):
         Returns:
             Ragged awkward array (n_time, var) where each time slice has 0-2 X-points
         """
-        zxpt1_key = Requirement(f'{self.aeqdsk_node}.ZXPT1', self.resolve_shot(shot), self.efit_tree).as_key()
-        zxpt2_key = Requirement(f'{self.aeqdsk_node}.ZXPT2', self.resolve_shot(shot), self.efit_tree).as_key()
+        zxpt1_key = Requirement(f'{self.aeqdsk_node}.ZXPT1', self.resolve_shot(shot),
+                                 self.efit_tree).as_key()
+        zxpt2_key = Requirement(f'{self.aeqdsk_node}.ZXPT2', self.resolve_shot(shot), 
+                                self.efit_tree).as_key()
+        rxpt1_key = Requirement(f'{self.aeqdsk_node}.RXPT1', self.resolve_shot(shot), 
+                                self.efit_tree).as_key()
+        rxpt2_key = Requirement(f'{self.aeqdsk_node}.RXPT2', self.resolve_shot(shot),
+                                self.efit_tree).as_key()
+
+        rxpt1 = raw_data[rxpt1_key]
+        rxpt2 = raw_data[rxpt2_key]
 
         zxpt1 = raw_data[zxpt1_key]
         zxpt2 = raw_data[zxpt2_key]
 
         # Stack Z coordinates
+        xpoints_r = np.column_stack([rxpt1, rxpt2])
         xpoints_z = np.column_stack([zxpt1, zxpt2])
 
-        # Z==0 means padding (X-points are never at midplane due to physics)
-        mask = ~np.isclose(xpoints_z, 0)
+        mask = xpoints_r > 0
+
         return filter_padding(xpoints_z, mask)
 
     def _compose_geometric_axis_r(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -2026,7 +2041,7 @@ class EquilibriumMapper(IDSMapper):
 
         All equilibrium lenghts are stored in meters in DIII-D MDSplus (unlike EFIT output files).
 
-        Removes invalid strike points (R == -0.89 in OMAS convention).
+        Removes invalid strike points (R <= 0, which includes the -0.89 EFIT sentinel).
         Result can have 0-4 strike points per time.
 
         Returns:
@@ -2045,8 +2060,8 @@ class EquilibriumMapper(IDSMapper):
         # Stack into (n_time, 4) array
         strike_points = np.column_stack([rvsid, rvsod, rvsiu, rvsou])
 
-        # Filter out invalid strike points (EFIT uses -0.89m as sentinel)
-        mask = ~np.isclose(strike_points, -0.89)
+        # Filter out invalid strike points (R <= 0, which includes the -0.89 EFIT sentinel)
+        mask = strike_points > 0.0
         return filter_padding(strike_points, mask)
 
     def _compose_strike_point_z(self, shot: int, raw_data: dict) -> ak.Array:
@@ -2082,9 +2097,9 @@ class EquilibriumMapper(IDSMapper):
         # Stack Z coordinates
         strike_points_z = np.column_stack([zvsid, zvsod, zvsiu, zvsou])
 
-        # Use R coordinates as mask (R == -0.89 m means invalid)
+        # Use R coordinates as mask (R <= 0 means invalid)
         strike_points_r = np.column_stack([rvsid, rvsod, rvsiu, rvsou])
-        mask = ~np.isclose(strike_points_r, -0.89)
+        mask = strike_points_r > 0.0
         return filter_padding(strike_points_z, mask)
 
     def _compose_minor_radius(self, shot: int, raw_data: dict) -> np.ndarray:
