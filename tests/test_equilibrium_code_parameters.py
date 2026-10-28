@@ -68,10 +68,6 @@ def axis_mismatch(composed: dict) -> np.ndarray:
     return np.abs(first - pprime_axis) / pprime_axis
 
 
-def raw_time_base(raw_data: dict, node: str) -> np.ndarray:
-    return np.asarray(next(value for key, value in raw_data.items() if key[0].endswith(node)))
-
-
 def parse_settings(xml: str, key: str) -> dict[int, str]:
     """The <key> setting of each time slice that has one, parsed from the XML."""
     return {int(element.get("index")): element.text for element in ET.fromstring(xml).find(key).findall("time_slice")}
@@ -96,24 +92,14 @@ def test_one_entry_per_equilibrium_time_slice(composed):
 @pytest.mark.integration
 @pytest.mark.requires_mdsplus
 def test_first_coefficient_is_pprime_on_axis(composed):
-    """|xrsp_1| = 2 pi |dpressure_dpsi(psi_n = 0)| on every slice whose MEASUREMENTS slice is taken at its time."""
-    data, raw_data = composed
-    gtime = raw_time_base(raw_data, "GEQDSK.GTIME")
-    mtime = raw_time_base(raw_data, "MEASUREMENTS.MTIME")
-    # slices whose MEASUREMENTS index lies beyond the clamp of the time mapping are covered by the xfail below
-    unaffected = (mtime.searchsorted(gtime) < len(gtime) - 1) if len(gtime) != len(mtime) else np.full(len(gtime), True)
-    mismatch = axis_mismatch(data)[unaffected]
+    """|xrsp_1| = 2 pi |dpressure_dpsi(psi_n = 0)| on every slice."""
+    data, _ = composed
+    mismatch = axis_mismatch(data)
     assert np.all(mismatch < AXIS_TOLERANCE), f"worst slice deviates by {mismatch.max():.1e}"
 
 
 @pytest.mark.integration
 @pytest.mark.requires_mdsplus
-@pytest.mark.xfail(
-    strict=True,
-    reason="pre-existing: _compose_constraint_time_indices clamps searchsorted(GTIME) to len(GTIME) - 1 instead of "
-    "len(MTIME) - 1 (copied from OMAS _common.py). On 202161 (237 GEQDSK, 282 MEASUREMENTS slices) slices 216-236 "
-    "all read MEASUREMENTS row 236, for every constraint field, not only XRSP",
-)
 def test_late_slices_map_to_their_own_measurements():
     data, _ = compose(ImasComposer(), UNEQUAL_TIME_BASE_SHOT)
     mismatch = axis_mismatch(data)
