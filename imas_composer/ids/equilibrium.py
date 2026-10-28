@@ -1980,19 +1980,15 @@ class EquilibriumMapper(IDSMapper):
         than the equilibrium time base (GTIME). This is because between-shot EFIT filters
         are applied to RESULTS.GEQDSK but not to MEASUREMENTS.
 
-        This function creates an index array that maps each GTIME to the corresponding MTIME index.
-
-        OMAS reference: _common.py lines 322-326
-        ```python
-        ntimes = len(all_data['time'])
-        if ntimes == len(all_data['mtime']):
-            it = np.arange(ntimes)
-        else:
-            it = np.minimum(all_data['mtime'].searchsorted(all_data['time']), ntimes-1)
-        ```
+        GTIME is therefore a subset of MTIME. Each GTIME is matched to the MTIME at the same time,
+        and a GTIME without a matching MTIME raises. OMAS (_common.py) instead clamps searchsorted
+        to len(GTIME) - 1, which maps late slices to the wrong MEASUREMENTS row when MTIME is longer.
 
         Returns:
             Array of indices into MTIME for each GTIME value
+
+        Raises:
+            ValueError: If a GTIME has no MTIME within 0.1 ms
         """
         gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', self.resolve_shot(shot), self.efit_tree).as_key()
         mtime_key = Requirement(f'{self.measurements_node}.MTIME', self.resolve_shot(shot), self.efit_tree).as_key()
@@ -2000,16 +1996,14 @@ class EquilibriumMapper(IDSMapper):
         gtime = raw_data[gtime_key]
         mtime = raw_data[mtime_key]
 
-        ntimes = len(gtime)
-
-        # If time dimensions match, use identity mapping
-        if ntimes == len(mtime):
-            return np.arange(ntimes)
-
-        # Otherwise, find closest MTIME index for each GTIME
-        # searchsorted returns index where GTIME would be inserted to maintain sorted order
-        # np.minimum caps at ntimes-1 to avoid out-of-bounds indexing
-        return np.minimum(mtime.searchsorted(gtime), ntimes - 1)
+        indices = np.abs(mtime[:, None] - gtime[None, :]).argmin(axis=0)
+        # Times are in ms and MTIME is spaced by >= 20 ms
+        unmatched = ~np.isclose(mtime[indices], gtime, rtol=0, atol=0.1)
+        if unmatched.any():
+            raise ValueError(
+                f"GTIME {gtime[unmatched]} ms of shot {shot} have no matching MTIME in {self.measurements_node}"
+            )
+        return indices
 
     def _compose_boundary_outline_r(self, shot: int, raw_data: dict) -> ak.Array:
         """
@@ -2105,23 +2099,23 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_geometric_axis_r(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose geometric axis R coordinate (convert cm to meters).
+        Compose geometric axis R coordinate.
 
-        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.RSURF) / 100.
+        AEQDSK.RSURF is stored in metres in DIII-D MDSplus (confirmed; no conversion needed).
+        Note: OMAS applies an erroneous /100 — see GA-FDP/imas_composer#112.
         """
         rsurf_key = Requirement(f'{self.aeqdsk_node}.RSURF', self.resolve_shot(shot), self.efit_tree).as_key()
-        rsurf_cm = raw_data[rsurf_key]
-        return rsurf_cm / 100.0  # Convert cm to meters
+        return raw_data[rsurf_key]
 
     def _compose_geometric_axis_z(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose geometric axis Z coordinate (convert cm to meters).
+        Compose geometric axis Z coordinate.
 
-        OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.ZSURF) / 100.
+        AEQDSK.ZSURF is stored in metres in DIII-D MDSplus (confirmed; no conversion needed).
+        Note: OMAS applies an erroneous /100 — see GA-FDP/imas_composer#112.
         """
         zsurf_key = Requirement(f'{self.aeqdsk_node}.ZSURF', self.resolve_shot(shot), self.efit_tree).as_key()
-        zsurf_cm = raw_data[zsurf_key]
-        return zsurf_cm / 100.0  # Convert cm to meters
+        return raw_data[zsurf_key]
 
     def _compose_closest_wall_distance(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -2239,13 +2233,13 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_minor_radius(self, shot: int, raw_data: dict) -> np.ndarray:
         """
-        Compose minor radius (convert cm to meters).
+        Compose minor radius.
 
-        OMAS: \\EFIT::TOP.RESULTS.AEQDSK.AMINOR / 100.
+        AEQDSK.AMINOR is stored in metres in DIII-D MDSplus (confirmed; no conversion needed).
+        Note: OMAS applies an erroneous /100 — see GA-FDP/imas_composer#112.
         """
         aminor_key = Requirement(f'{self.aeqdsk_node}.AMINOR', self.resolve_shot(shot), self.efit_tree).as_key()
-        aminor_cm = raw_data[aminor_key]
-        return aminor_cm / 100.0  # Convert cm to meters
+        return raw_data[aminor_key]
 
     def _compose_mse_measured(self, shot: int, raw_data: dict) -> np.ndarray:
         """
