@@ -4,6 +4,3 @@
 [submodule "toksearch_submodule"]
 	path = toksearch_submodule
 	url = git@github.com:GA-FDP/toksearch.git
-[submodule "fdp_submodule"]
-	path = fdp_submodule
-	url = git@github.com:GA-FDP/fdp.git

@@ -7,7 +7,7 @@ channels:
 dependencies:
   # Core runtime deps
   - python >=3.11
-  - numpy >=1.24
+  - numpy >=1.24,<3
   - pyyaml *
   - awkward *
   - scipy *
@@ -19,15 +19,21 @@ dependencies:
   - pexpect *
   - tqdm *
 
-  # toksearch requirements (toksearch itself is pip-installed from
-  # toksearch_submodule, not conda, since we need an unreleased version)
-  - gcc
-  - openblas
+  # toksearch run requirements, mirroring toksearch_submodule/recipe/recipe.yaml
+  # (toksearch itself is pip-installed from toksearch_submodule, not conda,
+  # since we need an unreleased version). Listed here so they are part of the
+  # initial solve instead of a later `--only-deps` install.
+  # Normal MDSplus instead of the recipe's mdsplus-xrdcl
+  - mdsplus >=7.157
+  - mdsip-fdp >=0.1.0
+  - fdp-schema >=0.2.1
   - pymssql
   - ray-core
   - pyspark >=4
   - sh
+  - xarray
   - bottleneck
+  - openblas
   - joblib >=1.3
   - jupyter
   - fsspec
@@ -36,23 +42,18 @@ dependencies:
   - openai >=1.50
   - claude-agent-sdk >=0.2
   - gradio >=4
-  - mcp >=1.23
+  - mcp >=1.23,<2
+  - matplotlib
   - plotly
   - python-kaleido
 
-  # fdp requirements (fdp itself is pip-installed from fdp_submodule,
-  # not conda, to match the unreleased toksearch above)
-  - xrdcl-pelican-fdp
-  - fdp-schema >=0.2.1
-  - pelicanplatform >=7.24.3,<8 # also required by fdp
-
-  # toksearch requirements
+  # toksearch build requirements for the pip install (ell1module C extension)
+  - gcc
   - versioneer
-  - filelock >=3
 
- # mdsip-fdp with normal MDSplus
-  - mdsplus >=7.157
-  - mdsip-fdp
+  # Pelican/XRootD transport, not in the toksearch recipe
+  - xrdcl-pelican-fdp
+  - pelicanplatform >=7.24.3,<8
 
   # For pip install
   - pip *

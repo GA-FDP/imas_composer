@@ -9,8 +9,10 @@ for concrete data retrieval utilities.
 
 from typing import Dict, List, Tuple, Any, Optional
 from pathlib import Path
+import numpy as np
+import awkward as ak
 import yaml
-from .core import Requirement, RequirementStage
+from .core import Requirement, RequirementStage, NoData
 from .ids.ids_factory import IDSFactory
 
 
@@ -36,6 +38,13 @@ def _load_default_from_yaml(yaml_filename: str, key: str, fallback: Any) -> Any:
         except Exception:
             return fallback
     return fallback
+
+
+def _is_empty(value: Any) -> bool:
+    """True for arrays without a single value, e.g. no channels or only empty channels."""
+    if isinstance(value, ak.Array) or (isinstance(value, np.ndarray) and value.ndim > 0):
+        return len(ak.flatten(ak.Array(value), axis=None)) == 0
+    return False
 
 class ImasComposer:
     """
@@ -330,7 +339,8 @@ class ImasComposer:
             raw_data: Dict of fetched data (requirement keys -> values)
 
         Returns:
-            Dict mapping each ids_path -> synthesized IDS data
+            Dict mapping each ids_path -> synthesized IDS data, or the NoData
+            of a missing input if the path could not be composed or has no values
 
         Raises:
             ValueError: If path not found or requirements not met
@@ -379,16 +389,34 @@ class ImasComposer:
                         f"Cannot compose '{ids_path}' - no compose function defined"
                     )
 
-                # Compose the data
+                # Compose the data. A field that fails to compose or ends up without
+                # any values because of missing inputs is reported as NoData.
                 try:
-                    results[ids_path] = spec.compose(shot, raw_data)
-                except KeyError as e:
-                    raise RuntimeError(
-                        f"Missing required data for composing '{ids_path}': {e}. "
-                        f"Did you call resolve() and fetch all requirements?"
-                    ) from e
+                    result = spec.compose(shot, raw_data)
+                except Exception as e:
+                    no_data = self._find_no_data(mapper, ids_path, shot, raw_data)
+                    if no_data is not None:
+                        results[ids_path] = no_data
+                    elif isinstance(e, KeyError):
+                        raise RuntimeError(
+                            f"Missing required data for composing '{ids_path}': {e}. "
+                            f"Did you call resolve() and fetch all requirements?"
+                        ) from e
+                    else:
+                        raise
+                    continue
+
+                if _is_empty(result):
+                    result = self._find_no_data(mapper, ids_path, shot, raw_data) or result
+                results[ids_path] = result
 
         return results
+
+    def _find_no_data(self, mapper, ids_path: str, shot: int, raw_data: Dict[str, Any]) -> Optional[NoData]:
+        """Return the first NoData among the fetched inputs of ids_path, if any."""
+        requirements = self._collect_requirements_batch(mapper, [ids_path], shot, raw_data)[ids_path]
+        return next((raw_data[req.as_key()] for req in requirements
+                     if isinstance(raw_data.get(req.as_key()), NoData)), None)
 
     def get_supported_fields(self, ids_path: str) -> List[str]:
         """

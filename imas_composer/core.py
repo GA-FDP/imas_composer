@@ -4,6 +4,10 @@ from enum import Enum
 import yaml
 from pathlib import Path
 
+class NoData(Exception):
+    """Requested data is not available; carries the original backend error message."""
+
+
 class RequirementStage(Enum):
     DIRECT = "direct"
     DERIVED = "derived"
