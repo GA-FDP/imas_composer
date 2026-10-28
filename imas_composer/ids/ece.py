@@ -127,6 +127,14 @@ class EceMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        self.specs["ece.time"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["ece._time_base"],
+            compose=self._compose_time,
+            ids_path="ece.time",
+            docs_file=self.DOCS_PATH
+        )
+
         # Line of sight geometry
         self.specs["ece.line_of_sight.first_point.r"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
@@ -282,11 +290,13 @@ class EceMapper(IDSMapper):
         n_channels = self._get_numch(shot, raw_data)
         return np.array([f'{self.tece_node}{ich:02d}' for ich in range(1, n_channels + 1)])
     
-    def _compose_channel_time(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _compose_time(self, shot: int, raw_data: dict) -> np.ndarray:
         time_key = Requirement(f"dim_of({self.tece_node}01)", shot, 'ELECTRONS').as_key()
-        time_s = raw_data[time_key] * 1e-3
+        return raw_data[time_key] * 1e-3
+
+    def _compose_channel_time(self, shot: int, raw_data: dict) -> np.ndarray:
         n_channels = self._get_numch(shot, raw_data)
-        return np.tile(time_s, (n_channels, 1))
+        return np.tile(self._compose_time(shot, raw_data), (n_channels, 1))
     
     def _compose_channel_frequency(self, shot: int, raw_data: dict) -> np.ndarray:
         freq_key = Requirement(f'{self.setup_node}FREQ', shot, 'ELECTRONS').as_key()
