@@ -26,7 +26,12 @@ fields:
   - ids_properties.homogeneous_time
 
   # Grid
+  # rho_tor_norm is ZIPFIT's native axis; the poloidal flux coordinates are
+  # reconstructed from the EFIT01 equilibrium (ZIPFIT stores no psi).
   - profiles_1d.grid.rho_tor_norm
+  - profiles_1d.grid.rho_pol_norm
+  - profiles_1d.grid.psi
+  - profiles_1d.grid.psi_norm
 
   # Electrons
   - profiles_1d.electrons.density
