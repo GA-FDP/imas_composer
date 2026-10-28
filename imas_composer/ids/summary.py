@@ -105,16 +105,17 @@ class SummaryMapper(IDSMapper):
         """
         Compose energy confinement time values (seconds).
 
-        TRANSPORT.GLOBAL.TIMES.TAUE is stored in seconds.  Non-positive and
-        non-finite values (analysis artifacts or L-mode ramp sentinels) are
-        removed; the corresponding time points are also removed by
-        _compose_tau_energy_time via the same mask stored on this array.
+        TRANSPORT.GLOBAL.TIMES.TAUE is stored in seconds.  Non-positive,
+        non-finite, and unphysically large values (> 5 s; near-zero-power
+        artifacts near the L→H transition) are removed; the corresponding
+        time points are also removed by _compose_tau_energy_time via the same
+        mask stored on this array.
         """
         key = Requirement(
             r"\TRANSPORT::TOP.GLOBAL.TIMES.TAUE", shot, "TRANSPORT"
         ).as_key()
         tau_e = np.asarray(raw_data[key], dtype=float)
-        mask = np.isfinite(tau_e) & (tau_e > 0)
+        mask = np.isfinite(tau_e) & (tau_e > 0) & (tau_e < 5.0)
         return tau_e[mask]
 
     def _compose_tau_energy_time(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -134,7 +135,7 @@ class SummaryMapper(IDSMapper):
             r"\TRANSPORT::TOP.GLOBAL.TIMES.TAUE", shot, "TRANSPORT"
         ).as_key()
         tau_e = np.asarray(raw_data[value_key], dtype=float)
-        mask = np.isfinite(tau_e) & (tau_e > 0)
+        mask = np.isfinite(tau_e) & (tau_e > 0) & (tau_e < 5.0)
         t = np.asarray(raw_data[time_key], dtype=float) / 1e3
         return t[mask]
 
