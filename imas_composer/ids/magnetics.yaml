@@ -36,3 +36,7 @@ fields:
   - flux_loop.flux.time
   - flux_loop.flux.validity
   - flux_loop.flux.data_error_upper
+  # flux_loop: loop voltage (from MDSplus VLOOP ptdata; empty for loops without a VLOOP signal)
+  - flux_loop.voltage.data
+  - flux_loop.voltage.time
+  - flux_loop.voltage.data_error_upper
