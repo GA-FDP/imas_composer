@@ -340,7 +340,6 @@ class PfActiveMapper(IDSMapper):
         Compose current data for all coils.
 
         Returns awkward array: ragged array (non-homogeneous time, different lengths per coil).
-        IMAS convention: F-coils (indices 6-23) are divided by turns_with_sign.
         Non-homogeneous time: each coil has its own timebase.
         """
         coils = self._load_pf_coils(shot)
@@ -350,23 +349,11 @@ class PfActiveMapper(IDSMapper):
             # Get current data
             key = Requirement(coil_name, shot, "__ptdata__").as_key()
 
-            if key not in raw_data:
+            if key in raw_data:
+                result.append(raw_data[key]['data'])
+            else:
                 # Coil data not available
                 result.append([])
-                continue
-
-            current = raw_data[key]['data']
-
-            # Apply F-coil correction (divide by turns_with_sign)
-            if 'F' in coil_name:
-                # Get turns_with_sign from hardware data
-                if k < len(coils):
-                    elements = coils[k].get('element', [])
-                    if elements:
-                        turns = elements[0].get('turns_with_sign', 1.0)
-                        current = current / turns
-
-            result.append(current)
 
         return ak.Array(result)
 
@@ -383,13 +370,11 @@ class PfActiveMapper(IDSMapper):
             # Get time data
             key = Requirement(coil_name, shot, "__ptdata__").as_key()
 
-            if key not in raw_data:
+            if key in raw_data:
+                result.append(raw_data[key]['times'] / 1000.0)  # ms to s
+            else:
                 # Coil time not available
                 result.append([])
-                continue
-
-            time = raw_data[key]['times'] / 1000.0  # ms to s
-            result.append(time)
 
         return ak.Array(result)
 
@@ -399,7 +384,6 @@ class PfActiveMapper(IDSMapper):
 
         From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0
         Returns awkward array: ragged array (non-homogeneous time, different lengths per coil).
-        F-coils also divided by turns_with_sign.
         """
         coils = self._load_pf_coils(shot)
 
@@ -408,27 +392,14 @@ class PfActiveMapper(IDSMapper):
             # Get data to determine time length
             key = Requirement(coil_name, shot, "__ptdata__").as_key()
 
-            if key not in raw_data:
+            if key in raw_data:
+                nt = len(raw_data[key]['data'])
+                header = raw_data[key]['rarray']
+                # OMAS formula: abs(header[3] * header[4]) * ones(nt) * 10.0
+                result.append(np.abs(header[3] * header[4]) * np.ones(nt) * 10.0)
+            else:
                 # Coil data not available
                 result.append([])
-                continue
-
-            nt = len(raw_data[key]['data'])
-            header = raw_data[key]['rarray']
-
-            # OMAS formula: abs(header[3] * header[4]) * ones(nt) * 10.0
-            error = np.abs(header[3] * header[4]) * np.ones(nt) * 10.0
-
-            # Apply F-coil correction (divide by turns_with_sign)
-            if 'F' in coil_name:
-                # Get turns_with_sign from hardware data
-                if k < len(coils):
-                    elements = coils[k].get('element', [])
-                    if elements:
-                        turns = elements[0].get('turns_with_sign', 1.0)
-                        error = error / turns
-
-            result.append(error)
 
         return ak.Array(result)
 
