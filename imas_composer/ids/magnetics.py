@@ -1,10 +1,10 @@
 """
 Magnetics IDS Mapping for DIII-D
 
-Maps plasma current, diamagnetic flux, and poloidal field probe measurements
-to IMAS magnetics IDS.
+Maps plasma current, diamagnetic flux, poloidal field probe, flux loop and
+loop voltage measurements to IMAS magnetics IDS.
 See OMAS: omas/machine_mappings/d3d.py::ip_bt_dflux_data, magnetics_hardware,
-          magnetics_probes_data, magnetics_floops_data
+          magnetics_probes_data, magnetics_floops_data, magnetics_floops_voltage_data
 """
 
 from pathlib import Path
@@ -15,6 +15,14 @@ import awkward as ak
 
 from ..core import RequirementStage, Requirement, IDSEntrySpec
 from .base import IDSMapper
+
+# Loop voltage ptdata per flux loop identifier: the slow digitizer with the smallest dynamic range
+VLOOP_SIGNALS = {
+    "PSF1A": "VLOOP",
+    "PSF6NA": "VLOOPF6NA",
+    "PSI11M": "VLOOPI11M",
+    "PSI6A": "VLOOPI6A",
+}
 
 
 class MagneticsMapper(IDSMapper):
@@ -597,6 +605,56 @@ class MagneticsMapper(IDSMapper):
             docs_file=self.CONFIG_PATH
         )
 
+        # flux_loop loop voltage - auxiliary nodes
+        self.specs["magnetics._vloop_data"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=[],
+            derive_requirements=self._derive_vloop_data_requirements,
+            ids_path="magnetics._vloop_data",
+            docs_file=self.CONFIG_PATH
+        )
+
+        self.specs["magnetics._vloop_time"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=[],
+            derive_requirements=self._derive_vloop_time_requirements,
+            ids_path="magnetics._vloop_time",
+            docs_file=self.CONFIG_PATH
+        )
+
+        self.specs["magnetics._vloop_header"] = IDSEntrySpec(
+            stage=RequirementStage.DERIVED,
+            depends_on=[],
+            derive_requirements=self._derive_vloop_header_requirements,
+            ids_path="magnetics._vloop_header",
+            docs_file=self.CONFIG_PATH
+        )
+
+        # flux_loop - loop voltage time-series data (from MDSplus, empty for loops without a VLOOP signal)
+        self.specs["magnetics.flux_loop.voltage.data"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["magnetics._vloop_data"],
+            compose=self._compose_floop_voltage_data,
+            ids_path="magnetics.flux_loop.voltage.data",
+            docs_file=self.CONFIG_PATH
+        )
+
+        self.specs["magnetics.flux_loop.voltage.time"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["magnetics._vloop_time"],
+            compose=self._compose_floop_voltage_time,
+            ids_path="magnetics.flux_loop.voltage.time",
+            docs_file=self.CONFIG_PATH
+        )
+
+        self.specs["magnetics.flux_loop.voltage.data_error_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["magnetics._vloop_data", "magnetics._vloop_header"],
+            compose=self._compose_floop_voltage_data_error_upper,
+            ids_path="magnetics.flux_loop.voltage.data_error_upper",
+            docs_file=self.CONFIG_PATH
+        )
+
     # Requirement derivation functions
     def _derive_ip_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
         """Derive requirements for IP (data, time, and header bundled under __ptdata__ key)."""
@@ -674,6 +732,20 @@ class MagneticsMapper(IDSMapper):
     def _derive_floop_header_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
         """Derive flux_loop header requirements (same keys as data — dedup handles it)."""
         return self._derive_floop_data_requirements(shot, _raw_data)
+
+    def _derive_vloop_data_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
+        """Derive ptdata requirements for the loop voltage of each flux loop that has a VLOOP signal."""
+        loops = self._load_flux_loops(shot)
+        return [Requirement(VLOOP_SIGNALS[f["identifier"]], shot, "__ptdata__")
+                for f in loops if f["identifier"] in VLOOP_SIGNALS]
+
+    def _derive_vloop_time_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
+        """Derive loop voltage time requirements (same keys as data — dedup handles it)."""
+        return self._derive_vloop_data_requirements(shot, _raw_data)
+
+    def _derive_vloop_header_requirements(self, shot: int, _raw_data: dict) -> List[Requirement]:
+        """Derive loop voltage header requirements (same keys as data — dedup handles it)."""
+        return self._derive_vloop_data_requirements(shot, _raw_data)
 
     # Compose functions
     def _compose_ip_data(self, shot: int, raw_data: dict) -> ak.Array:
@@ -996,6 +1068,61 @@ class MagneticsMapper(IDSMapper):
                 ref_un_interp = np.interp(time_k, ref_time,
                                           ref_uncertainty, left=0.0, right=0.0)
                 result[k] = np.sqrt(err_k**2 + ref_un_interp**2)
+        return ak.Array(result)
+
+    def _compose_floop_voltage_data(self, shot: int, raw_data: dict) -> ak.Array:
+        """
+        Get loop voltage data per flux loop.
+
+        From OMAS magnetics_floops_voltage_data: ptdata of the VLOOP signal measured on the loop.
+        No COCOS sign change: loop voltage transforms as 'TOR', which is +1 from COCOS 7 to 11.
+        Returns ragged awkward array of shape (n_loops, n_time), empty for loops without a VLOOP signal.
+        """
+        loops = self._load_flux_loops(shot)
+        result = []
+        for f in loops:
+            if f["identifier"] not in VLOOP_SIGNALS:
+                result.append(np.array([]))
+                continue
+            key = Requirement(VLOOP_SIGNALS[f["identifier"]], shot, "__ptdata__").as_key()
+            result.append(raw_data[key]['data'])
+        return ak.Array(result)
+
+    def _compose_floop_voltage_time(self, shot: int, raw_data: dict) -> ak.Array:
+        """
+        Get loop voltage time base per flux loop with unit conversion.
+
+        From OMAS: dim_of(...,0) / 1000 (convert ms to s).
+        Returns ragged awkward array of shape (n_loops, n_time), empty for loops without a VLOOP signal.
+        """
+        loops = self._load_flux_loops(shot)
+        result = []
+        for f in loops:
+            if f["identifier"] not in VLOOP_SIGNALS:
+                result.append(np.array([]))
+                continue
+            key = Requirement(VLOOP_SIGNALS[f["identifier"]], shot, "__ptdata__").as_key()
+            result.append(raw_data[key]['times'] / 1000.0)
+        return ak.Array(result)
+
+    def _compose_floop_voltage_data_error_upper(self, shot: int, raw_data: dict) -> ak.Array:
+        """
+        Compute loop voltage uncertainty per flux loop.
+
+        From OMAS: abs(header[3] * header[4]) * ones(nt) * 10.0
+        where header is the ptdata rarray for the VLOOP signal.
+        Returns ragged awkward array of shape (n_loops, n_time), empty for loops without a VLOOP signal.
+        """
+        loops = self._load_flux_loops(shot)
+        result = []
+        for f in loops:
+            if f["identifier"] not in VLOOP_SIGNALS:
+                result.append(np.array([]))
+                continue
+            key = Requirement(VLOOP_SIGNALS[f["identifier"]], shot, "__ptdata__").as_key()
+            nt = len(raw_data[key]['data'])
+            header = raw_data[key]['rarray']
+            result.append(np.abs(header[3] * header[4]) * np.ones(nt) * 10.0)
         return ak.Array(result)
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
