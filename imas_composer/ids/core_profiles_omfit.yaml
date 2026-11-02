@@ -95,6 +95,3 @@ fields:
   - profiles_1d.j_ohmic
   - profiles_1d.j_tor
   - profiles_1d.j_bootstrap
-
-  # Global quantities
-  - global_quantities.v_loop

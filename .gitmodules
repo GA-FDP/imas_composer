@@ -1,0 +1,12 @@
+[submodule "toksearch_d3d"]
+	path = toksearch_d3d_submodule
+	url = git@github.com:GA-FDP/toksearch_d3d.git
+[submodule "omas"]
+	path = omas_submodule
+	url = git@github.com:gafusion/omas.git
+[submodule "toksearch_submodule"]
+	path = toksearch_submodule
+	url = git@github.com:GA-FDP/toksearch.git
+[submodule "fdp_submodule"]
+	path = fdp_submodule
+	url = git@github.com:GA-FDP/fdp.git

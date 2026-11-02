@@ -92,6 +92,17 @@ def test_tau_energy_time_monotonic(composer):
     assert np.all(np.diff(t) > 0), "tau_energy.time should be monotonically increasing"
 
 
+def test_tau_energy_value_no_outliers(composer):
+    """tau_energy.value has no unphysical outliers (> 5 s) from near-zero-power artifacts."""
+    result = simple_load(
+        ['summary.global_quantities.tau_energy.value'], REFERENCE_SHOT
+    )
+    tau_e = result['summary.global_quantities.tau_energy.value']
+    assert np.all(tau_e < 5.0), (
+        f"tau_energy.value has outlier(s) >= 5 s: max = {np.max(tau_e):.2f} s"
+    )
+
+
 def test_tau_energy_value_and_time_same_length(composer):
     """tau_energy.value and .time have the same number of points."""
     result = simple_load(
