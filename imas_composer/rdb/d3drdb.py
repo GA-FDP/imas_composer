@@ -234,6 +234,26 @@ def list_all_tags() -> List[str]:
     return [r['TAG'] for r in rows if r['TAG'] is not None]
 
 
+def list_standard_efit_trees(shot: int) -> List[str]:
+    """EFIT trees of the standard per-shot runs of *shot* (EFIT01, EFIT02, EFITRT1, ...), alphabetically.
+
+    A standard run is stored under the shot number itself; runs under an extended pulse number, such
+    as the IRI CAKE runs in the EFIT tree, are left out.
+
+    Raises ValueError if *shot* has none.
+    """
+    with D3DRDB() as db:
+        rows = db.query(
+            f"SELECT DISTINCT tree FROM plasmas "
+            f"WHERE shot={shot} AND code_name='EFIT' AND run_id={shot} AND deleted=0 "
+            f"ORDER BY tree"
+        )
+    trees = [r['TREE'] for r in rows if r['TREE'] is not None]
+    if not trees:
+        raise ValueError(f"No standard EFIT run for shot {shot} in the code run database.")
+    return trees
+
+
 def list_shots_for_tag(tag: str = 'IRI_CAKE01') -> List[int]:
     """Shots with a valid IRI CAKE run for *tag* that has uploaded results,
     most recent run_date first."""

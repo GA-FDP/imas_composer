@@ -53,3 +53,8 @@ omas_path_map:
   magnetics.flux_loop.flux.time: magnetics.flux_loop.:.flux.time
   magnetics.flux_loop.flux.validity: magnetics.flux_loop.:.flux.validity
   magnetics.flux_loop.flux.data_error_upper: magnetics.flux_loop.:.flux.data_error_upper
+
+  # flux_loop - loop voltage (from MDSplus via magnetics_floops_voltage_data)
+  magnetics.flux_loop.voltage.data: magnetics.flux_loop.:.voltage.data
+  magnetics.flux_loop.voltage.time: magnetics.flux_loop.:.voltage.time
+  magnetics.flux_loop.voltage.data_error_upper: magnetics.flux_loop.:.voltage.data_error_upper

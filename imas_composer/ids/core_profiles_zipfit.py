@@ -216,20 +216,6 @@ class CoreProfilesZipfitMapper(IDSMapper):
         self.specs["core_profiles.profiles_1d._carbon_rotation_rho"] = self._create_profile_field_spec(
             '_carbon_rotation_rho', 'carbon_rotation', dim=0)
 
-        self.specs["core_profiles._vloop_data"] = IDSEntrySpec(
-            stage=RequirementStage.DERIVED,
-            derive_requirements=self._derive_vloop_data_requirements,
-            ids_path="core_profiles._vloop_data",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["core_profiles._vloop_time"] = IDSEntrySpec(
-            stage=RequirementStage.DERIVED,
-            derive_requirements=self._derive_vloop_time_requirements,
-            ids_path="core_profiles._vloop_time",
-            docs_file=self.DOCS_PATH
-        )
-
         # ============================================================
         # User-facing fields - COMPUTED stage
         # ============================================================
@@ -417,23 +403,6 @@ class CoreProfilesZipfitMapper(IDSMapper):
             depends_on=[],
             compose=lambda _shot, _raw: self.static_values['ids_properties.homogeneous_time'],
             ids_path="core_profiles.ids_properties.homogeneous_time",
-            docs_file=self.DOCS_PATH
-        )
-
-        # ============================================================
-        # Global quantities
-        # ============================================================
-
-        # global_quantities.v_loop: loop voltage interpolated to profile time
-        self.specs["core_profiles.global_quantities.v_loop"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=[
-                "core_profiles._vloop_data",
-                "core_profiles._vloop_time",
-                "core_profiles.time"
-            ],
-            compose=self._compose_v_loop,
-            ids_path="core_profiles.global_quantities.v_loop",
             docs_file=self.DOCS_PATH
         )
 
@@ -771,43 +740,3 @@ class CoreProfilesZipfitMapper(IDSMapper):
             else:
                 result.append(np.array([]))
         return ak.Array(result)
-
-    def _derive_vloop_data_requirements(self, shot: int, _raw_data: Dict[str, Any]) -> list:
-        """Derive requirements for v_loop (data, time, and header bundled under __ptdata__ key)."""
-        return [Requirement("VLOOP", shot, "__ptdata__")]
-
-    def _derive_vloop_time_requirements(self, shot: int, _raw_data: Dict[str, Any]) -> list:
-        """Derive requirements for v_loop time (same key as data — deduplication handles it)."""
-        return [Requirement("VLOOP", shot, "__ptdata__")]
-
-    def _compose_v_loop(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """
-        Compose loop voltage interpolated to profile time.
-
-        OMAS reference (d3d.py:1740-1741):
-            m = mdsvalue('d3d', pulse=pulse, TDI=f"ptdata2(\"VLOOP\",{pulse})", treename=None)
-            gq['v_loop'] = interp1d(m.dim_of(0) * 1e-3, m.data(),
-                                    bounds_error=False, fill_value=np.nan)(t)
-
-        Returns:
-            1D array of loop voltage in V, interpolated to profile time
-        """
-        # Get v_loop data and time
-        vloop_key = Requirement("VLOOP", shot, "__ptdata__").as_key()
-
-        vloop_data = raw_data[vloop_key]['data']
-        vloop_time = raw_data[vloop_key]['times'] * 1e-3  # Convert ms to s
-
-        # Get profile time - use the already-composed time to avoid bypassing dependencies
-        # Note: We depend on "core_profiles.time" so we need to compose it first
-        profile_time = self.specs["core_profiles.time"].compose(shot, raw_data)
-
-        # Interpolate v_loop to profile time
-        v_loop = interp1d(
-            vloop_time,
-            vloop_data,
-            bounds_error=False,
-            fill_value=np.nan
-        )(profile_time)
-
-        return v_loop
