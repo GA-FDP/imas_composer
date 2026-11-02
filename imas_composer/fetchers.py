@@ -10,9 +10,12 @@ Public API:
     simple_load: Convenience wrapper that runs the full resolve-fetch-compose loop
 """
 
+import re
 from typing import Dict, List, Tuple, Any, Optional
 
-from .core import Requirement
+import numpy as np
+
+from .core import Requirement, NoData
 from .composer import ImasComposer
 
 try:
@@ -21,6 +24,22 @@ try:
 except ImportError:
     TOKSEARCH_AVAILABLE = False
     fetch_many_from_req = None
+
+# MDSplus status codes meaning the data does not exist for this shot.
+# getMany reports a missing bare node as INVTREE instead of NNF.
+_NO_DATA_PATTERN = re.compile(r"%TREE-[A-Z]-(FOPENR|NODATA|NNF|INVTREE)\b")
+
+
+def _as_no_data(exc: Exception) -> Exception:
+    """Convert an MDSplus "no data" error into NoData, pass other errors through."""
+    if _NO_DATA_PATTERN.search(str(exc)):
+        return NoData(str(exc))
+    return exc
+
+
+def _is_missing_ptdata(value: dict) -> bool:
+    """ptdata reports a point without data through an all-zero pthead2 header."""
+    return not np.any(value['rarray'])
 
 
 def fetch_requirements(
@@ -40,7 +59,8 @@ def fetch_requirements(
 
     Returns:
         Dict mapping each requirement's as_key() tuple to its fetched value,
-        or to the Exception if fetching failed.
+        or to the Exception if fetching failed. Missing data (missing tree,
+        empty node, node not found, ptdata point without data) is stored as NoData.
 
     Raises:
         RuntimeError: If toksearch is not installed.
@@ -63,7 +83,17 @@ def fetch_requirements(
         seen_keys.add(key)
         unique_requirements.append(req)
 
-    return fetch_many_from_req(unique_requirements)
+    raw_data = fetch_many_from_req(unique_requirements)
+    for req in unique_requirements:
+        key = req.as_key()
+        value = raw_data[key]
+        if isinstance(value, Exception):
+            raw_data[key] = _as_no_data(value)
+        elif req.treename == "__ptdata__" and _is_missing_ptdata(value):
+            raw_data[key] = NoData(
+                f"PTDATA point '{req.mds_path}' #{req.shot}: pthead2 returned an all-zero header (no data)"
+            )
+    return raw_data
 
 
 def simple_load(
@@ -99,11 +129,13 @@ def simple_load(
         max_iterations: Maximum resolve-fetch iterations (default: 10)
 
     Returns:
-        Dict mapping each ids_path -> composed IDS data
+        Dict mapping each ids_path -> composed IDS data, or NoData if the
+        data for that path is not available
 
     Raises:
         RuntimeError: If toksearch is not installed, or if requirements
-            cannot be resolved or any fetch fails.
+            cannot be resolved or a fetch fails for a reason other than
+            missing data.
 
     Example:
         >>> result = simple_load(['equilibrium.time'], 200000)
@@ -131,7 +163,7 @@ def simple_load(
         fetched = fetch_requirements(requirements)
 
         for key, value in fetched.items():
-            if isinstance(value, Exception):
+            if isinstance(value, Exception) and not isinstance(value, NoData):
                 raise RuntimeError(
                     f"Failed to fetch requirement {key}: {value}"
                 ) from value
