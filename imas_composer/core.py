@@ -18,7 +18,9 @@ class Requirement:
     mds_path: str
     shot: int
     treename: str = "ELECTRONS"
-    
+    # fetch on its own instead of in a getMany batch, which mangles some data (e.g. 2D string arrays)
+    isolated: bool = field(default=False, compare=False)
+
     def __hash__(self):
         return hash((self.mds_path, self.shot, self.treename))
     

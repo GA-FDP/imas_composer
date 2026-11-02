@@ -7,10 +7,12 @@ Implements EFIT equilibrium reconstruction data mapping.
 """
 
 from typing import Dict, Any, Optional
+import xml.etree.ElementTree as ET
+import f90nml
 import numpy as np
 import awkward as ak
 
-from ..core import RequirementStage, Requirement, IDSEntrySpec
+from ..core import RequirementStage, Requirement, IDSEntrySpec, NoData
 from .base import IDSMapper
 from ..cocos import (
     COCOSTransform,
@@ -18,7 +20,13 @@ from ..cocos import (
     identify_cocos_from_signals,
     apply_cocos_transform,
 )
+from scipy.constants import mu_0
 from scipy.interpolate import interp1d
+
+# XRSP entries beyond kppcur + kffcur hold the netCDF fill value 9.97e36
+XRSP_FILL_THRESHOLD = 1e30
+# a k-file belongs to the equilibrium slice at the same time (KTIME and GTIME in ms)
+KTIME_TOLERANCE = 1e-3
 
 
 def filter_padding(arr: np.ndarray, mask: np.ndarray) -> ak.Array:
@@ -87,6 +95,7 @@ class EquilibriumMapper(IDSMapper):
         self.geqdsk_node = f'\\{efit_tree}::TOP.RESULTS.GEQDSK'
         self.aeqdsk_node = f'\\{efit_tree}::TOP.RESULTS.AEQDSK'
         self.measurements_node = f'\\{efit_tree}::TOP.MEASUREMENTS'
+        self.namelists_node = f'\\{efit_tree}::TOP.NAMELISTS'
 
         # COCOS transformer
         self.cocos = COCOSTransform()
@@ -249,6 +258,50 @@ class EquilibriumMapper(IDSMapper):
             depends_on=[],
             compose=lambda shot, raw: self.efit_tree,
             ids_path="equilibrium.code.version",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Internal dependency: XRSP (p' and FF' basis function coefficients, MEASUREMENTS time base)
+        self.specs["equilibrium._xrsp"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'{self.measurements_node}.XRSP', 0, self.efit_tree),
+            ],
+            ids_path="equilibrium._xrsp",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Internal dependency: the k-file namelists EFIT ran with, one per KTIME. Only some runs store them
+        # (CAKE runs do, the standard EFIT01/EFIT02 trees do not).
+        self.specs["equilibrium._keqdsks"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'{self.namelists_node}:KEQDSKS', 0, self.efit_tree, isolated=True),
+                Requirement(f'{self.namelists_node}:KEQDSKS:KTIME', 0, self.efit_tree),
+            ],
+            ids_path="equilibrium._keqdsks",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Internal dependency: the snap file (&EFITIN) the run was set up with. The standard EFIT01/EFIT02 trees
+        # store it, and their slices have no k-files.
+        self.specs["equilibrium._snap"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[
+                Requirement(f'\\{self.efit_tree}::TOP:NAMELIST', 0, self.efit_tree),
+            ],
+            ids_path="equilibrium._snap",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["equilibrium.code.parameters"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "equilibrium._xrsp", "equilibrium._constraint_time_indices", "equilibrium._keqdsks", "equilibrium._snap",
+                "equilibrium._gtime",
+            ],
+            compose=self._compose_code_parameters,
+            ids_path="equilibrium.code.parameters",
             docs_file=self.DOCS_PATH
         )
 
@@ -1755,6 +1808,19 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        self.specs["equilibrium.time_slice.profiles_2d.j_tor"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=[
+                "equilibrium._r_grid", "equilibrium._z_grid", "equilibrium._bcentr",
+                "equilibrium._psirz", "equilibrium._cpasma_cocos",
+                "equilibrium._ssimag", "equilibrium._ssibry",
+                "equilibrium._rbbbs", "equilibrium._zbbbs"
+            ],
+            compose=self._compose_profiles_2d_j_tor,
+            ids_path="equilibrium.time_slice.profiles_2d.j_tor",
+            docs_file=self.DOCS_PATH
+        )
+
         # === Auxiliary nodes for vacuum_toroidal_field ===
 
         # RZERO from GEQDSK
@@ -1844,6 +1910,81 @@ class EquilibriumMapper(IDSMapper):
         gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', self.resolve_shot(shot), self.efit_tree).as_key()
         gtime_ms = raw_data[gtime_key]
         return gtime_ms / 1000.0  # Convert milliseconds to seconds
+
+    def _compose_code_parameters(self, shot: int, raw_data: dict) -> str:
+        """
+        Compose the EFIT code parameters as XML: the basis function coefficients of p' and FF' (XRSP) and, for runs
+        that store their k-file or snap file namelists, EFIT's rigid vertical shift settings (fitdelz, ifitdelz).
+
+        XRSP is brsp/darea of the last EFIT iteration (write_m.F90), the kppcur coefficients of p' followed by
+        the kffcur coefficients of FF'. With the profile basis functions of the run they give the profiles
+        EFIT evaluates on every grid node (pressure.F90 ppcurr, current.f90 fpcurr):
+
+            pprime(psi_n) = sum_j xrsp_j bsppel_j(psi_n),   ffprim(psi_n) = mu0 sum_j xrsp_(kppcur+j) bsffel_j(psi_n)
+
+        in g-file units. The basis (kppfnc, kfffnc, knots, tensions) is an EFIT input and not stored.
+        One <time_slice> per equilibrium time slice (XRSP is on the MEASUREMENTS time base), the unused
+        entries (netCDF fill values) are dropped and the float32 values written in their shortest exact form.
+
+        With fitdelz EFIT fits a rigid vertical shift of the plasma: ifitdelz = 1 translates the total flux by it
+        (pflux.F90), ifitdelz = 3 the plasma current (current.f90). The settings come from the k-file of the slice
+        (NAMELISTS:KEQDSKS, &INWANT) for runs that store k-files (CAKE runs), otherwise from the snap file of the run
+        (TOP:NAMELIST, &EFITIN), which the standard EFIT01/EFIT02 trees store and which holds for every slice.
+        <fitdelz> and <ifitdelz> hold one <time_slice> per equilibrium time slice whose namelist sets the value. A
+        value the namelist does not set is left out (EFIT's default applies, set_defaults.f90: fitdelz = .false.,
+        ifitdelz = 1), and both are absent for runs that store neither namelist.
+
+        Returns:
+            XML string
+        """
+        xrsp_key = Requirement(f'{self.measurements_node}.XRSP', self.resolve_shot(shot), self.efit_tree).as_key()
+        xrsp = np.asarray(raw_data[xrsp_key], dtype=np.float32)[self._compose_constraint_time_indices(shot, raw_data)]
+
+        root = ET.Element("parameters")
+        xrsp_element = ET.SubElement(root, "xrsp")
+        for index, coefficients in enumerate(xrsp):
+            used = coefficients[np.abs(coefficients) < XRSP_FILL_THRESHOLD]
+            element = ET.SubElement(xrsp_element, "time_slice", index=str(index))
+            element.text = " ".join(np.format_float_scientific(value, unique=True) for value in used)
+
+        keqdsks = raw_data[Requirement(f'{self.namelists_node}:KEQDSKS', self.resolve_shot(shot), self.efit_tree).as_key()]
+        ktime = raw_data[Requirement(f'{self.namelists_node}:KEQDSKS:KTIME', self.resolve_shot(shot), self.efit_tree).as_key()]
+        snap = raw_data[Requirement(f'\\{self.efit_tree}::TOP:NAMELIST', self.resolve_shot(shot), self.efit_tree).as_key()]
+        gtime = np.asarray(
+            raw_data[Requirement(f'{self.geqdsk_node}.GTIME', self.resolve_shot(shot), self.efit_tree).as_key()],
+            dtype=np.float64,
+        )
+        settings = {}  # fitdelz and ifitdelz by equilibrium time slice index
+        if not isinstance(keqdsks, NoData) and not isinstance(ktime, NoData):
+            namelists = np.asarray(keqdsks).astype(str)
+            ktime = np.asarray(ktime, dtype=np.float64)
+            if namelists.ndim != 2 or len(namelists) != len(ktime):
+                raise ValueError(
+                    f"KEQDSKS holds {namelists.shape} namelist lines for {len(ktime)} KTIME entries, expected one row "
+                    "of lines per k-file"
+                )
+            for index, time in enumerate(gtime):
+                matches = np.flatnonzero(np.abs(ktime - time) < KTIME_TOLERANCE)
+                if len(matches):
+                    settings[index] = self._parse_fitdelz("\n".join(namelists[matches[0]]), "inwant")
+        elif not isinstance(snap, NoData):
+            run_settings = self._parse_fitdelz(str(np.asarray(snap)), "efitin")
+            settings = {index: run_settings for index in range(len(gtime))}
+
+        if settings:
+            elements = {key: ET.SubElement(root, key) for key in ("fitdelz", "ifitdelz")}
+            for index, values in settings.items():
+                for key, value in values.items():
+                    ET.SubElement(elements[key], "time_slice", index=str(index)).text = str(value).lower()
+        return ET.tostring(root, encoding="unicode")
+
+    @staticmethod
+    def _parse_fitdelz(namelist: str, group: str) -> dict:
+        """The fitdelz and ifitdelz settings a namelist sets in `group`: &INWANT of a k-file (one line per record) or
+        &EFITIN of a snap file. f90nml skips the text around the groups, such as the comments that follow the
+        &EFITIN group of the stored snap files."""
+        values = f90nml.reads(namelist).get(group, {})
+        return {key: values[key] for key in ("fitdelz", "ifitdelz") if key in values}
 
     def _compose_constraint_time_indices(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -3177,6 +3318,81 @@ class EquilibriumMapper(IDSMapper):
         b_field_z = -dPSIdR / (2.0 * np.pi * r_mesh)
 
         return b_field_z
+
+    def _compose_profiles_2d_j_tor(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose the toroidal plasma current density on the profiles_2d grid.
+
+        EFIT does not store its current (pcurrt) in MDSplus, so it is recovered from the flux with the
+        5-point finite difference Grad-Shafranov operator whose inverse EFIT uses for the interior flux
+        (cyclic.F90) and which it evaluates forward only as a plotted diagnostic (shapesurf.F90, "delstar"):
+
+            Delta* psi = d2psi/dR2 - (1/R) dpsi/dR + d2psi/dZ2 = 2*pi * mu0 * R * j_tor
+
+        with psi in COCOS 11 (Sauter & Medvedev 2013, eqs. 7 and 9 with sigma_Bp = +1, exp_Bp = 1).
+        This is the current implied by the stored flux, not EFIT's pcurrt itself. The two agree up to
+        the float32 storage of PSIRZ if EFIT's last flux update was the finite difference solve
+        (ibunmn=1); if it was the direct Green's function sum (ibunmn=0, or ibunmn=2 once converged
+        below errcut), they differ by the O(h^2) truncation of the stencil. Neither is R p' + FF'/(mu0 R)
+        on the final flux: EFIT evaluates its current on the previous iterate, so that differs by EFIT's
+        convergence error.
+
+        The current is kept where EFIT lets it flow (update_parameters.F90, weight): 0 <= psi_n <= 1
+        inside the bounding box of the boundary outline, which also excludes the private flux region.
+        Outside, Delta* psi only holds the truncation error of the vacuum field and conductors inside the
+        grid. EFIT took this mask from the previous iterate as well, which can only matter on the ring of
+        nodes at psi_n = 1. The grid edge, EFIT's Dirichlet boundary, is 0.
+
+        Returns:
+            (n_time, 1, n_r, n_z) toroidal current density [A/m^2]
+        """
+        r_grid_key = Requirement(f'{self.geqdsk_node}.R', self.resolve_shot(shot), self.efit_tree).as_key()
+        z_grid_key = Requirement(f'{self.geqdsk_node}.Z', self.resolve_shot(shot), self.efit_tree).as_key()
+        psirz_key = Requirement(f'{self.geqdsk_node}.PSIRZ', self.resolve_shot(shot), self.efit_tree).as_key()
+        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', self.resolve_shot(shot), self.efit_tree).as_key()
+        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self.resolve_shot(shot), self.efit_tree).as_key()
+        rbbbs_key = Requirement(f'{self.geqdsk_node}.RBBBS', self.resolve_shot(shot), self.efit_tree).as_key()
+        zbbbs_key = Requirement(f'{self.geqdsk_node}.ZBBBS', self.resolve_shot(shot), self.efit_tree).as_key()
+
+        r_grid = raw_data[r_grid_key]
+        z_grid = raw_data[z_grid_key]
+        dr = r_grid[1] - r_grid[0]
+        dz = z_grid[1] - z_grid[0]
+        r_inner = r_grid[None, None, 1:-1, None]
+
+        # psi on 2D grid (already has COCOS 11 applied), shape: (n_time, 1, n_r, n_z)
+        psi_2d = self._compose_profiles_2d_psi(shot, raw_data).astype(np.float64)
+        center = psi_2d[:, :, 1:-1, 1:-1]
+        r_plus = psi_2d[:, :, 2:, 1:-1]
+        r_minus = psi_2d[:, :, :-2, 1:-1]
+        z_plus = psi_2d[:, :, 1:-1, 2:]
+        z_minus = psi_2d[:, :, 1:-1, :-2]
+        delta_star = (
+            (r_plus - 2 * center + r_minus) / dr**2
+            - (r_plus - r_minus) / (2 * dr * r_inner)
+            + (z_plus - 2 * center + z_minus) / dz**2
+        )
+        j_tor = np.zeros_like(psi_2d)
+        j_tor[:, :, 1:-1, 1:-1] = delta_star / (2 * np.pi * mu_0 * r_inner)
+
+        # EFIT's mask; psi_n is COCOS invariant, so it is taken on the raw g-file flux
+        psirz = np.swapaxes(raw_data[psirz_key], 1, 2)[:, None]
+        ssimag = raw_data[ssimag_key][:, None, None, None]
+        ssibry = raw_data[ssibry_key][:, None, None, None]
+        psi_n = (psirz - ssimag) / (ssibry - ssimag)
+
+        # RBBBS == 0 is padding, as in _compose_boundary_outline_r
+        rbbbs = raw_data[rbbbs_key]
+        valid = rbbbs != 0
+        r_bbbs = np.where(valid, rbbbs, np.nan)
+        z_bbbs = np.where(valid, raw_data[zbbbs_key], np.nan)
+        in_r = (r_grid[None, :] >= np.nanmin(r_bbbs, axis=1)[:, None]) & (
+            r_grid[None, :] <= np.nanmax(r_bbbs, axis=1)[:, None])
+        in_z = (z_grid[None, :] >= np.nanmin(z_bbbs, axis=1)[:, None]) & (
+            z_grid[None, :] <= np.nanmax(z_bbbs, axis=1)[:, None])
+        in_box = in_r[:, None, :, None] & in_z[:, None, None, :]
+
+        return np.where(in_box & (psi_n >= 0) & (psi_n <= 1), j_tor, 0.0)
 
     def _compose_vacuum_b0(self, shot: int, raw_data: dict) -> np.ndarray:
         """
