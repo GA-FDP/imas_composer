@@ -212,6 +212,13 @@ def get_iri_upload_ids(shot: int, tag: str = 'CAKE_FDP') -> Tuple[str, str]:
         raise ValueError(f"No valid IRI CAKE data for shot {shot} (run too old)")
 
     uploads = iri_runs[iri_num]['results_uploaded']
+    missing = [code for code in ('OMFIT_CAKE_PROF', 'OMFIT_CAKE_EFIT') if code not in uploads]
+    if missing:
+        raise ValueError(
+            f"IRI CAKE run {iri_num} for shot {shot} (tag '{tag}') is missing "
+            f"upload(s) {missing}.\nUploaded codes: {sorted(uploads) or ['(none)']}"
+        )
+
     prof_id = str(uploads['OMFIT_CAKE_PROF']['UPLOAD_ID'])[-3:]
     eq_id   = str(uploads['OMFIT_CAKE_EFIT']['UPLOAD_ID'])[-2:]
     return prof_id, eq_id
@@ -232,6 +239,26 @@ def list_all_tags() -> List[str]:
             "ORDER BY tag"
         )
     return [r['TAG'] for r in rows if r['TAG'] is not None]
+
+
+def list_standard_efit_trees(shot: int) -> List[str]:
+    """EFIT trees of the standard per-shot runs of *shot* (EFIT01, EFIT02, EFITRT1, ...), alphabetically.
+
+    A standard run is stored under the shot number itself; runs under an extended pulse number, such
+    as the IRI CAKE runs in the EFIT tree, are left out.
+
+    Raises ValueError if *shot* has none.
+    """
+    with D3DRDB() as db:
+        rows = db.query(
+            f"SELECT DISTINCT tree FROM plasmas "
+            f"WHERE shot={shot} AND code_name='EFIT' AND run_id={shot} AND deleted=0 "
+            f"ORDER BY tree"
+        )
+    trees = [r['TREE'] for r in rows if r['TREE'] is not None]
+    if not trees:
+        raise ValueError(f"No standard EFIT run for shot {shot} in the code run database.")
+    return trees
 
 
 def list_shots_for_tag(tag: str = 'IRI_CAKE01') -> List[int]:

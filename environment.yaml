@@ -1,6 +1,7 @@
 name: imas_composer
 
 channels:
+  - ga-fdp
   - conda-forge
 
 dependencies:
@@ -10,6 +11,7 @@ dependencies:
   - pyyaml *
   - awkward *
   - scipy *
+  - f90nml # parsing EFIT k-files
 
   # Test tools
   - pytest *
@@ -17,10 +19,16 @@ dependencies:
   - pytest-xdist *
   - pexpect *
   - tqdm *
-  - mdsplus =7.157.0
 
-  # OMAS - available on conda-forge since 0.95.2
-  - omas >=0.95.2
+  # Default fetching backend
+  # FDP data access: Pelican/XRootD transport and the store schema used by toksearch
+  - xrdcl-pelican-fdp
+  - fdp-schema >=0.2.1
+  - pelicanplatform >=7.24.3,<8
+
+   # mdsip-fdp with normal MDSplus
+  - mdsplus >=7.157
+  - mdsip-fdp
 
   # For pip install
   - pip *
