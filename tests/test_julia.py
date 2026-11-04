@@ -13,7 +13,7 @@ from imas_composer.julia import julia_value
 
 
 # Node classes IMASdd.awkward_from_buffers can read
-SUPPORTED_CLASSES = {"NumpyArray", "ListOffsetArray", "RegularArray", "ByteMaskedArray"}
+SUPPORTED_CLASSES = {"NumpyArray", "EmptyArray", "ListOffsetArray", "RegularArray", "ByteMaskedArray"}
 
 
 def _regular_of_list_array():
@@ -36,6 +36,9 @@ ARRAYS = [
     pytest.param(lambda: ak.Array([["ECOILA", "ECOILA_1"], ["F1A"]]), id="var_string"),
     pytest.param(lambda: ak.Array(np.arange(6.0).reshape(2, 3)), id="regular_float64"),
     pytest.param(lambda: ak.Array(np.arange(3.0)), id="flat_float64"),
+    pytest.param(lambda: ak.Array([]), id="empty"),
+    pytest.param(lambda: ak.Array([[], []]), id="var_empty"),
+    pytest.param(lambda: ak.Array(np.zeros((3, 0))), id="regular_size_0"),
 ]
 
 
