@@ -25,11 +25,8 @@ def filter_padding(arr: np.ndarray, mask: np.ndarray) -> ak.Array:
     """
     Remove padding from 2D array using boolean mask, returning ragged awkward array.
 
-    Each row is truncated after its last valid entry. Invalid entries before
-    that point are kept as None rather than dropped, so every valid value stays
-    at its original inner index (e.g. a missing first X-point does not shift
-    the second X-point into slot 0). The inner type is only an option type
-    (``?float64``) when such interior gaps exist.
+    Invalid entries are dropped wherever they are in the row, so rows without
+    any valid entry become empty lists.
 
     Args:
         arr: 2D numpy array with shape (n_outer, n_max_inner) - data to filter
@@ -44,22 +41,11 @@ def filter_padding(arr: np.ndarray, mask: np.ndarray) -> ak.Array:
         <Array [[1, 2], [3], [4, 5, 6]] type='3 * var * int64'>
         >>> arr = np.array([[0, 2], [3, 0], [0, 0]])
         >>> filter_padding(arr, arr != 0)
-        <Array [[None, 2], [3], []] type='3 * var * ?int64'>
+        <Array [[2], [3], []] type='3 * var * int64'>
     """
     arr = np.asarray(arr)
     mask = np.asarray(mask, dtype=bool)
-    n_inner = mask.shape[1]
-
-    # Row length = index of the last valid entry + 1 (0 for rows with no valid entries)
-    lengths = np.where(mask.any(axis=1), n_inner - np.argmax(mask[:, ::-1], axis=1), 0)
-    keep = np.arange(n_inner) < lengths[:, None]
-
-    content = ak.Array(arr[keep])
-    valid = mask[keep]
-    if not valid.all():
-        content = ak.mask(content, valid)
-
-    return ak.unflatten(content, lengths)
+    return ak.unflatten(arr[mask], mask.sum(axis=1))
 
 
 class EquilibriumMapper(IDSMapper):
