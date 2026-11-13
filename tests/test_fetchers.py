@@ -83,6 +83,55 @@ def test_failure_is_stored_in_band(monkeypatch, error, expected_type):
     assert str(result[req.as_key()]) == str(error)
 
 
+@pytest.fixture
+def fake_fetch(monkeypatch):
+    """Make fetch_many_from_req return the value set on the returned dict for every req."""
+    returned = {}
+
+    def _fake_fetch_many(reqs):
+        return {req.as_key(): returned['value'] for req in reqs}
+
+    monkeypatch.setattr("imas_composer.fetchers.TOKSEARCH_AVAILABLE", True)
+    monkeypatch.setattr("imas_composer.fetchers.fetch_many_from_req", _fake_fetch_many)
+    return returned
+
+
+@pytest.mark.parametrize("value, expected", [
+    (np.array([1.1, 2.2], dtype=np.float32), np.array([1.1, 2.2], dtype=np.float32).astype(np.float64)),
+    (np.float32(1.1), np.float64(np.float32(1.1))),
+    (np.array([1.1, 2.2]), np.array([1.1, 2.2])),
+    (np.array([1, 2], dtype=np.int32), np.array([1, 2], dtype=np.int32)),
+    (np.array(["EFIT01"]), np.array(["EFIT01"])),
+])
+def test_tree_floats_cast_to_float64(fake_fetch, value, expected):
+    """Floating-point tree data is cast to float64 without changing its values,
+    other dtypes pass through unchanged."""
+    fake_fetch['value'] = value
+    req = Requirement("\\EFIT01::TOP.RESULTS.GEQDSK.GTIME", REFERENCE_SHOT, "EFIT01")
+
+    result = fetch_requirements([req])[req.as_key()]
+
+    assert result.dtype == expected.dtype
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_ptdata_floats_cast_to_float64(fake_fetch):
+    """ptdata 'data' and 'times' are cast to float64, the pthead2 'rarray' is left alone."""
+    data = np.array([1.1, 2.2], dtype=np.float32)
+    times = np.array([0.1, 0.2], dtype=np.float32)
+    rarray = np.ones(20, dtype=np.float32)
+    fake_fetch['value'] = {'data': data, 'times': times, 'rarray': rarray}
+    req = Requirement("BT", REFERENCE_SHOT, "__ptdata__")
+
+    result = fetch_requirements([req])[req.as_key()]
+
+    assert result['data'].dtype == np.float64
+    assert result['times'].dtype == np.float64
+    np.testing.assert_array_equal(result['data'], data)
+    np.testing.assert_array_equal(result['times'], times)
+    assert result['rarray'] is rarray
+
+
 def test_empty_requirements_returns_empty():
     """An empty requirement list short-circuits before the availability check."""
     assert fetch_requirements([]) == {}

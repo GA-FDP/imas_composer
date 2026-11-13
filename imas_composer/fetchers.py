@@ -42,6 +42,17 @@ def _is_missing_ptdata(value: dict) -> bool:
     return not np.any(value['rarray'])
 
 
+def _as_float64(value: Any) -> Any:
+    """Cast floating-point data (array or numpy scalar) to float64, pass anything else through.
+
+    MDSplus stores most signals as float32 and numpy >= 2 keeps float32 when it is
+    combined with a Python float, so unit conversions downstream would lose precision.
+    """
+    if isinstance(value, (np.ndarray, np.floating)) and np.issubdtype(value.dtype, np.floating):
+        return value.astype(np.float64, copy=False)
+    return value
+
+
 def fetch_requirements(
     requirements: List[Requirement],
 ) -> Dict[Tuple[str, int, str], Any]:
@@ -63,6 +74,7 @@ def fetch_requirements(
         Dict mapping each requirement's as_key() tuple to its fetched value,
         or to the Exception if fetching failed. Missing data (missing tree,
         empty node, node not found, ptdata point without data) is stored as NoData.
+        Floating-point data (including ptdata 'data' and 'times') is cast to float64.
 
     Raises:
         RuntimeError: If toksearch is not installed.
@@ -91,10 +103,16 @@ def fetch_requirements(
         value = raw_data[key]
         if isinstance(value, Exception):
             raw_data[key] = _as_no_data(value)
-        elif req.treename == "__ptdata__" and _is_missing_ptdata(value):
-            raw_data[key] = NoData(
-                f"PTDATA point '{req.mds_path}' #{req.shot}: pthead2 returned an all-zero header (no data)"
-            )
+        elif req.treename == "__ptdata__":
+            if _is_missing_ptdata(value):
+                raw_data[key] = NoData(
+                    f"PTDATA point '{req.mds_path}' #{req.shot}: pthead2 returned an all-zero header (no data)"
+                )
+            else:
+                value['data'] = _as_float64(value['data'])
+                value['times'] = _as_float64(value['times'])
+        else:
+            raw_data[key] = _as_float64(value)
     return raw_data
 
 
