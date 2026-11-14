@@ -2734,7 +2734,7 @@ class EquilibriumMapper(IDSMapper):
         OMAS: data(\\EFIT::TOP.RESULTS.AEQDSK.AREA)
         """
         area_key = Requirement(f'{self.aeqdsk_node}.AREA', self.resolve_shot(shot), self.efit_tree).as_key()
-        return raw_data[area_key]
+        return self._aeqdsk_on_gtime(shot, raw_data, raw_data[area_key])
 
     def _compose_global_li_3(self, shot: int, raw_data: dict) -> np.ndarray:
         """Trivial pass-through for li_3."""
