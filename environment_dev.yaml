@@ -56,6 +56,13 @@ dependencies:
   - xrdcl-pelican-fdp
   - pelicanplatform >=7.24.3,<8
 
+  # fdp: toksearch_d3d's FDP environment bootstrap (build_device_config)
+  # needs >=0.12.1, matching toksearch_d3d's own pin
+  - fdp >=0.12.1
+
+  # toksearch_d3d (pip-installed from toksearch_d3d_submodule) imports ptdata
+  - ptdata >=2.13.0,<3
+
   # For pip install
   - pip *
   - setuptools

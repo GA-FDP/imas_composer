@@ -20,6 +20,8 @@ from .composer import ImasComposer
 
 try:
     from toksearch.interfaces.req_interface import fetch_many_from_req
+    # Patches the DIII-D servers and PTDATA support into toksearch's req_interface
+    import toksearch_d3d
     TOKSEARCH_AVAILABLE = True
 except ImportError:
     TOKSEARCH_AVAILABLE = False
@@ -72,8 +74,9 @@ def fetch_requirements(
 
     if not TOKSEARCH_AVAILABLE:
         raise RuntimeError(
-            "toksearch is required for fetching requirements but is not "
-            "installed. Install it with: conda install -c ga-fdp toksearch"
+            "toksearch and toksearch_d3d are required for fetching requirements "
+            "but are not installed. Install them with: "
+            "conda install -c ga-fdp toksearch toksearch_d3d"
         )
 
     unique_requirements = []
