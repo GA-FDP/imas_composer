@@ -20,6 +20,9 @@ dependencies:
   - tqdm *
 
   # Default fetching backend
+  # fdp: toksearch_d3d's FDP environment bootstrap (build_device_config)
+  # needs >=0.12.1, matching toksearch_d3d's own pin
+  - fdp >=0.12.1
   # FDP data access: Pelican/XRootD transport and the store schema used by toksearch
   - xrdcl-pelican-fdp
   - fdp-schema >=0.2.1
@@ -28,6 +31,9 @@ dependencies:
    # mdsip-fdp with normal MDSplus
   - mdsplus >=7.157
   - mdsip-fdp
+
+  # toksearch_d3d (pip-installed from toksearch_d3d_submodule) imports ptdata
+  - ptdata >=2.13.0,<3
 
   # For pip install
   - pip *
