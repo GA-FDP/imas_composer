@@ -1,11 +1,12 @@
 """
-Test equilibrium.code.parameters, the XML holding EFIT's p' and FF' basis function coefficients (XRSP) and EFIT's rigid
-vertical shift settings (fitdelz, ifitdelz) from the k-files or the snap file of the run.
+Test equilibrium.code.parameters, the XML holding EFIT's p' and FF' basis function coefficients (XRSP), the bases of
+p' and FF' and EFIT's rigid vertical shift settings (fitdelz, ifitdelz) from the k-files or the snap file of the run.
 
 OMAS has no mapping for it. The coefficients are checked against the p' profile: every basis function EFIT
 offers for p' (polynomial or spline, ppbasisfunc.f90) vanishes on the magnetic axis except the first one,
 which is 1 there, so p' at psi_n = 0 is the first coefficient. The g-file PPRIME is that sum (shapesurf.F90),
-dpressure_dpsi is PPRIME / (2 pi) in COCOS 11 up to the sign.
+dpressure_dpsi is PPRIME / (2 pi) in COCOS 11 up to the sign. The bases are checked against the stored profiles
+on the cases IDA verifies its free-boundary solver with. Tests of the bases without data are in test_efit_basis.py.
 """
 import xml.etree.ElementTree as ET
 
@@ -13,12 +14,35 @@ import numpy as np
 import pytest
 
 from imas_composer import ImasComposer, NoData, Requirement
+from imas_composer.efit_basis import RECOVERY_TOLERANCE, efit_f_profile, efit_profile_basis
 from imas_composer.fetchers import fetch_requirements
-from imas_composer.ids.equilibrium import EquilibriumMapper
+from imas_composer.ids.equilibrium import FITDELZ_KEYS, EquilibriumMapper
+from tests.conftest import efit_fpol
 
 CODE_PARAMETERS = "equilibrium.code.parameters"
 TIME = "equilibrium.time"
 PPRIME = "equilibrium.time_slice.profiles_1d.dpressure_dpsi"
+FFPRIME = "equilibrium.time_slice.profiles_1d.f_df_dpsi"
+F = "equilibrium.time_slice.profiles_1d.f"
+PSI_AXIS = "equilibrium.time_slice.global_quantities.psi_axis"
+PSI_BOUNDARY = "equilibrium.time_slice.global_quantities.psi_boundary"
+# IDA's basis cases (tests/models/test_free_boundary_gs_solver_efit.py): shot, tree, run id, time [s], where the
+# settings come from and whether EFIT moved the knots (kautoknt) away from those of the k-file
+BASIS_CASES = [
+    pytest.param(203877, "EFIT", "01", 2.0, "kfile", False, id="203877_cake_01"),
+    pytest.param(169621, "EFIT", "04", 2.0, "kfile", True, id="169621_cake_04_moved_knots"),
+    pytest.param(169621, "EFIT", "04", 1.44, "kfile", False, id="169621_cake_04_pedestal"),
+    pytest.param(173587, "EFIT", "01", 2.28, "kfile", True, id="173587_cake_01_moved_knots"),
+    pytest.param(173587, "EFIT", "01", 5.4, "kfile", False, id="173587_cake_01_knots_at_one_half"),
+    pytest.param(155149, "EFIT", "05", 3.0, "kfile", False, id="155149_cake_05"),
+    pytest.param(203877, "EFIT01", "", 2.0, "snap", False, id="203877_efit01"),
+    pytest.param(203877, "EFIT02", "", 2.0, "snap", False, id="203877_efit02"),
+    pytest.param(118162, "EFIT01", "", 1.8, "snap", False, id="118162_efit01"),
+]
+# a basis case slice lies within this of its time [s]
+CASE_TIME_TOLERANCE = 1e-3
+# F of the basis differs from EFIT's FPOL by the error of EFIT's trapezoidal rule on nw points (ece.F90)
+F_TRAPEZOID_TOLERANCE = 1e-4
 # float32 storage of both XRSP and PPRIME
 AXIS_TOLERANCE = 1e-6
 # 237 GEQDSK and 282 MEASUREMENTS slices, see test_late_slices_map_to_their_own_measurements
@@ -39,9 +63,10 @@ SNAP_TITLE = "EFIT_SNAP.DAT_JTA_F  (rename to EFIT_SNAP.DAT for EFITD)\n"
 SNAP_DESCRIPTION = "\n  NAMELIST input parameters               03/07/91\n  kffcur : number of fitting parameters in FF'\n"
 
 
-def compose(composer, shot: int) -> tuple[dict, dict]:
-    """`CODE_PARAMETERS`, `TIME` and `PPRIME` of `shot`, and the raw data they were composed from."""
-    paths = [CODE_PARAMETERS, TIME, PPRIME]
+def compose(composer, shot: int, paths: tuple = (CODE_PARAMETERS, TIME, PPRIME)) -> tuple[dict, dict]:
+    """`paths` of `shot`, by default `CODE_PARAMETERS`, `TIME` and `PPRIME`, and the raw data they were composed
+    from."""
+    paths = list(paths)
     raw_data = {}
     for _ in range(10):
         status, requirements = composer.resolve(paths, shot, raw_data)
@@ -106,6 +131,62 @@ def test_late_slices_map_to_their_own_measurements():
     assert np.all(mismatch < AXIS_TOLERANCE), f"{np.sum(mismatch >= AXIS_TOLERANCE)} slices read another slice's XRSP"
 
 
+def relative_rms(values: np.ndarray, stored: np.ndarray) -> float:
+    """rms of `values` against `stored`, relative to max |stored|, as efit_basis checks the bases."""
+    return float(np.sqrt(np.mean(((values - stored) / np.abs(stored).max()) ** 2)))
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+def test_one_basis_per_equilibrium_time_slice(composed):
+    data, _ = composed
+    slices = ET.fromstring(data[CODE_PARAMETERS]).find("basis").findall("time_slice")
+    assert [int(element.get("index")) for element in slices] == list(range(len(data[TIME])))
+    for element in slices:
+        assert [child.tag for child in element] == ["pprime", "ffprime"]
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+@pytest.mark.parametrize("shot, efit_tree, efit_run_id, time, source, fitted", BASIS_CASES)
+def test_basis_reproduces_the_stored_profiles(shot, efit_tree, efit_run_id, time, source, fitted):
+    """The basis of the slice reproduces the stored p' and FF', from the expected namelist, with the knots fitted
+    only where EFIT moved them."""
+    composer = ImasComposer(efit_tree=efit_tree, efit_run_id=efit_run_id)
+    data, _ = compose(composer, shot, (CODE_PARAMETERS, TIME, PPRIME, FFPRIME))
+    times = np.asarray(data[TIME])
+    index = int(np.argmin(np.abs(times - time)))
+    assert abs(times[index] - time) < CASE_TIME_TOLERANCE, f"no slice at {time} s, nearest {times[index]} s"
+
+    element = ET.fromstring(data[CODE_PARAMETERS]).find("basis").findall("time_slice")[index]
+    assert element.get("source") == source
+    assert any(child.get("fitted_knots") == "true" for child in element) == fitted
+
+    stored_pprime, stored_ffprime = np.asarray(data[PPRIME])[index], np.asarray(data[FFPRIME])[index]
+    pprime, ffprime = efit_profile_basis(data[CODE_PARAMETERS], index)(np.linspace(0, 1, stored_pprime.size))
+    assert relative_rms(pprime, stored_pprime) < RECOVERY_TOLERANCE
+    assert relative_rms(ffprime, stored_ffprime) < RECOVERY_TOLERANCE
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+def test_f_follows_the_stored_f(composer, test_shot):
+    """EFIT's trapezoidal rule (ece.F90) on the FF' of the basis gives the stored F, which checks the inputs of
+    efit_f_profile and their COCOS. Its closed-form integral differs from it by the error of that rule."""
+    data, _ = compose(composer, test_shot, (CODE_PARAMETERS, TIME, F, PSI_AXIS, PSI_BOUNDARY))
+    f_stored = np.asarray(data[F], dtype=np.float64)
+    psi_axis, psi_boundary = np.asarray(data[PSI_AXIS]), np.asarray(data[PSI_BOUNDARY])
+    psin = np.linspace(0, 1, f_stored.shape[1])
+    for index in (0, len(f_stored) // 2, len(f_stored) - 1):
+        _, ffprime = efit_profile_basis(data[CODE_PARAMETERS], index)(psin)
+        trapezoid = efit_fpol(ffprime, f_stored[index, -1], psi_boundary[index] - psi_axis[index])
+        np.testing.assert_allclose(trapezoid, f_stored[index], rtol=AXIS_TOLERANCE)
+        f_profile = efit_f_profile(
+            data[CODE_PARAMETERS], index, f_stored[index, -1], psi_axis[index], psi_boundary[index]
+        )
+        np.testing.assert_allclose(f_profile(psin), f_stored[index], rtol=F_TRAPEZOID_TOLERANCE)
+
+
 @pytest.mark.requires_atlas  # the EFIT run KEQDSKS_RUN_ID is not on FDP
 @pytest.mark.integration
 @pytest.mark.requires_mdsplus
@@ -165,4 +246,4 @@ def test_fitdelz_from_snap_file(shot, expected):
 ])
 def test_parse_fitdelz(namelist, group, expected):
     """Only the settings the namelist sets in its group, no EFIT defaults."""
-    assert EquilibriumMapper._parse_fitdelz(namelist, group) == expected
+    assert EquilibriumMapper._parse_namelist(namelist, group, FITDELZ_KEYS) == expected
