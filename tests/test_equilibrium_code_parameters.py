@@ -35,6 +35,7 @@ BASIS_CASES = [
     pytest.param(173587, "EFIT", "01", 2.28, "kfile", True, id="173587_cake_01_moved_knots"),
     pytest.param(173587, "EFIT", "01", 5.4, "kfile", False, id="173587_cake_01_knots_at_one_half"),
     pytest.param(155149, "EFIT", "05", 3.0, "kfile", False, id="155149_cake_05"),
+    pytest.param(155149, "EFIT", "05", 1.18, "kfile", True, id="155149_cake_05_knots_far_in_their_windows"),
     pytest.param(203877, "EFIT01", "", 2.0, "snap", False, id="203877_efit01"),
     pytest.param(203877, "EFIT02", "", 2.0, "snap", False, id="203877_efit02"),
     pytest.param(118162, "EFIT01", "", 1.8, "snap", False, id="118162_efit01"),

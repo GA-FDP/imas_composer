@@ -16,13 +16,13 @@ from imas_composer import ImasComposer, NoData
 from imas_composer.efit_basis import (
     EFIT_MU0,
     RECOVERY_TOLERANCE,
-    _search_knots,
     basis_settings,
     efit_f_profile,
     efit_profile_basis,
     evaluate_basis,
     evaluate_f,
     evaluate_profiles,
+    knot_windows,
     parse_basis,
     polynomial_basis,
     resolve_basis,
@@ -99,21 +99,24 @@ def efit_polynomial_reference(psin: np.ndarray, coefficients: np.ndarray, edge: 
     return profile
 
 
-def spline_settings(spline: dict, knots: np.ndarray, movable_knots: bool) -> dict:
-    """Settings of `basis_settings` for the synthetic spline, starting from `knots`."""
+def spline_settings(spline: dict, knots: np.ndarray, appdf) -> dict:
+    """Settings of `basis_settings` for the synthetic spline, starting from `knots`, with the knot windows of `appdf`
+    (a fraction or one per knot), or None for knots EFIT kept (kautoknt = 0)."""
+    windows = None if appdf is None else knot_windows(knots, np.broadcast_to(appdf, knots.shape).astype(np.float64))
     return {
         "kind": "tension_spline",
         "n_coefficients": 2 * len(knots),
         "knots": knots,
         "tension": spline["tension"],
-        "movable_knots": movable_knots,
+        "knot_windows": windows,
     }
 
 
-def moved_knots(knots: np.ndarray) -> np.ndarray:
-    """`knots` with the interior knots moved by 3e-3 in alternating directions, as EFIT's knot optimisation does."""
+def moved_knots(knots: np.ndarray, fraction: float) -> np.ndarray:
+    """`knots` with the interior knots moved by `fraction` of the smallest knot spacing in alternating directions, as
+    EFIT's knot searches do. Below a fraction of 0.25 the windows of appdf = 0.5 around them hold the original knots."""
     shifted = knots.copy()
-    shifted[1:-1] += 3e-3 * (-1.0) ** np.arange(len(knots) - 2)
+    shifted[1:-1] += fraction * np.diff(knots).min() * (-1.0) ** np.arange(len(knots) - 2)
     return shifted
 
 
@@ -178,7 +181,7 @@ def code_parameters() -> tuple[str, list[dict]]:
 @pytest.mark.parametrize("synthetic_spline", SPLINE_CASES, indirect=True)
 def test_namelist_knots_are_kept(synthetic_spline):
     """Knots that reproduce the stored profile are not fitted, even where EFIT could have moved them."""
-    settings = spline_settings(synthetic_spline, synthetic_spline["knots"], movable_knots=True)
+    settings = spline_settings(synthetic_spline, synthetic_spline["knots"], appdf=0.5)
     basis, rms, fitted = resolve_basis(
         settings, synthetic_spline["coefficients"], synthetic_spline["psin"], synthetic_spline["profile"]
     )
@@ -187,10 +190,12 @@ def test_namelist_knots_are_kept(synthetic_spline):
     np.testing.assert_array_equal(basis["knots"], synthetic_spline["knots"])
 
 
+@pytest.mark.parametrize("fraction", [0.02, 0.2], ids=["near", "far"])
 @pytest.mark.parametrize("synthetic_spline", SPLINE_CASES, indirect=True)
-def test_moved_knots_are_fitted(synthetic_spline):
-    """Where EFIT moved the knots (kautoknt), the knots are fitted from those of the namelist."""
-    settings = spline_settings(synthetic_spline, moved_knots(synthetic_spline["knots"]), movable_knots=True)
+def test_moved_knots_are_fitted_within_their_windows(synthetic_spline, fraction):
+    """Where EFIT moved the knots (kautoknt), the knots are fitted within the windows around those of the namelist,
+    also far from them."""
+    settings = spline_settings(synthetic_spline, moved_knots(synthetic_spline["knots"], fraction), appdf=0.5)
     basis, rms, fitted = resolve_basis(
         settings, synthetic_spline["coefficients"], synthetic_spline["psin"], synthetic_spline["profile"]
     )
@@ -202,8 +207,8 @@ def test_moved_knots_are_fitted(synthetic_spline):
 
 @pytest.mark.parametrize("synthetic_spline", SPLINE_CASES[:1], indirect=True)
 def test_fixed_knots_are_not_fitted(synthetic_spline):
-    """Knots EFIT kept (kautoknt = 0) are never fitted: the basis misses and the caller raises."""
-    settings = spline_settings(synthetic_spline, moved_knots(synthetic_spline["knots"]), movable_knots=False)
+    """Knots EFIT kept (kautoknt = 0) are never fitted: the basis misses and the slice keeps an error."""
+    settings = spline_settings(synthetic_spline, moved_knots(synthetic_spline["knots"], 0.02), appdf=None)
     _, rms, fitted = resolve_basis(
         settings, synthetic_spline["coefficients"], synthetic_spline["psin"], synthetic_spline["profile"]
     )
@@ -211,18 +216,41 @@ def test_fixed_knots_are_not_fitted(synthetic_spline):
     assert rms > RECOVERY_TOLERANCE
 
 
-@pytest.mark.parametrize("synthetic_spline", SPLINE_CASES, indirect=True)
-def test_search_finds_knots_far_from_the_start(synthetic_spline):
-    """The candidate search starts from the points where the profile takes the hat values, not from the namelist."""
-    n_knots = len(synthetic_spline["knots"])
-    basis = {
-        "kind": "tension_spline",
-        "knots": np.linspace(0, 1, n_knots),
-        "tension": synthetic_spline["tension"],
-        "coefficients": synthetic_spline["coefficients"],
-    }
-    found = _search_knots(basis, synthetic_spline["psin"], synthetic_spline["profile"])
-    np.testing.assert_allclose(found["knots"], synthetic_spline["knots"], rtol=0, atol=KNOT_TOLERANCE)
+@pytest.mark.parametrize("synthetic_spline", SPLINE_CASES[:1], indirect=True)
+def test_knots_outside_their_windows_are_not_found(synthetic_spline):
+    """Knots EFIT cannot have reached are not fitted to: with appdf = 1e-3 the windows are narrower than 1e-3, the
+    knots moved by at least 2e-3. The fitted knots stay within their windows and the basis misses."""
+    settings = spline_settings(synthetic_spline, moved_knots(synthetic_spline["knots"], 0.2), appdf=1e-3)
+    basis, rms, fitted = resolve_basis(
+        settings, synthetic_spline["coefficients"], synthetic_spline["psin"], synthetic_spline["profile"]
+    )
+    lower, upper = settings["knot_windows"]
+    assert fitted
+    assert rms > RECOVERY_TOLERANCE
+    assert np.all((lower <= basis["knots"][1:-1]) & (basis["knots"][1:-1] <= upper))
+
+
+@pytest.mark.parametrize("synthetic_spline", SPLINE_CASES[:1], indirect=True)
+def test_knots_with_an_empty_window_stay(synthetic_spline):
+    """A knot with appdf = 0 is not moved, the others are fitted around it; if no knot can move, none is fitted."""
+    knots = synthetic_spline["knots"]
+    start = moved_knots(knots, 0.02)
+    start[1] = knots[1]
+    appdf = np.full(len(knots), 0.5)
+    appdf[1] = 0.0
+    basis, rms, fitted = resolve_basis(
+        spline_settings(synthetic_spline, start, appdf), synthetic_spline["coefficients"], synthetic_spline["psin"],
+        synthetic_spline["profile"],
+    )
+    assert fitted and rms < RECOVERY_TOLERANCE
+    assert basis["knots"][1] == knots[1]
+    np.testing.assert_allclose(basis["knots"], knots, rtol=0, atol=KNOT_TOLERANCE)
+
+    _, rms, fitted = resolve_basis(
+        spline_settings(synthetic_spline, start, 0.0), synthetic_spline["coefficients"], synthetic_spline["psin"],
+        synthetic_spline["profile"],
+    )
+    assert not fitted and rms > RECOVERY_TOLERANCE
 
 
 @pytest.mark.parametrize("n_knots", [2, 5, 8])
@@ -313,8 +341,29 @@ def test_spline_coefficients_follow_the_knots():
     # pptens2 = |pptens| (kppknt - 1) / (ppknt(kppknt) - ppknt(1))
     assert settings["pprime"]["tension"] == 5.0
     assert settings["ffprime"]["tension"] == 10.0
-    assert not settings["pprime"]["movable_knots"]
-    assert basis_settings({"kppfnc": 6, "kppknt": 2, "ppknt": [0.0, 1.0], "kautoknt": 3})["pprime"]["movable_knots"]
+    assert settings["pprime"]["knot_windows"] is None
+
+
+# the k-file of 155149 EFIT 05 sets APPDF = 0, 0.3, 0.3, 0.3, 0.1, 0.1, 0 for these knots
+WINDOW_KNOTS = [0.0, 0.5, 0.88119, 0.94993, 0.97579, 0.98298, 1.0]
+
+
+@pytest.mark.parametrize("appdf, fractions", [
+    pytest.param(None, [0.5] * 5, id="default"),
+    pytest.param([0.0, 0.3, 0.3, 0.3, 0.1, 0.1, 0.0], [0.3, 0.3, 0.3, 0.1, 0.1], id="155149"),
+    pytest.param([0.0, 0.3], [0.3, 0.5, 0.5, 0.5, 0.5], id="leading_knots"),
+    pytest.param([None, None, 0.2], [0.5, 0.2, 0.5, 0.5, 0.5], id="skipped_elements"),
+])
+def test_knot_windows_follow_appdf(appdf, fractions):
+    """EFIT moves interior knot i within [k_i - appdf_i (k_i - k_(i-1)), k_i + appdf_i (k_(i+1) - k_i)]
+    (auto_knot.F90, rand_knot_opt.F90); appdf defaults to 0.5 for every knot the namelist does not set."""
+    values = {"kppfnc": 6, "kppknt": 7, "ppknt": WINDOW_KNOTS, "kautoknt": 3}
+    if appdf is not None:
+        values["appdf"] = appdf
+    lower, upper = basis_settings(values)["pprime"]["knot_windows"]
+    knots, fractions = np.array(WINDOW_KNOTS), np.array(fractions)
+    np.testing.assert_allclose(lower, knots[1:-1] - fractions * np.diff(knots)[:-1], rtol=0, atol=1e-15)
+    np.testing.assert_allclose(upper, knots[1:-1] + fractions * np.diff(knots)[1:], rtol=0, atol=1e-15)
 
 
 @pytest.mark.parametrize("kind", [1, 2, 3, 4, 5, 7, 8])

@@ -30,29 +30,17 @@ checks it against the stored profiles (`resolve_basis`) and writes it into the X
 
 import functools
 import xml.etree.ElementTree as ET
-from itertools import product
 from typing import Callable, Optional
 
 import numpy as np
-from scipy.interpolate import CubicSpline
 from scipy.optimize import least_squares
 
 # relative rms of a basis against the stored profiles, which are float32; EFIT's basis reproduces them to ~1e-8
 RECOVERY_TOLERANCE = 1e-6
-# psi_n points of the cubic interpolant of the stored profile on which knots are searched
-CROSSING_POINTS = 200001
-# relative distance of the interpolant to a hat value within which a local minimum counts as touching it
-TOUCH_TOLERANCE = 1e-3
-# candidate knots closer than this in psi_n are one candidate
-MERGE_DISTANCE = 1e-3
-# a spline whose candidate knot combinations exceed this is not searched
-MAX_KNOT_COMBINATIONS = 20000
-# best ranked knot combinations that are refined
-N_REFINED = 5
-# if the refined knots miss RECOVERY_TOLERANCE, each knot is restarted from this many positions between its
-# neighbours, for at most this many passes
-N_RESCAN_STARTS = 8
-MAX_RESCAN_PASSES = 3
+# random starts of the knot fit after the namelist knots; 300 recover 155149 EFIT 05 at 1180 ms
+N_KNOT_STARTS = 300
+# xtol, ftol and gtol of each knot fit, with which the starts of 155149 at 1180 ms reach a relative rms of 1.7e-8
+KNOT_FIT_TOLERANCE = 1e-15
 # EFIT's mu0 of FF', twopi * tmu with tmu = 2e-7 (modules-efit.F90)
 EFIT_MU0 = 4e-7 * np.pi
 
@@ -75,6 +63,9 @@ BASIS_DEFAULTS = {
     "fftens": 0.0,
     "kautoknt": 0,
     "icprof": 0,
+    # of every knot; a namelist sets the leading knots
+    "appdf": 0.5,
+    "affdf": 0.5,
 }
 BASIS_KEYS = tuple(BASIS_DEFAULTS)
 # kffcur, kppcur and fcurbd = pcurbd that icprof sets (set_basis_params, set_basis.f90)
@@ -82,9 +73,9 @@ ICPROF_SETTINGS = {1: (2, 2, 1.0), 2: (2, 2, 0.0), 3: (3, 2, 0.0)}
 # namelist names of the settings of each profile
 PROFILE_NAMES = {
     "pprime": {"kind": "kppfnc", "count": "kppcur", "edge": "pcurbd", "n_knots": "kppknt", "knots": "ppknt",
-               "tension": "pptens"},
+               "tension": "pptens", "window": "appdf"},
     "ffprime": {"kind": "kfffnc", "count": "kffcur", "edge": "fcurbd", "n_knots": "kffknt", "knots": "ffknt",
-                "tension": "fftens"},
+                "tension": "fftens", "window": "affdf"},
 }
 
 
@@ -101,8 +92,8 @@ def basis_settings(values: dict) -> dict[str, dict]:
 
     Returns:
         `pprime` and `ffprime` settings, each with its `kind` ("polynomial" or "tension_spline") and `n_coefficients`.
-        A polynomial has its `edge` (pcurbd, fcurbd), a tension spline its `knots`, its effective `tension` and
-        whether EFIT moved the knots (`movable_knots`, kautoknt != 0).
+        A polynomial has its `edge` (pcurbd, fcurbd), a tension spline its `knots`, its effective `tension` and,
+        where EFIT may have moved the knots (kautoknt != 0), their `knot_windows` (otherwise None).
 
     Raises:
         ValueError: For other kinds of basis, or a tension spline without its knots.
@@ -130,13 +121,19 @@ def basis_settings(values: dict) -> dict[str, dict]:
                     f"and {names['knots']} = {knots.tolist()}."
                 )
             knots = knots[:n_knots]
+            fractions = np.full(n_knots, BASIS_DEFAULTS[names["window"]])
+            given = values.get(names["window"], [])
+            # f90nml gives a scalar for one value and None for an element the namelist skips
+            for index, fraction in enumerate((given if isinstance(given, list) else [given])[:n_knots]):
+                if fraction is not None:
+                    fractions[index] = fraction
             profiles[profile] = {
                 "kind": "tension_spline",
                 "n_coefficients": 2 * n_knots,
                 "knots": knots,
                 # pptens2 of ppbasisfunc.f90 (fftens2 of ffbasisfunc.f90)
                 "tension": abs(float(settings[names["tension"]])) * (n_knots - 1) / (knots[-1] - knots[0]),
-                "movable_knots": settings["kautoknt"] != 0,
+                "knot_windows": knot_windows(knots, fractions) if settings["kautoknt"] != 0 else None,
             }
         else:
             raise ValueError(
@@ -144,6 +141,22 @@ def basis_settings(values: dict) -> dict[str, dict]:
                 f"({TENSION_SPLINE}) are supported."
             )
     return profiles
+
+
+def knot_windows(knots: np.ndarray, fractions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    The windows of the interior knots in which EFIT's knot searches (kautoknt) move them.
+
+    Interior knot i moves within [k_i - f_i (k_i - k_(i-1)), k_i + f_i (k_(i+1) - k_i)] of the namelist knots k, with
+    f its appdf (affdf for FF'). rand_knot (kautoknt = 3, rand_knot_opt.F90) draws the knots from these fixed
+    windows. autoknot and knot_opt (1, 2, auto_knot.F90) centre them on the knots they have moved so far, so over
+    several passes (kakloop) a knot can leave its window.
+
+    Returns:
+        (lower, upper) bounds of the interior knots.
+    """
+    interior, fractions = knots[1:-1], fractions[1:-1]
+    return interior - fractions * (interior - knots[:-2]), interior + fractions * (knots[2:] - interior)
 
 
 def split_coefficients(coefficients: np.ndarray, settings: dict[str, dict]) -> dict[str, np.ndarray]:
@@ -296,8 +309,8 @@ def resolve_basis(
 
     EFIT can move the knots of a tension spline during the fit (kautoknt) and stores only the knots it started from.
     If the knots of the namelist miss the stored profile by more than `RECOVERY_TOLERANCE` and EFIT moved them, the
-    interior knots are fitted to the stored profile, while the end knots and the tension stay those of the namelist:
-    first by least squares from the knots of the namelist, then by the candidate search of `_search_knots`.
+    interior knots are fitted to the stored profile within their windows (`knot_windows`, `_fit_knots`), while the
+    end knots and the tension stay those of the namelist.
 
     Args:
         settings: Settings of the profile, from `basis_settings`.
@@ -320,12 +333,9 @@ def resolve_basis(
         "coefficients": coefficients,
     }
     rms = relative_rms(basis, psin, profile)
-    if rms <= RECOVERY_TOLERANCE or not settings["movable_knots"] or len(basis["knots"]) < 3:
+    if rms <= RECOVERY_TOLERANCE or settings["knot_windows"] is None:
         return basis, rms, False
-
-    fitted = _with_interior_knots(basis, _refine_knots(basis, psin, profile, basis["knots"][1:-1]).x)
-    if relative_rms(fitted, psin, profile) > RECOVERY_TOLERANCE:
-        fitted = _search_knots(basis, psin, profile)
+    fitted = _fit_knots(basis, psin, profile, *settings["knot_windows"])
     if fitted is None:
         return basis, rms, False
     return fitted, relative_rms(fitted, psin, profile), True
@@ -336,87 +346,50 @@ def _with_interior_knots(basis: dict, interior: np.ndarray) -> dict:
     return {**basis, "knots": np.r_[basis["knots"][0], interior, basis["knots"][-1]]}
 
 
-def _knot_residual(interior: np.ndarray, basis: dict, psin: np.ndarray, profile: np.ndarray) -> np.ndarray:
-    """Residual of the spline with the interior knots `interior` against `profile`, relative to max |profile|."""
-    return (evaluate_basis(psin, _with_interior_knots(basis, interior)) - profile) / _scale(profile)
+def _knot_residual(
+    free_knots: np.ndarray, interior: np.ndarray, free: np.ndarray, basis: dict, psin: np.ndarray, profile: np.ndarray
+) -> np.ndarray:
+    """Residual against `profile`, relative to max |profile|, of the spline with the interior knots `interior`, those
+    where `free` replaced by `free_knots`."""
+    knots = interior.copy()
+    knots[free] = free_knots
+    return (evaluate_basis(psin, _with_interior_knots(basis, knots)) - profile) / _scale(profile)
 
 
-def _refine_knots(basis: dict, psin: np.ndarray, profile: np.ndarray, start: np.ndarray):
-    """Levenberg-Marquardt fit of the interior knots of `basis` to `profile` from `start`."""
-    return least_squares(_knot_residual, start, args=(basis, psin, profile), method="lm")
-
-
-def _search_knots(basis: dict, psin: np.ndarray, profile: np.ndarray) -> Optional[dict]:
+def _fit_knots(
+    basis: dict, psin: np.ndarray, profile: np.ndarray, lower: np.ndarray, upper: np.ndarray
+) -> Optional[dict]:
     """
-    Interior knots of a tension spline from the stored profile, with the coefficients and tension of `basis`.
+    Interior knots of a tension spline fitted to the stored profile within their windows, with the coefficients and
+    tension of `basis`.
 
-    Every hat coefficient is the profile at its knot, so the interior knots are among the points where the profile
-    takes these values: EFIT keeps the first derivative continuous at the knots, so the profile crosses the value
-    there, or touches it at an extremum. The increasing combinations of candidates are ranked and the best
-    `N_REFINED` refined. If that misses `RECOVERY_TOLERANCE`, the knots are restarted one at a time between their
-    neighbours: near a steep pedestal the cubic interpolant can place a candidate outside the basin of its knot
-    (169621 at 1.44 s: 0.9956 for 0.9933).
+    Like rand_knot, the search starts from the namelist knots and then from knots drawn uniformly from the windows,
+    with a fixed seed, at most `N_KNOT_STARTS` of them. It stops at the first fit within `RECOVERY_TOLERANCE`, otherwise
+    the best fit is kept. Knots with an empty window (appdf = 0) stay where they are.
 
     Returns:
-        The basis with the best interior knots found, None if a hat value is never taken or there are too many
-        candidates.
+        The basis with the fitted interior knots, None if no knot can move.
     """
-    coefficients = basis["coefficients"]
-    first, last = basis["knots"][0], basis["knots"][-1]
-    n_knots = len(basis["knots"])
-    scale = _scale(profile)
-
-    dense = np.linspace(first, last, CROSSING_POINTS)
-    values = CubicSpline(psin, profile)(dense)
-    candidates = []
-    for hat in coefficients[2:-2:2]:
-        offset = values - hat
-        crossings = np.flatnonzero(np.diff(np.sign(offset)) != 0)
-        # an extremum on the knot touches the value without crossing it
-        distance = np.abs(offset)
-        touching = 1 + np.flatnonzero(
-            (distance[1:-1] <= distance[:-2])
-            & (distance[1:-1] <= distance[2:])
-            & (distance[1:-1] < TOUCH_TOLERANCE * scale)
-        )
-        found = np.union1d(dense[crossings], dense[touching])
-        if not len(found):
-            return None
-        candidates.append(found[np.r_[True, np.diff(found) > MERGE_DISTANCE]])
-    if np.prod([len(knots) for knots in candidates], dtype=float) > MAX_KNOT_COMBINATIONS:
+    interior = basis["knots"][1:-1]
+    free = upper > lower
+    if not free.any():
         return None
-
-    ranked = sorted(
-        (
-            (np.linalg.norm(_knot_residual(np.asarray(interior), basis, psin, profile)), np.asarray(interior))
-            for interior in product(*candidates)
-            if np.all(np.diff(np.r_[first, interior, last]) > 0)
-        ),
-        key=lambda item: item[0],
-    )
+    rng = np.random.default_rng(0)
     best = None
-    for _, interior in ranked[:N_REFINED]:
-        result = _refine_knots(basis, psin, profile, interior)
+    for start in range(N_KNOT_STARTS + 1):
+        x0 = interior[free] if start == 0 else rng.uniform(lower[free], upper[free])
+        result = least_squares(
+            _knot_residual, x0, bounds=(lower[free], upper[free]), args=(interior, free, basis, psin, profile),
+            xtol=KNOT_FIT_TOLERANCE, ftol=KNOT_FIT_TOLERANCE, gtol=KNOT_FIT_TOLERANCE,
+        )
         if best is None or result.cost < best.cost:
             best = result
-    if best is None:
-        return None
-
-    for _ in range(MAX_RESCAN_PASSES):
-        if np.sqrt(2 * best.cost / len(profile)) < RECOVERY_TOLERANCE:
+        # the residual is relative, so this is relative_rms
+        if np.sqrt(2 * best.cost / len(profile)) <= RECOVERY_TOLERANCE:
             break
-        improved = False
-        for k in range(n_knots - 2):
-            knots = np.r_[first, best.x, last]
-            for position in np.linspace(knots[k], knots[k + 2], N_RESCAN_STARTS + 2)[1:-1]:
-                start = best.x.copy()
-                start[k] = position
-                result = _refine_knots(basis, psin, profile, start)
-                if result.cost < best.cost:
-                    best, improved = result, True
-        if not improved:
-            break
-    return _with_interior_knots(basis, best.x)
+    knots = interior.copy()
+    knots[free] = best.x
+    return _with_interior_knots(basis, knots)
 
 
 def format_floats(values: np.ndarray) -> str:
