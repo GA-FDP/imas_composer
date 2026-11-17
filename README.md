@@ -105,16 +105,13 @@ python convert_to_ids.py
 
 This project is designed to be extended with AI assistance.
 
-**At the start of each Claude Code session, tell Claude:**
-```
-Read .claude/.claudecontext
-```
-
-This provides:
-- Data privacy policy (NEVER execute code)
+Claude Code loads [CLAUDE.md](CLAUDE.md) at the start of every session started in the repository root. It provides:
 - Project architecture and three-stage requirement system
 - OMAS integration patterns
+- How pull requests are opened and checked, and how Claude works on GitHub
 - Links to detailed implementation and testing guides
+
+Setup for the pull request workflow: "Claude Code" in [INSTALLATION.md](INSTALLATION.md).
 
 ### Adding New Fields
 
@@ -123,7 +120,7 @@ Tell Claude which OMAS mapping to implement:
 Implement equilibrium.time_slice.profiles_2d.psi from omas/machine_mappings/_efit.json
 ```
 
-Claude will create the necessary mapper code, YAML configuration, and test files. See [.claude/.claudecontext](.claude/.claudecontext) and [.claude/IMPLEMENTING_FIELDS.md](.claude/IMPLEMENTING_FIELDS.md) for details.
+Claude will create the necessary mapper code, YAML configuration, and test files. See [CLAUDE.md](CLAUDE.md) and [.claude/IMPLEMENTING_FIELDS.md](.claude/IMPLEMENTING_FIELDS.md) for details.
 
 ## Contributing
 
