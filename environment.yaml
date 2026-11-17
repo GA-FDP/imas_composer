@@ -43,3 +43,8 @@ dependencies:
   - pyqtgraph
   - pyodbc
   - pyqt
+
+  # GitHub access for Claude Code (gh), and the session-to-pr-skills plugin's bot-token (jq, openssl)
+  - gh
+  - jq
+  - openssl
