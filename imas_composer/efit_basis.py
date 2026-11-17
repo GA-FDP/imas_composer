@@ -458,14 +458,20 @@ def parse_basis(code_parameters: str, i_time: int) -> dict[str, dict]:
         `pprime` and `ffprime` bases for `evaluate_basis`.
 
     Raises:
-        ValueError: If the time slices are not numbered 0 ... n - 1 or `i_time` is not one of them.
+        ValueError: If the XML holds no <basis> (its inputs were missing), the time slices are not numbered
+            0 ... n - 1, `i_time` is not one of them or its basis could not be resolved (its `error`).
     """
-    slices = ET.fromstring(code_parameters).find("basis").findall("time_slice")
+    basis = ET.fromstring(code_parameters).find("basis")
+    if basis is None:
+        raise ValueError("equilibrium.code.parameters holds no <basis>, the EFIT run lacks its inputs.")
+    slices = basis.findall("time_slice")
     indices = [int(element.get("index")) for element in slices]
     if indices != list(range(len(slices))):
         raise ValueError(f"The basis time slices are not numbered 0..{len(slices) - 1}: {indices}.")
     if not 0 <= i_time < len(slices):
         raise ValueError(f"Time slice {i_time} is outside the {len(slices)} time slices of the basis.")
+    if "error" in slices[i_time].attrib:
+        raise ValueError(f"Time slice {i_time} has no EFIT basis: {slices[i_time].get('error')}")
     return {profile: _parse_profile(slices[i_time].find(profile)) for profile in ("pprime", "ffprime")}
 
 

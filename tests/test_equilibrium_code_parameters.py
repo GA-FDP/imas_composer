@@ -143,7 +143,7 @@ def test_one_basis_per_equilibrium_time_slice(composed):
     slices = ET.fromstring(data[CODE_PARAMETERS]).find("basis").findall("time_slice")
     assert [int(element.get("index")) for element in slices] == list(range(len(data[TIME])))
     for element in slices:
-        assert [child.tag for child in element] == ["pprime", "ffprime"]
+        assert [child.tag for child in element] == ["pprime", "ffprime"], element.get("error")
 
 
 @pytest.mark.integration

@@ -455,30 +455,51 @@ def test_parse_rejects_time_slices_it_does_not_have(code_parameters):
         parse_basis(xml, 2)
 
 
-def standard_tree_raw_data(composer: ImasComposer, snap, pprime_error: float = 0.0) -> dict:
+# snap files of polynomials of 2 coefficients with finite boundary values, without and with fitdelz
+SNAP = " &efitin\n  kppcur=2  kffcur=2\n  pcurbd=0. fcurbd=0.\n /\n"
+FITDELZ_SNAP = " &efitin\n  kppcur=2  kffcur=2\n  pcurbd=0. fcurbd=0.\n  fitdelz=.true.\n /\n"
+NODE_NOT_FOUND = NoData("%TREE-W-NNF, Node Not Found")
+
+
+def standard_tree_raw_data(
+    composer: ImasComposer,
+    snap,
+    pprime_error: tuple = (0.0, 0.0),
+    plasma: tuple = (1.0e6, 1.0e6),
+    no_data: tuple = (),
+) -> dict:
     """raw_data of equilibrium.code.parameters of a standard EFIT tree with two slices: polynomials of 2 coefficients
-    with finite boundary values (pcurbd = fcurbd = 0), the g-file profiles their float32 sums times 1 + pprime_error
-    for p'. `snap` is the snap file namelist or a NoData."""
+    with finite boundary values (pcurbd = fcurbd = 0), the g-file profiles their float32 sums times EFIT's output sign
+    (write_g.f90: -1 where the measured Ip `plasma` of the slice is > 0) and 1 + pprime_error of the slice for p'.
+    CPASMA is positive whatever `plasma` is. `snap` is the snap file namelist or a NoData, the nodes `no_data` (e.g.
+    "XRSP") are NODE_NOT_FOUND."""
     status, requirements = composer.resolve([CODE_PARAMETERS, DPRESSURE_DPSI, F_DF_DPSI], SHOT, {})
     psin = np.linspace(0, 1, 65)
     xrsp = np.full((2, 8), 9.97e36, dtype=np.float32)
     xrsp[:, :4] = [[1.2e5, -4.0e4, 2.5, -0.8], [0.9e5, -3.0e4, 2.2, -0.6]]
     used = xrsp[:, :4].astype(np.float64)
+    sign_out = np.where(np.array(plasma) > 0, -1.0, 1.0)[:, np.newaxis]
     pprime = np.stack([efit_polynomial_reference(psin, coefficients[:2], 0.0) for coefficients in used])
     ffprim = np.stack([EFIT_MU0 * efit_polynomial_reference(psin, coefficients[2:], 0.0) for coefficients in used])
     values = {
         "GTIME": np.array([1000.0, 2000.0]),
         "MTIME": np.array([1000.0, 2000.0]),
         "XRSP": xrsp,
+        "PLASMA": np.array(plasma),
         "NAMELIST": snap,
         "PSIN": psin.astype(np.float32),
-        "PPRIME": (pprime * (1 + pprime_error)).astype(np.float32),
-        "FFPRIM": ffprim.astype(np.float32),
+        "PPRIME": (sign_out * pprime * (1 + np.array(pprime_error)[:, np.newaxis])).astype(np.float32),
+        "FFPRIM": (sign_out * ffprim).astype(np.float32),
         "BCENTR": np.array([-2.0, -2.0]),
         "CPASMA": np.array([1.0e6, 1.0e6]),
     }
+    values.update({name: NODE_NOT_FOUND for name in no_data})
     # the last name of the MDSplus path, e.g. GTIME of \EFIT01::TOP.RESULTS.GEQDSK.GTIME
     return {req.as_key(): values[req.mds_path.split(".")[-1].split(":")[-1]] for req in requirements}
+
+
+def basis_slices(xml: str) -> list:
+    return ET.fromstring(xml).find("basis").findall("time_slice")
 
 
 @pytest.mark.parametrize("efit_tree, efit_run_id, namelist", [
@@ -486,7 +507,7 @@ def standard_tree_raw_data(composer: ImasComposer, snap, pprime_error: float = 0
     pytest.param("EFIT", "01", "KEQDSKS", id="run_id_tree_k_files"),
 ])
 def test_only_the_namelist_of_the_tree_is_required(efit_tree, efit_run_id, namelist):
-    """A standard tree requires its snap file and no k-files, whose NoData would hide basis errors in compose()."""
+    """A standard tree requires its snap file and no k-files, a run-id run its k-files and no snap file."""
     composer = ImasComposer(efit_tree=efit_tree, efit_run_id=efit_run_id)
     _, requirements = composer.resolve([CODE_PARAMETERS], SHOT, {})
     paths = [req.mds_path for req in requirements]
@@ -495,13 +516,18 @@ def test_only_the_namelist_of_the_tree_is_required(efit_tree, efit_run_id, namel
     assert not any(other in path for path in paths)
 
 
-def test_basis_from_the_snap_file():
+@pytest.mark.parametrize("plasma", [
+    pytest.param((1.0e6, 1.0e6), id="positive_ip"),
+    pytest.param((-1.0e6, -1.0e6), id="negative_ip"),
+    pytest.param((1.0e6, 0.0), id="measured_ip_zero"),
+])
+def test_basis_from_the_snap_file(plasma):
+    """The basis follows the sign of the stored profiles slice by slice, set by the measured Ip, not CPASMA."""
     composer = ImasComposer()
-    snap = " &efitin\n  kppcur=2  kffcur=2\n  pcurbd=0. fcurbd=0.\n /\n"
-    raw_data = standard_tree_raw_data(composer, snap)
+    raw_data = standard_tree_raw_data(composer, SNAP, plasma=plasma)
     results = composer.compose([CODE_PARAMETERS, DPRESSURE_DPSI, F_DF_DPSI], SHOT, raw_data)
     xml = results[CODE_PARAMETERS]
-    assert [element.get("source") for element in ET.fromstring(xml).find("basis")] == ["snap", "snap"]
+    assert [element.get("source") for element in basis_slices(xml)] == ["snap", "snap"]
     psin = np.linspace(0, 1, 65)
     for index in range(2):
         pprime, ffprime = efit_profile_basis(xml, index)(psin)
@@ -509,19 +535,53 @@ def test_basis_from_the_snap_file():
             np.testing.assert_allclose(values, stored, rtol=0, atol=RECOVERY_TOLERANCE * np.abs(stored).max())
 
 
-def test_basis_error_raises_on_a_standard_tree():
-    """A basis that misses the stored profile raises instead of composing to NoData."""
+def test_slice_whose_basis_misses_keeps_the_error():
+    """A slice whose basis misses its stored profiles has an error instead of bases, the other slices keep theirs."""
     composer = ImasComposer()
-    snap = " &efitin\n  kppcur=2  kffcur=2\n  pcurbd=0. fcurbd=0.\n /\n"
-    raw_data = standard_tree_raw_data(composer, snap, pprime_error=1e-3)
-    with pytest.raises(ValueError, match="misses the stored profile"):
-        composer.compose([CODE_PARAMETERS], SHOT, raw_data)
+    raw_data = standard_tree_raw_data(composer, SNAP, pprime_error=(0.0, 1e-3))
+    xml = composer.compose([CODE_PARAMETERS], SHOT, raw_data)[CODE_PARAMETERS]
+    first, second = basis_slices(xml)
+    assert [child.tag for child in first] == ["pprime", "ffprime"] and "error" not in first.attrib
+    assert len(second) == 0 and "misses the stored pprime (polynomial)" in second.get("error")
+    efit_profile_basis(xml, 0)
+    with pytest.raises(ValueError, match="Time slice 1 has no EFIT basis: EFIT's basis .* misses the stored pprime"):
+        efit_profile_basis(xml, 1)
+    with pytest.raises(ValueError, match="Time slice 1 has no EFIT basis"):
+        efit_f_profile(xml, 1, 1.0, 0.0, 1.0)
 
 
-def test_run_without_namelist_composes_to_no_data():
-    """Without a snap file EFIT's defaults (polynomials of 3 and 1 coefficients vanishing at the boundary) apply,
-    which miss these profiles: the missing namelist is reported."""
+@pytest.mark.parametrize("snap, error", [
+    pytest.param(" &efitin\n  kppfnc=2\n /\n", "kppfnc = 2", id="unsupported_kind"),
+    pytest.param(" &efitin\n  kppcur=3  kffcur=2\n /\n", "XRSP holds 4 coefficients", id="xrsp_count"),
+    pytest.param(NODE_NOT_FOUND, "misses the stored pprime", id="defaults_miss"),
+])
+def test_slices_without_a_basis_keep_xrsp(snap, error):
+    """Unsupported settings, and EFIT's defaults (polynomials of 3 and 1 coefficients vanishing at the boundary) of a
+    run without a snap file, leave every slice without a basis, but the field composes with <xrsp>."""
     composer = ImasComposer()
-    no_data = NoData("%TREE-W-NNF, Node Not Found")
-    raw_data = standard_tree_raw_data(composer, no_data)
-    assert composer.compose([CODE_PARAMETERS], SHOT, raw_data)[CODE_PARAMETERS] is no_data
+    raw_data = standard_tree_raw_data(composer, snap)
+    xml = composer.compose([CODE_PARAMETERS], SHOT, raw_data)[CODE_PARAMETERS]
+    assert len(ET.fromstring(xml).find("xrsp")) == 2
+    for element in basis_slices(xml):
+        assert len(element) == 0 and error in element.get("error")
+
+
+@pytest.mark.parametrize("no_data, snap, parts", [
+    pytest.param(("PPRIME",), SNAP, ["xrsp"], id="no_profiles"),
+    pytest.param(("PLASMA",), SNAP, ["xrsp"], id="no_measured_ip"),
+    pytest.param(("XRSP",), FITDELZ_SNAP, ["fitdelz", "ifitdelz"], id="no_xrsp"),
+    pytest.param(("GTIME",), FITDELZ_SNAP, None, id="no_time_slices"),
+    pytest.param(("XRSP",), SNAP, None, id="no_xrsp_nor_fitdelz"),
+])
+def test_parts_whose_inputs_are_missing_are_left_out(no_data, snap, parts):
+    """Every part is written when its inputs exist, NoData (parts None) only when there is none."""
+    composer = ImasComposer()
+    raw_data = standard_tree_raw_data(composer, snap, no_data=no_data)
+    result = composer.compose([CODE_PARAMETERS], SHOT, raw_data)[CODE_PARAMETERS]
+    if parts is None:
+        assert result is NODE_NOT_FOUND
+        return
+    assert [child.tag for child in ET.fromstring(result)] == parts
+    if "xrsp" in parts:
+        with pytest.raises(ValueError, match="holds no <basis>"):
+            efit_profile_basis(result, 0)
