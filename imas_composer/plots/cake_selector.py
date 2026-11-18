@@ -29,7 +29,7 @@ from imas_composer.rdb.d3drdb import (
 
 RDB_TIMEOUT_MS = 20_000
 # Tag entry that selects a standard per-shot EFIT tree instead of an IRI CAKE run.
-STANDARD_EFIT_TAG = 'standard EFIT'
+STANDARD_EFIT_TAG = 'non-IRI EFITs'
 # Tree of the IRI CAKE EFIT runs, restored when leaving STANDARD_EFIT_TAG.
 CAKE_EFIT_TREE = 'EFIT'
 

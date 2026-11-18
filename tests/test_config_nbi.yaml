@@ -1,8 +1,20 @@
 # Test configuration for NBI IDS
-
+override_shots: [200000, 166885, 184005] # Deuterium, Helium, Hydrogen
 # Fields to skip OMAS comparison for (composer still tested)
 # Format: field_path: "reason for skipping"
-skip_fields: {}
+skip_fields:
+  nbi.unit.species.z_n: "imas_composer-only field, no OMAS reference"
+  nbi.unit.species.label: "imas_composer-only field, no OMAS reference"
+  # imas_composer selects active beams via the dedicated FIRED flag; OMAS's
+  # nbi_active_hardware still selects them via PINJ time-trace presence, so the
+  # beam lists (and therefore array order/length) can diverge. Compared instead
+  # by beam name in test_composition_matches_omas_by_beam_name.
+  nbi.unit.name: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
+  nbi.unit.power_launched.time: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
+  nbi.unit.power_launched.data: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
+  nbi.unit.energy.time: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
+  nbi.unit.energy.data: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
+  nbi.unit.species.a: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
 
 # Requirement validation settings
 requirement_validation:
@@ -23,3 +35,6 @@ omas_path_map:
   nbi.unit.energy.time: nbi.unit.:.energy.time
   nbi.unit.energy.data: nbi.unit.:.energy.data
   nbi.unit.species.a: nbi.unit.:.species.a
+  # z_n/label have no OMAS reference (skipped above); mapping kept for documentation
+  nbi.unit.species.z_n: nbi.unit.:.species.z_n
+  nbi.unit.species.label: nbi.unit.:.species.label

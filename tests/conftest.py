@@ -196,23 +196,36 @@ def check_field_shot_exclusion(ids_name, ids_path, shot):
             pytest.skip(f"Shot {shot} excluded for {ids_path} (no data available)")
 
 
-def check_skip_field(ids_name, ids_path):
+def check_skip_field(ids_name, ids_path, tree=None):
     """
     Check if OMAS comparison should be skipped for a specific field.
+
+    A skip_fields entry is either a reason string (skip for every tree) or a
+    mapping of tree name to reason, for fields OMAS maps on some trees but not
+    others (e.g. core_profiles grid.psi, mapped for OMFIT_PROFS but not ZIPFIT).
 
     Args:
         ids_name: IDS identifier (e.g., 'ece')
         ids_path: Full IDS path (e.g., 'ece.channel.t_e.data')
+        tree: Tree name the composer is configured for, in the same vocabulary as
+              the `trees:` key of the IDS YAML (e.g. 'ZIPFIT', 'OMFIT_PROFS')
 
     Raises:
-        pytest.skip: If the field is in the skip_fields dict
+        pytest.skip: If the field is in the skip_fields dict for this tree
     """
     config = load_test_config(ids_name)
     skip_fields = config.get('skip_fields', {})
 
-    if ids_path in skip_fields:
-        reason = skip_fields[ids_path]
-        pytest.skip(f"OMAS comparison skipped for {ids_path}: {reason}")
+    if ids_path not in skip_fields:
+        return
+
+    reason = skip_fields[ids_path]
+    if isinstance(reason, dict):
+        if tree not in reason:
+            return
+        reason = reason[tree]
+
+    pytest.skip(f"OMAS comparison skipped for {ids_path}: {reason}")
 
 
 def get_ndim(arr):
@@ -309,6 +322,34 @@ def _matches_optional_pattern(mds_path, pattern):
 
     return bool(re.match(regex_pattern, mds_path))
 
+
+def _missing_to_nan(value):
+    """Replace missing (None) composer entries with NaN, the OMAS representation."""
+    if value is None:
+        return np.nan
+    if isinstance(value, ak.Array):
+        return ak.fill_none(value, np.nan)
+    return value
+
+
+def _is_all_nan(value):
+    """True if every element of an OMAS value is NaN (i.e. OMAS padding)."""
+    try:
+        flat = np.asarray(ak.flatten(ak.Array([value]), axis=None), dtype=float)
+    except (TypeError, ValueError):
+        return False
+    return bool(np.all(np.isnan(flat)))
+
+
+def _has_omas_data(ods, omas_path):
+    """True if OMAS stores anything other than NaN padding at omas_path."""
+    try:
+        value = ods[omas_path]
+    except (ValueError, LookupError, IndexError):
+        return False
+    return not _is_all_nan(value)
+
+
 def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float=1e-12, atol_array=1e-6):
     """
     Compare composer and OMAS values with appropriate method based on type.
@@ -324,6 +365,9 @@ def compare_values(composer_val, omas_val, label="value", rtol=1e-10, atol_float
     Raises:
         AssertionError: If values don't match
     """
+    # Missing entries (None) in composer output are stored as NaN by OMAS
+    composer_val = _missing_to_nan(composer_val)
+
     # Handle awkward arrays first (before other checks)
     if isinstance(composer_val, ak.Array) or isinstance(omas_val, ak.Array):
         # For awkward arrays, use awkward's comparison utilities
@@ -820,8 +864,10 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
     """
     Recursively compare composer value with OMAS data.
 
-    Uses ndim to determine when to stop recursion and compare 1D arrays.
-    Handles ragged arrays by slicing OMAS NaN-padded data to match composer length.
+    Recurses over each ':' in the OMAS path, indexing OMAS element by element so
+    ragged inner dimensions are compared at their own lengths. Missing composer
+    entries (None) must be NaN in OMAS. Where OMAS has more entries than composer,
+    the OMAS entries holding only NaN are the ones composer dropped.
 
     Args:
         composer_value: Value from imas_composer
@@ -836,7 +882,8 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
     if ":" not in omas_path:
         # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
         # Flatten and check length - if zero, verify OMAS is also empty
-        if not np.isscalar(composer_value) and len(ak.flatten(composer_value, axis=None)) == 0:
+        if (composer_value is not None and not np.isscalar(composer_value)
+                and len(ak.flatten(composer_value, axis=None)) == 0):
             try:
                 flat_omas = ak.flatten( ods[omas_path], axis=None)
                 assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
@@ -849,17 +896,27 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
                     return
     
         # Compare
-        compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol, 
+        compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol,
                        atol_float=atol_float, atol_array=atol_array)
 
     else:
         # Recursive case: ndim > 1, iterate over outer dimension
         n_outer = len(composer_value)
+        omas_indices = list(range(n_outer))
 
-        for i in range(n_outer):
-            # Recurse into next level
-            composer_elem = composer_value[i]
+        # Composer drops missing entries (e.g. X-points) that OMAS keeps as NaN-filled slots,
+        # so composer entries are matched to the OMAS entries that hold data, in order.
+        aos_path = omas_path[:omas_path.index(':')].rstrip('.')
+        try:
+            n_omas = len(ods[aos_path])
+        except (ValueError, LookupError, IndexError):
+            n_omas = n_outer
+        if n_omas > n_outer:
+            omas_indices = [i for i in range(n_omas) if _has_omas_data(ods, omas_path.replace(':', str(i), 1))]
+            assert len(omas_indices) == n_outer, \
+                f"OMAS has data in {len(omas_indices)} entries of {aos_path}, composer has {n_outer}"
 
+        for composer_elem, i in zip(composer_value, omas_indices):
             # Replace first occurrence of ':' with the index for OMAS-style path
             # e.g., 'thomson_scattering.channel.:.n_e.time' -> 'thomson_scattering.channel.0.n_e.time'
             new_omas_path = omas_path.replace(':', str(i), 1)
@@ -890,8 +947,12 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
     # Compose using imas_composer
     composer_value = resolve_and_compose(composer, ids_path, shot)
 
-    # Check if OMAS comparison should be skipped
-    check_skip_field(ids_name, ids_path)
+    # Check if OMAS comparison should be skipped (possibly only for this tree).
+    # Normalize to the `trees:` vocabulary of the IDS YAML: ZIPFIT01 -> ZIPFIT.
+    composer_tree = getattr(composer, 'profiles_tree', 'ZIPFIT01')
+    if composer_tree.startswith('ZIPFIT'):
+        composer_tree = 'ZIPFIT'
+    check_skip_field(ids_name, ids_path, tree=composer_tree)
 
     # Load test config to get OMAS path mapping
     test_config = load_test_config(ids_name)

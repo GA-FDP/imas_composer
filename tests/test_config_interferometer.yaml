@@ -4,7 +4,6 @@
 # RIP data only available for shots >= 168823
 # T channel only available for shots > 202680
 override_shots: [200000, 203886]
-
 # Fields to skip OMAS comparison for (composer still tested)
 # Format: field_path: "reason for skipping"
 skip_fields:
