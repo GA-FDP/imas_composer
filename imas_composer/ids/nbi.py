@@ -7,7 +7,7 @@ See OMAS: omas/machine_mappings/d3d.py::nbi_active_hardware
 from typing import Dict, List
 import numpy as np
 
-from ..core import RequirementStage, Requirement, IDSEntrySpec
+from ..core import RequirementStage, Requirement, IDSEntrySpec, NoData
 from .base import IDSMapper
 
 
@@ -183,7 +183,11 @@ class NbiMapper(IDSMapper):
 
     def _get_active_beams(self, shot: int, raw_data: dict) -> List[str]:
         """
-        Get list of active beam names (beams with FIRED == 1).
+        Get list of active beam names (beams with FIRED == 1 and a PINJ time base).
+
+        All per-beam fields index their beams with this list. A fired beam without PINJ data
+        is left out of all of them; if no beam is left, the fields are empty and compose()
+        reports them as NoData.
 
         Args:
             shot: Shot number
@@ -196,10 +200,12 @@ class NbiMapper(IDSMapper):
         for beam_name in self.beam_names:
             fired_path = f'\\NB::TOP.NB{beam_name}.FIRED'
             fired_key = Requirement(fired_path, shot, 'NB').as_key()
+            time_path = f'dim_of(\\NB::TOP.NB{beam_name}.PINJ_{beam_name}, 0)/1E3'
+            time_key = Requirement(time_path, shot, 'NB').as_key()
 
             # Check if beam actually fired
             if fired_key in raw_data and not isinstance(raw_data[fired_key], Exception):
-                if raw_data[fired_key]:
+                if raw_data[fired_key] and not isinstance(raw_data[time_key], NoData):
                     active_beams.append(beam_name)
 
         return active_beams
