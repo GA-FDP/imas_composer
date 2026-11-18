@@ -23,14 +23,9 @@ import yaml
 import awkward as ak
 from pathlib import Path
 
-import os
-
-# Handle authentication
-
-if "BEARER_TOKEN" not in os.environ:
-    _token_file = Path.home() / ".fdp" / "token"
-    if _token_file.exists():
-        os.environ["BEARER_TOKEN"] = _token_file.read_text().strip()
+# Handle authentication: fdp resolves $BEARER_TOKEN, then the `fdp login` cache, skipping expired tokens
+from toksearch_d3d import setup_environment
+setup_environment()
 
 # Set omas to use toksearch
 from omas.utilities.omas_mds import set_default_mds_backend
