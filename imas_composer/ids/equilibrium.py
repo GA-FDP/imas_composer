@@ -1931,8 +1931,11 @@ class EquilibriumMapper(IDSMapper):
 
             pprime(psi_n) = sum_j xrsp_j bsppel_j(psi_n),   ffprim(psi_n) = mu0 sum_j xrsp_(kppcur+j) bsffel_j(psi_n)
 
-        in g-file units. The basis (kppfnc, kfffnc, knots, tensions) is an EFIT input and not stored.
-        One <time_slice> per equilibrium time slice (XRSP is on the MEASUREMENTS time base), the unused
+        in g-file units, before EFIT's output sign: the g-file PPRIME and FFPRIM are these sums times sign_out = -1
+        where the measured Ip of the slice (MEASUREMENTS.PLASMA) is > 0 and 1 otherwise (write_g.f90), while XRSP is
+        written without it. The basis (kppfnc, kfffnc, knots, tensions) is an input of the run, set in its namelists
+        (&IN1 of a k-file, &EFITIN of a snap file) with EFIT's defaults for what they do not set; it is not decoded
+        here. One <time_slice> per equilibrium time slice (XRSP is on the MEASUREMENTS time base), the unused
         entries (netCDF fill values) are dropped and the float32 values written in their shortest exact form.
 
         With fitdelz EFIT fits a rigid vertical shift of the plasma: ifitdelz = 1 translates the total flux by it
