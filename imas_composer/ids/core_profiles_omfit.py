@@ -484,21 +484,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # V_loop data (for global_quantities)
-        self.specs["core_profiles._vloop_data"] = IDSEntrySpec(
-            stage=RequirementStage.DERIVED,
-            derive_requirements=self._derive_vloop_data_requirements,
-            ids_path="core_profiles._vloop_data",
-            docs_file=self.DOCS_PATH
-        )
-
-        self.specs["core_profiles._vloop_time"] = IDSEntrySpec(
-            stage=RequirementStage.DERIVED,
-            derive_requirements=self._derive_vloop_time_requirements,
-            ids_path="core_profiles._vloop_time",
-            docs_file=self.DOCS_PATH
-        )
-
         # ============================================================
         # User-facing fields - COMPUTED stage
         # ============================================================
@@ -1095,23 +1080,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
-        # ============================================================
-        # Global quantities
-        # ============================================================
-
-        # global_quantities.v_loop: loop voltage interpolated to profile time
-        self.specs["core_profiles.global_quantities.v_loop"] = IDSEntrySpec(
-            stage=RequirementStage.COMPUTED,
-            depends_on=[
-                "core_profiles._vloop_data",
-                "core_profiles._vloop_time",
-                "core_profiles.time"
-            ],
-            compose=self._compose_v_loop,
-            ids_path="core_profiles.global_quantities.v_loop",
-            docs_file=self.DOCS_PATH
-        )
-
     def _get_unified_time(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """
         Get unified time array from OMFIT_PROFS.
@@ -1464,47 +1432,6 @@ class CoreProfilesOmfitMapper(IDSMapper):
     def _compose_deuterium_density(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose deuterium density for OMFIT_PROFS (from \\TOP.N_D)."""
         return self._compose_omfit_data_field(shot, raw_data, "core_profiles.profiles_1d._deuterium_density_data")
-
-    def _derive_vloop_data_requirements(self, shot: int, _raw_data: Dict[str, Any]) -> list:
-        """Derive requirements for v_loop (data, time, and header bundled under __ptdata__ key)."""
-        return [Requirement("VLOOP", shot, "__ptdata__")]
-
-    def _derive_vloop_time_requirements(self, shot: int, _raw_data: Dict[str, Any]) -> list:
-        """Derive requirements for v_loop time (same key as data — deduplication handles it)."""
-        return [Requirement("VLOOP", shot, "__ptdata__")]
-
-    def _compose_v_loop(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
-        """
-        Compose loop voltage interpolated to profile time.
-
-        OMAS reference (d3d.py:1740-1741):
-            m = mdsvalue('d3d', pulse=pulse, TDI=f"ptdata2(\"VLOOP\",{pulse})", treename=None)
-            gq['v_loop'] = interp1d(m.dim_of(0) * 1e-3, m.data(),
-                                    bounds_error=False, fill_value=np.nan)(t)
-
-        Returns:
-            1D array of loop voltage in V, interpolated to profile time
-        """
-        from scipy.interpolate import interp1d
-
-        # Get v_loop data and time
-        vloop_key = Requirement("VLOOP", shot, "__ptdata__").as_key()
-
-        vloop_data = raw_data[vloop_key]['data']
-        vloop_time = raw_data[vloop_key]['times'] * 1e-3  # Convert ms to s
-
-        # Get profile time - use the already-composed time to avoid bypassing dependencies
-        profile_time = self.specs["core_profiles.time"].compose(shot, raw_data)
-
-        # Interpolate v_loop to profile time
-        v_loop = interp1d(
-            vloop_time,
-            vloop_data,
-            bounds_error=False,
-            fill_value=np.nan
-        )(profile_time)
-
-        return v_loop
 
     def _compose_density_error(self, shot: int, raw_data: Dict[str, Any]) -> np.ndarray:
         """Compose electrons.density_thermal_error_upper for OMFIT_PROFS."""
