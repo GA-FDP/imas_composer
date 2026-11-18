@@ -47,8 +47,11 @@ TIME_CASES = pytest.mark.parametrize(
         ([100, 120, 140, 160], [100, 160], [0, -1, -1, 1]),
         ([100, 120, 140], [100, 120], [0, 1, -1]),
         ([100, 120], [100, 120.5], [0, -1]),
+        # Same lengths, but the a-files are shifted against the g-files
+        ([100, 120, 140], [90, 100, 120], [1, 2, -1]),
     ],
-    ids=["equal_lengths", "missing_at_start", "missing_in_middle", "missing_at_end", "outside_tolerance"],
+    ids=["equal_lengths", "missing_at_start", "missing_in_middle", "missing_at_end", "outside_tolerance",
+         "shifted_equal_lengths"],
 )
 
 
