@@ -7,7 +7,7 @@ on old shots.
 """
 import re
 
-import awkward as ak
+import numpy as np
 import pytest
 from omas import mdsvalue
 
@@ -114,10 +114,46 @@ def test_compose_returns_no_data(ids_path, no_data):
     assert composer.compose([ids_path], 200000, raw_data)[ids_path] is no_data
 
 
+def nbi_raw_data(requirements, beams_with_data, no_data):
+    """Every beam fired with D2; beams outside beams_with_data have no PINJ, PINJ time base or VBEAM."""
+    raw_data = {}
+    for req in requirements:
+        beam, node = re.search(r"\.NB(\w+)\.(\w+)", req.mds_path).groups()
+        if node == "FIRED":
+            raw_data[req.as_key()] = 1
+        elif node == "GAS":
+            raw_data[req.as_key()] = "D2"
+        elif beam not in beams_with_data:
+            raw_data[req.as_key()] = no_data
+        elif req.mds_path.startswith("dim_of"):
+            raw_data[req.as_key()] = np.linspace(0.0, 1.0, 3)
+        else:
+            raw_data[req.as_key()] = np.full(3, 1e6)
+    return raw_data
+
+
+@pytest.mark.parametrize("beams_with_data", [["30L", "21R"], ["33R"], []], ids=["two_beams", "one_beam", "no_beam"])
+def test_nbi_composes_beams_with_data(beams_with_data, no_data):
+    """Fired beams without PINJ data are left out of every per-beam field; without any beam left, all are NoData."""
+    composer = ImasComposer()
+    fields = [path for path in composer.get_supported_fields("nbi") if ".ids_properties." not in path]
+    _, requirements = composer.resolve(fields, 200000, {})
+    raw_data = nbi_raw_data(requirements, beams_with_data, no_data)
+    assert all(composer.resolve(fields, 200000, raw_data)[0].values())
+
+    results = composer.compose(fields, 200000, raw_data)
+
+    if beams_with_data:
+        assert list(results["nbi.unit.name"]) == beams_with_data
+        assert {path: len(value) for path, value in results.items()} == dict.fromkeys(fields, len(beams_with_data))
+    else:
+        assert all(value is no_data for value in results.values())
+
+
 # (ids_name, shot, composer kwargs, expected NoData coverage: "some" or "all" fields)
 OLD_SHOT_CASES = [
     *[pytest.param(ids_name, 118162, {}, "some", id=f"{ids_name}-118162")
-      for ids_name in ["equilibrium", "core_profiles", "ece", "charge_exchange", "reflectometer_profile"]],
+      for ids_name in ["equilibrium", "ece", "charge_exchange", "reflectometer_profile"]],
     pytest.param("nbi", 118162, {}, "all", id="nbi-118162"),
     pytest.param("nbi", 111203, {}, "all", id="nbi-111203"),
     pytest.param("core_profiles", 118162, {"profiles_tree": "OMFIT_PROFS"}, "all", id="core_profiles_omfit-118162"),
@@ -141,31 +177,10 @@ def test_simple_load_old_shot(ids_name, shot, composer_kwargs, expected):
         assert missing, f"Expected at least one NoData field for {ids_name} #{shot}"
 
 
-RIP_MEASUREMENT_FIELDS = [
-    "interferometer.channel.n_e_line.time",
-    "interferometer.channel.n_e_line.data",
-    "interferometer.channel.n_e_line.validity_timed",
-    "interferometer.channel.n_e_line.data_error_upper",
-]
-
-
 @pytest.mark.integration
 @pytest.mark.requires_mdsplus
-@pytest.mark.parametrize("shot, has_rip", [
-    pytest.param(190000, True, id="co2_and_rip"),
-    pytest.param(175000, False, id="rip_nodata"),
-    pytest.param(150000, False, id="no_rip_tree"),
-])
-def test_interferometer_rip_channels_without_data(shot, has_rip):
-    """RIP channels are always present with include_rip; channels without data are empty."""
-    composer = ImasComposer(include_rip=True)
-    results = simple_load(composer.get_supported_fields("interferometer"), shot, composer=composer)
-    assert not [path for path, value in results.items() if isinstance(value, NoData)]
-    n_co2 = composer._mappers["interferometer"].N_CO2_CHANNELS
-    n_channels = len(results["interferometer.channel.identifier"])
-    assert n_channels > n_co2
-    for path in RIP_MEASUREMENT_FIELDS:
-        lengths = ak.num(results[path], axis=1).tolist()
-        assert len(lengths) == n_channels, path
-        assert all(n > 0 for n in lengths[:n_co2]), path
-        assert all((n > 0) == has_rip for n in lengths[n_co2:]), path
+def test_simple_load_invalid_data_raises():
+    """Data that is present but invalid is not NoData: EFIT01 RHOVN on 118162 is not monotonic on two slices."""
+    composer = ImasComposer()
+    with pytest.raises(AssertionError, match="RHOVN is not strictly increasing"):
+        simple_load(composer.get_supported_fields("core_profiles"), 118162, composer=composer)

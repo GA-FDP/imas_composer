@@ -2241,7 +2241,7 @@ class EquilibriumMapper(IDSMapper):
         # Stack into (n_time, 4) array on GTIME and convert to meters, slices without an a-file (index -1)
         # have no strike points
         indices = self._compose_aeqdsk_time_indices(shot, raw_data)
-        strike_points = np.column_stack([rvsid, rvsod, rvsiu, rvsou])
+        strike_points = np.column_stack([rvsid, rvsod, rvsiu, rvsou])[indices]
 
         # Filter out invalid strike points (EFIT uses -0.89m as sentinel)
         mask = ~np.isclose(strike_points, -0.89) & (indices >= 0)[:, None]
@@ -2280,10 +2280,10 @@ class EquilibriumMapper(IDSMapper):
         # Stack Z coordinates on GTIME and convert to meters, slices without an a-file (index -1)
         # have no strike points
         indices = self._compose_aeqdsk_time_indices(shot, raw_data)
-        strike_points_z = np.column_stack([zvsid, zvsod, zvsiu, zvsou])
+        strike_points_z = np.column_stack([zvsid, zvsod, zvsiu, zvsou])[indices]
 
         # Use R coordinates as mask (R == -0.89 m means invalid)
-        strike_points_r = np.column_stack([rvsid, rvsod, rvsiu, rvsou])
+        strike_points_r = np.column_stack([rvsid, rvsod, rvsiu, rvsou])[indices]
         mask = ~np.isclose(strike_points_r, -0.89) & (indices >= 0)[:, None]
         return filter_padding(strike_points_z, mask)
 
