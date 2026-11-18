@@ -364,18 +364,13 @@ def _is_all_nan(value):
     return bool(np.all(np.isnan(flat)))
 
 
-def _drop_missing_for_nanfilter(composer_value, omas_value):
-    """
-    Align a 1D composer leaf containing None with a NANFILTER-compacted OMAS leaf.
-
-    OMAS NANFILTER drops NaNs from whole-array leaves (e.g. boundary.outline.r),
-    so it loses the original indexing that composer keeps by storing None.
-    """
-    if (isinstance(composer_value, ak.Array) and composer_value.ndim == 1
-            and np.ndim(omas_value) == 1 and len(omas_value) != len(composer_value)
-            and len(omas_value) == ak.count(composer_value)):
-        return composer_value[~ak.is_none(composer_value)]
-    return composer_value
+def _has_omas_data(ods, omas_path):
+    """True if OMAS stores anything other than NaN padding at omas_path."""
+    try:
+        value = ods[omas_path]
+    except (ValueError, LookupError, IndexError):
+        return False
+    return not _is_all_nan(value)
 
 
 def compare_values(composer_val, omas_val, label="value", rtol=1e-7, atol_float=1e-7, atol_array=1e-6):
@@ -890,8 +885,8 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
 
     Recurses over each ':' in the OMAS path, indexing OMAS element by element so
     ragged inner dimensions are compared at their own lengths. Missing composer
-    entries (None) must be NaN in OMAS, and OMAS entries beyond the composer
-    length (trailing padding that composer trims) must be NaN or absent.
+    entries (None) must be NaN in OMAS. Where OMAS has more entries than composer,
+    the OMAS entries holding only NaN are the ones composer dropped.
 
     Args:
         composer_value: Value from imas_composer
@@ -920,41 +915,32 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
                     return
     
         # Compare
-        omas_value = ods[omas_path]
-        composer_value = _drop_missing_for_nanfilter(composer_value, omas_value)
-        compare_values(composer_value, omas_value, omas_path, rtol=rtol,
+        compare_values(composer_value, ods[omas_path], omas_path, rtol=rtol,
                        atol_float=atol_float, atol_array=atol_array)
 
     else:
         # Recursive case: ndim > 1, iterate over outer dimension
         n_outer = len(composer_value)
+        omas_indices = list(range(n_outer))
 
-        for i in range(n_outer):
-            # Recurse into next level
-            composer_elem = composer_value[i]
-
-            # Replace first occurrence of ':' with the index for OMAS-style path
-            # e.g., 'thomson_scattering.channel.:.n_e.time' -> 'thomson_scattering.channel.0.n_e.time'
-            new_omas_path = omas_path.replace(':', str(i), 1)
-
-            _compare_recursive(composer_elem, ods, new_omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
-
-
-        # Composer trims trailing missing entries that OMAS keeps as NaN, 
-        # so any OMAS entries beyond the composer length must be NaN.
+        # Composer drops missing entries (e.g. X-points) that OMAS keeps as NaN-filled slots,
+        # so composer entries are matched to the OMAS entries that hold data, in order.
         aos_path = omas_path[:omas_path.index(':')].rstrip('.')
         try:
             n_omas = len(ods[aos_path])
         except (ValueError, LookupError, IndexError):
             n_omas = n_outer
-        for i in range(n_outer, n_omas):
-            extra_path = omas_path.replace(':', str(i), 1)
-            try:
-                extra_value = ods[extra_path]
-            except (ValueError, LookupError, IndexError):
-                continue  # No data stored for this entry
-            assert _is_all_nan(extra_value), \
-                f"OMAS has data at {extra_path} beyond composer length {n_outer}"
+        if n_omas > n_outer:
+            omas_indices = [i for i in range(n_omas) if _has_omas_data(ods, omas_path.replace(':', str(i), 1))]
+            assert len(omas_indices) == n_outer, \
+                f"OMAS has data in {len(omas_indices)} entries of {aos_path}, composer has {n_outer}"
+
+        for composer_elem, i in zip(composer_value, omas_indices):
+            # Replace first occurrence of ':' with the index for OMAS-style path
+            # e.g., 'thomson_scattering.channel.:.n_e.time' -> 'thomson_scattering.channel.0.n_e.time'
+            new_omas_path = omas_path.replace(':', str(i), 1)
+
+            _compare_recursive(composer_elem, ods, new_omas_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
 
 
 def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
