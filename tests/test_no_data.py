@@ -7,6 +7,7 @@ on old shots, and ptdata points without data.
 """
 import re
 
+import awkward as ak
 import numpy as np
 import pytest
 
@@ -168,3 +169,35 @@ def test_simple_load_missing_ptdata():
     results = simple_load(paths, 118162)
     for path in paths:
         assert isinstance(results[path], NoData), f"{path}: {results[path]!r}"
+
+
+# Shot and b_field_pol_probe pointname without ptdata
+PROBE_WITHOUT_DATA = (202161, "DSL6U157")
+
+
+@pytest.fixture(scope="module")
+def bpol_probe_fields():
+    """b_field_pol_probe fields of a shot in which one probe has no ptdata, fetched once."""
+    shot, _ = PROBE_WITHOUT_DATA
+    paths = ["magnetics.b_field_pol_probe.identifier",
+             *[f"magnetics.b_field_pol_probe.field.{name}" for name in ["data", "time", "validity", "data_error_upper"]]]
+    return simple_load(paths, shot)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+@pytest.mark.requires_toksearch
+@pytest.mark.parametrize("ids_path, expected", [
+    ("magnetics.b_field_pol_probe.field.data", []),
+    ("magnetics.b_field_pol_probe.field.time", []),
+    ("magnetics.b_field_pol_probe.field.data_error_upper", []),
+    ("magnetics.b_field_pol_probe.field.validity", -2),
+])
+def test_simple_load_probe_without_data(bpol_probe_fields, ids_path, expected):
+    """A probe without ptdata keeps its slot with empty arrays instead of turning the field into NoData."""
+    _, pointname = PROBE_WITHOUT_DATA
+    value = bpol_probe_fields[ids_path]
+    assert not isinstance(value, NoData), repr(value)
+    identifiers = list(bpol_probe_fields["magnetics.b_field_pol_probe.identifier"])
+    assert len(value) == len(identifiers)
+    assert ak.to_list(value)[identifiers.index(pointname)] == expected
