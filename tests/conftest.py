@@ -23,14 +23,9 @@ import yaml
 import awkward as ak
 from pathlib import Path
 
-import os
-
-# Handle authentication
-
-if "BEARER_TOKEN" not in os.environ:
-    _token_file = Path.home() / ".fdp" / "token"
-    if _token_file.exists():
-        os.environ["BEARER_TOKEN"] = _token_file.read_text().strip()
+# Handle authentication: fdp resolves $BEARER_TOKEN, then the `fdp login` cache, skipping expired tokens
+from toksearch_d3d import setup_environment
+setup_environment()
 
 # Set omas to use toksearch
 from omas.utilities.omas_mds import set_default_mds_backend
@@ -1045,8 +1040,10 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
         ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
                        fast_ece=fast_ece_omas)
     else:
-        # DO not reset the cache unnecessarily
-        ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
+        # DO not reset the cache unnecessarily. The exception is charge_exchange: its OMAS mapping
+        # appends channels on every fetch, so a cached ODS accumulates duplicate channels
+        reset = (ids_name == 'charge_exchange')
+        ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=reset,
                         profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
 
     # Recursively compare using ndim-based logic with field-specific tolerances
