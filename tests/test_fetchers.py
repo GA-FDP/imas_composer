@@ -1,8 +1,8 @@
 """
-Tests for fetch_requirements, which fetches through toksearch_d3d.
+Tests for fetch_requirements, which fetches through toksearch.
 
 The dedup and pass-through tests monkeypatch fetch_many_from_req and run
-anywhere.  The remaining tests fetch real data and are skipped when toksearch_d3d
+anywhere.  The remaining tests fetch real data and are skipped when toksearch
 is not installed.
 """
 
@@ -18,10 +18,10 @@ from imas_composer.fetchers import fetch_requirements
 from tests.conftest import REFERENCE_SHOT
 
 
-TOKSEARCH_INSTALLED = importlib.util.find_spec("toksearch_d3d") is not None
+TOKSEARCH_INSTALLED = importlib.util.find_spec("toksearch") is not None
 
 requires_toksearch = pytest.mark.skipif(
-    not TOKSEARCH_INSTALLED, reason="toksearch_d3d is not installed"
+    not TOKSEARCH_INSTALLED, reason="toksearch is not installed"
 )
 
 
@@ -84,7 +84,7 @@ def test_empty_requirements_returns_empty():
 @pytest.mark.requires_toksearch
 @requires_toksearch
 class TestAgainstRealData:
-    """Tests that fetch real DIII-D data through toksearch_d3d."""
+    """Tests that fetch real DIII-D data through toksearch."""
 
     def test_ptdata_requirement_shape(self):
         """A __ptdata__ requirement returns the data/times/rarray dict."""
