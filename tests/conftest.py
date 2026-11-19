@@ -21,6 +21,7 @@ import pytest
 import numpy as np
 import yaml
 import awkward as ak
+import os
 from pathlib import Path
 
 # Handle authentication: fdp resolves $BEARER_TOKEN, then the `fdp login` cache, skipping expired tokens
