@@ -1,0 +1,186 @@
+"""
+Test handling of missing MDSplus data.
+
+Pins down how MDSplus/OMAS report the "no data" failure modes we map to NoData:
+missing trees, empty (e.g. rejected) nodes, and nodes that did not exist yet
+on old shots.
+"""
+import re
+
+import numpy as np
+import pytest
+from omas import mdsvalue
+
+from imas_composer import ImasComposer, NoData, Requirement, fetch_requirements, simple_load
+from imas_composer.fetchers import _as_no_data
+
+
+# (treename, shot, mds_path, expected MDSplus status code)
+FAILURE_MODES = [
+    # Missing tree: the whole mdsvalue call raises
+    pytest.param("OMFIT_PROFS", 118162, "\\TOP.PROFILES.ITEMPFIT", "FOPENR", id="missing_tree"),
+    # Empty node: actively rejected CER channel
+    pytest.param("IONS", 200000, "\\IONS::TOP.CER.CERQUICK.VERTICAL.CHANNEL08.ROTC", "NODATA",
+                 id="rejected_cer_channel"),
+    # Empty node on an old shot
+    pytest.param("EFIT01", 118162, "\\EFIT01::TOP.MEASUREMENTS.SIGPASMA", "NODATA", id="old_shot_empty_node"),
+    # Node did not exist yet: getMany reports a bare missing node as INVTREE instead of NNF
+    pytest.param("NB", 111203, "\\pinj0", "INVTREE", id="old_shot_missing_node"),
+    pytest.param("IONS", 118162, "\\IONS::TOP.IMPDENS.CERAUTO.ZEFF", "INVTREE", id="old_shot_missing_subtree"),
+    # Node did not exist yet, wrapped in an expression: getMany reports NNF
+    pytest.param("NB", 118162, "dim_of(\\NB::TOP.NB30L.PINJ_30L, 0)/1E3", "NNF",
+                 id="old_shot_missing_node_expression"),
+]
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+@pytest.mark.parametrize("treename, shot, mds_path, code", FAILURE_MODES)
+def test_raw_mdsvalue_failure_mode(treename, shot, mds_path, code):
+    """MDSplus/OMAS report the failure mode with the expected status code."""
+    try:
+        error = mdsvalue("d3d", treename=treename, pulse=shot, TDI={mds_path: mds_path}).raw()[mds_path]
+    except Exception as e:
+        error = e
+    assert isinstance(error, Exception), f"Expected an error, got data: {error!r}"
+    assert re.search(rf"%TREE-[A-Z]-{code}\b", str(error)), str(error)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+@pytest.mark.parametrize("treename, shot, mds_path, code", FAILURE_MODES)
+def test_fetch_requirements_returns_no_data(treename, shot, mds_path, code):
+    """fetch_requirements stores missing data as NoData with the original MDSplus message."""
+    req = Requirement(mds_path, shot, treename)
+    value = fetch_requirements([req])[req.as_key()]
+    assert isinstance(value, NoData), repr(value)
+    assert re.search(rf"%TREE-[A-Z]-{code}\b", str(value)), str(value)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+@pytest.mark.parametrize("treename, shot, mds_path, code", [
+    # Standard EFIT tree without stored k-files
+    pytest.param("EFIT01", 155151, "\\EFIT01::TOP.NAMELISTS:KEQDSKS", "NODATA", id="empty_node"),
+    # EFIT run that does not exist
+    pytest.param("EFIT", 15515199, "\\EFIT::TOP.NAMELISTS:KEQDSKS", "FOPENR", id="missing_tree"),
+])
+def test_isolated_fetch_returns_no_data(treename, shot, mds_path, code):
+    """An isolated requirement (fetched without getMany) stores missing data as NoData as well."""
+    req = Requirement(mds_path, shot, treename, isolated=True)
+    value = fetch_requirements([req])[req.as_key()]
+    assert isinstance(value, NoData), repr(value)
+    assert re.search(rf"%TREE-[A-Z]-{code}\b", str(value)), str(value)
+
+
+@pytest.mark.parametrize("error, is_no_data", [
+    (Exception("%TREE-E-FOPENR, Error opening file read-only."), True),
+    (Exception("%TREE-E-NODATA, No data available for this node"), True),
+    (Exception("%TREE-W-NNF, Node Not Found"), True),
+    (Exception("%TREE-E-INVTREE, Invalid tree identification structure"), True),
+    (Exception("%TDI-E-SYNTAX, Bad punctuation or misspelled word or number"), False),
+    (ConnectionError("Error connecting to atlas.gat.com:8000"), False),
+])
+def test_as_no_data_classification(error, is_no_data):
+    """Only MDSplus "no data" status codes are converted to NoData."""
+    result = _as_no_data(error)
+    if is_no_data:
+        assert isinstance(result, NoData)
+        assert str(result) == str(error)
+    else:
+        assert result is error
+
+
+@pytest.fixture
+def no_data():
+    return NoData("%TREE-E-NODATA, No data available for this node")
+
+
+@pytest.mark.parametrize("ids_path", [
+    # Pass-through of a single MDSplus node
+    "equilibrium.time_slice.boundary_separatrix.elongation",
+    # Computed from a ptdata signal
+    "tf.b_field_tor_vacuum_r.data",
+])
+def test_compose_returns_no_data(ids_path, no_data):
+    """compose() returns the NoData of a missing input instead of crashing."""
+    composer = ImasComposer()
+    raw_data = {}
+    for _ in range(10):
+        status, requirements = composer.resolve([ids_path], 200000, raw_data)
+        if all(status.values()):
+            break
+        raw_data.update({req.as_key(): no_data for req in requirements})
+    assert composer.compose([ids_path], 200000, raw_data)[ids_path] is no_data
+
+
+def nbi_raw_data(requirements, beams_with_data, no_data):
+    """Every beam fired with D2; beams outside beams_with_data have no PINJ, PINJ time base or VBEAM."""
+    raw_data = {}
+    for req in requirements:
+        beam, node = re.search(r"\.NB(\w+)\.(\w+)", req.mds_path).groups()
+        if node == "FIRED":
+            raw_data[req.as_key()] = 1
+        elif node == "GAS":
+            raw_data[req.as_key()] = "D2"
+        elif beam not in beams_with_data:
+            raw_data[req.as_key()] = no_data
+        elif req.mds_path.startswith("dim_of"):
+            raw_data[req.as_key()] = np.linspace(0.0, 1.0, 3)
+        else:
+            raw_data[req.as_key()] = np.full(3, 1e6)
+    return raw_data
+
+
+@pytest.mark.parametrize("beams_with_data", [["30L", "21R"], ["33R"], []], ids=["two_beams", "one_beam", "no_beam"])
+def test_nbi_composes_beams_with_data(beams_with_data, no_data):
+    """Fired beams without PINJ data are left out of every per-beam field; without any beam left, all are NoData."""
+    composer = ImasComposer()
+    fields = [path for path in composer.get_supported_fields("nbi") if ".ids_properties." not in path]
+    _, requirements = composer.resolve(fields, 200000, {})
+    raw_data = nbi_raw_data(requirements, beams_with_data, no_data)
+    assert all(composer.resolve(fields, 200000, raw_data)[0].values())
+
+    results = composer.compose(fields, 200000, raw_data)
+
+    if beams_with_data:
+        assert list(results["nbi.unit.name"]) == beams_with_data
+        assert {path: len(value) for path, value in results.items()} == dict.fromkeys(fields, len(beams_with_data))
+    else:
+        assert all(value is no_data for value in results.values())
+
+
+# (ids_name, shot, composer kwargs, expected NoData coverage: "some" or "all" fields)
+OLD_SHOT_CASES = [
+    *[pytest.param(ids_name, 118162, {}, "some", id=f"{ids_name}-118162")
+      for ids_name in ["equilibrium", "ece", "charge_exchange", "reflectometer_profile"]],
+    pytest.param("nbi", 118162, {}, "all", id="nbi-118162"),
+    pytest.param("nbi", 111203, {}, "all", id="nbi-111203"),
+    pytest.param("core_profiles", 118162, {"profiles_tree": "OMFIT_PROFS"}, "all", id="core_profiles_omfit-118162"),
+]
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+@pytest.mark.parametrize("ids_name, shot, composer_kwargs, expected", OLD_SHOT_CASES)
+def test_simple_load_old_shot(ids_name, shot, composer_kwargs, expected):
+    """simple_load populates fields without data with NoData instead of crashing."""
+    composer = ImasComposer(**composer_kwargs)
+    fields = composer.get_supported_fields(ids_name)
+    results = simple_load(fields, shot, composer=composer)
+    assert set(results) == set(fields)
+    missing = [path for path, value in results.items() if isinstance(value, NoData)]
+    if expected == "all":
+        # Static ids_properties do not depend on fetched data
+        assert set(missing) == {path for path in fields if ".ids_properties." not in path}
+    else:
+        assert missing, f"Expected at least one NoData field for {ids_name} #{shot}"
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+def test_simple_load_invalid_data_raises():
+    """Data that is present but invalid is not NoData: EFIT01 RHOVN on 118162 is not monotonic on two slices."""
+    composer = ImasComposer()
+    with pytest.raises(AssertionError, match="RHOVN is not strictly increasing"):
+        simple_load(composer.get_supported_fields("core_profiles"), 118162, composer=composer)

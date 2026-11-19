@@ -9,10 +9,14 @@ from tests.conftest import load_ids_fields, run_composition_against_omas
 
 # Fields that require special handling (tested separately)
 # profiles_2d magnetic fields use OMAS physics derivation (see test_equilibrium_profiles_2d_bfields.py)
+# profiles_2d.j_tor has no OMAS counterpart (see test_equilibrium_profiles_2d_j_tor.py)
+# code.parameters has no OMAS counterpart (see test_equilibrium_code_parameters.py)
 EXCLUDED_FIELDS = [
+    'equilibrium.code.parameters',
     'equilibrium.time_slice.profiles_2d.b_field_tor',
     'equilibrium.time_slice.profiles_2d.b_field_r',
     'equilibrium.time_slice.profiles_2d.b_field_z',
+    'equilibrium.time_slice.profiles_2d.j_tor',
 ]
 
 # Filter out excluded fields from parametrization

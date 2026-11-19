@@ -26,7 +26,7 @@ from pathlib import Path
 from omas import ODS, mdsvalue
 from omas.omas_machine import machine_to_omas
 
-from imas_composer import ImasComposer
+from imas_composer import ImasComposer, NoData
 from imas_composer.core import Requirement
 from imas_composer.fetchers import fetch_requirements
 
@@ -278,7 +278,7 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
         # Check if any fetched values are exceptions (from failed MDSplus access)
         for key, value in fetched.items():
             if isinstance(value, Exception):
-                if not '%TREE-E-NODATA' in str(value).upper():
+                if not isinstance(value, NoData):
                     raise RuntimeError(f"Failed to fetch requirement {key}: {value}") from value
                 # Check if this requirement matches any optional pattern
             mds_path = key[0]  # key is (mds_path, shot, treename)
