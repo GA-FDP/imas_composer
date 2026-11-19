@@ -28,14 +28,18 @@ PSI_AXIS = "equilibrium.time_slice.global_quantities.psi_axis"
 PSI_BOUNDARY = "equilibrium.time_slice.global_quantities.psi_boundary"
 # IDA's basis cases (tests/models/test_free_boundary_gs_solver_efit.py): shot, tree, run id, time [s], where the
 # settings come from and whether EFIT moved the knots (kautoknt) away from those of the k-file
+# The FDP origin cannot open these EFIT runs yet (%TREE-E-FOPENR), atlas serves them.
+# TODO: remove NOT_ON_FDP once the origin has the runs 16962104, 17358701 and 15514905
+NOT_ON_FDP = pytest.mark.requires_atlas
 BASIS_CASES = [
     pytest.param(203877, "EFIT", "01", 2.0, "kfile", False, id="203877_cake_01"),
-    pytest.param(169621, "EFIT", "04", 2.0, "kfile", True, id="169621_cake_04_moved_knots"),
-    pytest.param(169621, "EFIT", "04", 1.44, "kfile", False, id="169621_cake_04_pedestal"),
-    pytest.param(173587, "EFIT", "01", 2.28, "kfile", True, id="173587_cake_01_moved_knots"),
-    pytest.param(173587, "EFIT", "01", 5.4, "kfile", False, id="173587_cake_01_knots_at_one_half"),
-    pytest.param(155149, "EFIT", "05", 3.0, "kfile", False, id="155149_cake_05"),
-    pytest.param(155149, "EFIT", "05", 1.18, "kfile", True, id="155149_cake_05_knots_far_in_their_windows"),
+    pytest.param(169621, "EFIT", "04", 2.0, "kfile", True, marks=NOT_ON_FDP, id="169621_cake_04_moved_knots"),
+    pytest.param(169621, "EFIT", "04", 1.44, "kfile", False, marks=NOT_ON_FDP, id="169621_cake_04_pedestal"),
+    pytest.param(173587, "EFIT", "01", 2.28, "kfile", True, marks=NOT_ON_FDP, id="173587_cake_01_moved_knots"),
+    pytest.param(173587, "EFIT", "01", 5.4, "kfile", False, marks=NOT_ON_FDP, id="173587_cake_01_knots_at_one_half"),
+    pytest.param(155149, "EFIT", "05", 3.0, "kfile", False, marks=NOT_ON_FDP, id="155149_cake_05"),
+    pytest.param(155149, "EFIT", "05", 1.18, "kfile", True, marks=NOT_ON_FDP,
+                 id="155149_cake_05_knots_far_in_their_windows"),
     pytest.param(203877, "EFIT01", "", 2.0, "snap", False, id="203877_efit01"),
     pytest.param(203877, "EFIT02", "", 2.0, "snap", False, id="203877_efit02"),
     pytest.param(118162, "EFIT01", "", 1.8, "snap", False, id="118162_efit01"),
