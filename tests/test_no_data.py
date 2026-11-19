@@ -136,8 +136,9 @@ def test_compose_returns_no_data(ids_path, no_data):
 OLD_SHOT_CASES = [
     *[pytest.param(ids_name, 118162, {}, "some", id=f"{ids_name}-118162")
       for ids_name in ["equilibrium", "core_profiles", "ece", "charge_exchange", "reflectometer_profile"]],
-    pytest.param("nbi", 118162, {}, "all", id="nbi-118162"),
-    pytest.param("nbi", 111203, {}, "all", id="nbi-111203"),
+    # The beam signals are missing, but unit.name needs no data and FIRED/GAS give the species
+    pytest.param("nbi", 118162, {}, "some", id="nbi-118162"),
+    pytest.param("nbi", 111203, {}, "some", id="nbi-111203"),
     pytest.param("core_profiles", 118162, {"profiles_tree": "OMFIT_PROFS"}, "all", id="core_profiles_omfit-118162"),
 ]
 
