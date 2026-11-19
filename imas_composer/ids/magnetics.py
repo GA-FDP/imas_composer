@@ -13,7 +13,7 @@ from typing import Dict, List
 import numpy as np
 import awkward as ak
 
-from ..core import RequirementStage, Requirement, IDSEntrySpec
+from ..core import RequirementStage, Requirement, IDSEntrySpec, NoData
 from .base import IDSMapper
 
 # Loop voltage ptdata per flux loop identifier: the slow digitizer with the smallest dynamic range
@@ -871,6 +871,8 @@ class MagneticsMapper(IDSMapper):
 
         From OMAS: the probe ptdata pointname minus compensation corrections
         from btcomp, ccomp, icomp (applied only to valid channels).
+        A probe without data keeps its slot with an empty array, so the probe
+        arrays stay aligned with the hardware fields.
         Returns ragged awkward array of shape (n_probes, n_time).
         """
         probes = self._load_probes(shot)
@@ -878,6 +880,9 @@ class MagneticsMapper(IDSMapper):
         result = []
         for p in probes:
             key = Requirement(p["identifier"], shot, "__ptdata__").as_key()
+            if isinstance(raw_data[key], NoData):
+                result.append(np.array([]))
+                continue
             data = raw_data[key]['data']
             time_s = raw_data[key]['times'] / 1000.0
             result.append(self._apply_compensation(corrections, shot, raw_data, p['identifier'], data, time_s))
@@ -888,12 +893,14 @@ class MagneticsMapper(IDSMapper):
         Get b_field_pol_probe time base per channel with unit conversion.
 
         From OMAS: dim_of(...,0) / 1000 (convert ms to s).
+        A probe without data has an empty time base.
         Returns ragged awkward array of shape (n_probes, n_time).
         """
         probes = self._load_probes(shot)
+        signals = [raw_data[Requirement(p["identifier"], shot, "__ptdata__").as_key()] for p in probes]
         return ak.Array([
-            raw_data[Requirement(p["identifier"], shot, "__ptdata__").as_key()]['times'] / 1000.0
-            for p in probes
+            np.array([]) if isinstance(signal, NoData) else signal['times'] / 1000.0
+            for signal in signals
         ])
 
     def _compose_bpol_field_validity(self, shot: int, raw_data: dict) -> np.ndarray:
@@ -908,7 +915,8 @@ class MagneticsMapper(IDSMapper):
         result = []
         for k, p in enumerate(probes):
             key = Requirement(p["identifier"], shot, "__ptdata__").as_key()
-            data_missing = key not in raw_data or len(raw_data[key]['data']) <= 1
+            data_missing = (key not in raw_data or isinstance(raw_data[key], NoData)
+                            or len(raw_data[key]['data']) <= 1)
             weight_invalid = k < len(weights) and weights[k] < 0.5
             result.append(-2 if data_missing or weight_invalid else 0)
         return np.array(result, dtype=int)
@@ -929,7 +937,7 @@ class MagneticsMapper(IDSMapper):
         result = []
         for k, p in enumerate(probes):
             key = Requirement(p["identifier"], shot, "__ptdata__").as_key()
-            data = raw_data[key]['data']
+            data = np.array([]) if isinstance(raw_data[key], NoData) else raw_data[key]['data']
             nt = len(data)
             data_missing = nt <= 1
             weight_invalid = k < len(weights) and weights[k] < 0.5

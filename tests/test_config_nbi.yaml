@@ -5,16 +5,16 @@ override_shots: [200000, 166885, 184005] # Deuterium, Helium, Hydrogen
 skip_fields:
   nbi.unit.species.z_n: "imas_composer-only field, no OMAS reference"
   nbi.unit.species.label: "imas_composer-only field, no OMAS reference"
-  # imas_composer selects active beams via the dedicated FIRED flag; OMAS's
-  # nbi_active_hardware still selects them via PINJ time-trace presence, so the
-  # beam lists (and therefore array order/length) can diverge. Compared instead
-  # by beam name in test_composition_matches_omas_by_beam_name.
-  nbi.unit.name: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
-  nbi.unit.power_launched.time: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
-  nbi.unit.power_launched.data: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
-  nbi.unit.energy.time: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
-  nbi.unit.energy.data: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
-  nbi.unit.species.a: "beam list order/length diverges from OMAS; see test_composition_matches_omas_by_beam_name"
+  # imas_composer lists every beam (empty arrays for a beam without data); OMAS's
+  # nbi_active_hardware lists only beams with a PINJ time base, so the beam lists
+  # differ in length. Compared instead by beam name in
+  # test_composition_matches_omas_by_beam_name.
+  nbi.unit.name: "beam list length differs from OMAS; see test_composition_matches_omas_by_beam_name"
+  nbi.unit.power_launched.time: "beam list length differs from OMAS; see test_composition_matches_omas_by_beam_name"
+  nbi.unit.power_launched.data: "beam list length differs from OMAS; see test_composition_matches_omas_by_beam_name"
+  nbi.unit.energy.time: "beam list length differs from OMAS; see test_composition_matches_omas_by_beam_name"
+  nbi.unit.energy.data: "beam list length differs from OMAS; see test_composition_matches_omas_by_beam_name"
+  nbi.unit.species.a: "beam list length differs from OMAS; see test_composition_matches_omas_by_beam_name"
 
 # Requirement validation settings
 requirement_validation:
