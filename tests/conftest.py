@@ -896,12 +896,13 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
     # Base case: 0D (scalar) or 1D array - do comparison
     if ":" not in omas_path:
         # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
-        # Flatten and check length - if zero, verify OMAS is also empty
+        # Flatten and check length - if zero, verify OMAS is also empty. OMAS keeps the single sample
+        # ptdata returns for a point without data, where composer has an empty channel
         if (composer_value is not None and not np.isscalar(composer_value)
                 and len(ak.flatten(composer_value, axis=None)) == 0):
             try:
                 flat_omas = ak.flatten( ods[omas_path], axis=None)
-                assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
+                assert len(flat_omas) <= 1, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
                 return
             except ValueError as e:
                 if not 'has no data' in str(e).lower():
