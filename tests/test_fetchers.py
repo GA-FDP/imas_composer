@@ -15,7 +15,7 @@ from MDSplus.connection import MdsIpException
 
 from imas_composer import ImasComposer, NoData, simple_load
 from imas_composer.core import Requirement
-from imas_composer.fetchers import fetch_requirements
+from imas_composer.fetchers import fetch_requirements, fetch_many_from_req
 
 from tests.conftest import REFERENCE_SHOT
 
@@ -131,6 +131,48 @@ class TestAgainstRealData:
 
         assert not isinstance(value, Exception), value
         assert np.asarray(value).size > 0
+
+    @pytest.mark.parametrize("mds_path, shot, treename", [
+        ("\\EFIT01::TOP.RESULTS.GEQDSK.GTIME", REFERENCE_SHOT, "EFIT01"),
+        ("\\EFIT01::TOP.RESULTS.GEQDSK.SSIMAG", REFERENCE_SHOT, "EFIT01"),
+        (".ECH.SYSTEM_1.GYROTRON.FREQUENCY", 203321, "RF"),  # numpy scalar
+    ])
+    def test_tree_floats_cast_to_float64(self, mds_path, shot, treename):
+        """MDSplus stores these nodes as float32; fetch_requirements hands them over
+        as float64 with unchanged values."""
+        req = Requirement(mds_path, shot, treename)
+
+        value = fetch_requirements([req])[req.as_key()]
+        raw = fetch_many_from_req([req])[req.as_key()]
+
+        assert raw.dtype == np.float32
+        assert value.dtype == np.float64
+        np.testing.assert_array_equal(value, raw)
+
+    @pytest.mark.parametrize("mds_path, expected_type", [
+        (".ECH.NUM_SYSTEMS", np.int16),
+        (".ECH.SYSTEM_1.GYROTRON.NAME", str),
+    ])
+    def test_tree_non_floats_unchanged(self, mds_path, expected_type):
+        """Integer and string nodes are handed over as fetched."""
+        req = Requirement(mds_path, 203321, "RF")
+
+        value = fetch_requirements([req])[req.as_key()]
+        raw = fetch_many_from_req([req])[req.as_key()]
+
+        assert type(value) is expected_type
+        assert value == raw
+
+    def test_ptdata_floats_cast_to_float64(self):
+        """ptdata 'data' and 'times' are handed over as float64 with unchanged values."""
+        req = Requirement("BT", REFERENCE_SHOT, "__ptdata__")
+
+        value = fetch_requirements([req])[req.as_key()]
+        raw = fetch_many_from_req([req])[req.as_key()]
+
+        for field in ('data', 'times'):
+            assert value[field].dtype == np.float64
+            np.testing.assert_array_equal(value[field], raw[field])
 
     @pytest.mark.parametrize("pointname", ["BT", "IP", "IPSPR15V", "DIAMAG3"])
     def test_ptdata_times_are_milliseconds(self, pointname):
