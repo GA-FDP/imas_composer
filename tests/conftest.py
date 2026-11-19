@@ -21,6 +21,7 @@ import pytest
 import numpy as np
 import yaml
 import awkward as ak
+import os
 from pathlib import Path
 
 # Handle authentication: fdp resolves $BEARER_TOKEN, then the `fdp login` cache, skipping expired tokens
@@ -68,6 +69,16 @@ TEST_SHOTS = [202161, 203321, 204601, 204602]
 # ============================================================================
 # Pytest Configuration
 # ============================================================================
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests that need data only atlas serves when toksearch is told not to fall back to atlas (e.g. CI)."""
+    if not os.environ.get("TOKSEARCH_D3D_NO_ATLAS"):
+        return
+    skip_atlas = pytest.mark.skip(reason="needs data FDP does not serve, and TOKSEARCH_D3D_NO_ATLAS disables atlas")
+    for item in items:
+        if "requires_atlas" in item.keywords:
+            item.add_marker(skip_atlas)
+
 
 def pytest_addoption(parser):
     """Add custom command line options for pytest."""
