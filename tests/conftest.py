@@ -21,6 +21,7 @@ import pytest
 import numpy as np
 import yaml
 import awkward as ak
+import os
 from pathlib import Path
 
 from omas import ODS, mdsvalue
@@ -60,6 +61,16 @@ TEST_SHOTS = [202161, 203321, 204601, 204602]
 # ============================================================================
 # Pytest Configuration
 # ============================================================================
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests that need data only atlas serves when toksearch is told not to fall back to atlas (e.g. CI)."""
+    if not os.environ.get("TOKSEARCH_D3D_NO_ATLAS"):
+        return
+    skip_atlas = pytest.mark.skip(reason="needs data FDP does not serve, and TOKSEARCH_D3D_NO_ATLAS disables atlas")
+    for item in items:
+        if "requires_atlas" in item.keywords:
+            item.add_marker(skip_atlas)
+
 
 def pytest_addoption(parser):
     """Add custom command line options for pytest."""
@@ -259,7 +270,7 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
     single_path = isinstance(ids_path, str)
     ids_paths = [ids_path] if single_path else ids_path
     # Load test configuration to get optional requirements list
-    ids_name = ids_path.split('.')[0]
+    ids_name = ids_paths[0].split('.')[0]
     test_config = load_test_config(ids_name)
     optional_patterns = test_config.get('requirement_validation', {}).get('optional_requirements', [])
 
