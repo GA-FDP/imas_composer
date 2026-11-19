@@ -8,7 +8,7 @@ from typing import Dict, List
 import numpy as np
 import re
 
-from ..core import RequirementStage, Requirement, IDSEntrySpec
+from ..core import RequirementStage, Requirement, IDSEntrySpec, NoData
 from .base import IDSMapper
 
 
@@ -503,12 +503,12 @@ class EcLaunchersMapper(IDSMapper):
 
             xfrac_key = Requirement(f'.ECH.{gyrotron_name.upper()}.EC{gyr}XMFRAC', shot, 'RF').as_key()
 
-            if xfrac_key in raw_data and not isinstance(raw_data[xfrac_key], Exception):
-                xfrac = raw_data[xfrac_key]
-                mode = int(np.round(1.0 - 2.0 * max(np.atleast_1d(xfrac))))
-            else:
+            xfrac = raw_data[xfrac_key]
+            if isinstance(xfrac, NoData):
                 # Assume X-mode if XMFRAC not recorded
                 mode = -1
+            else:
+                mode = int(np.round(1.0 - 2.0 * max(np.atleast_1d(xfrac))))
 
             modes.append(mode)
 
@@ -525,14 +525,15 @@ class EcLaunchersMapper(IDSMapper):
 
             xfrac_key = Requirement(f'.ECH.{gyrotron_name.upper()}.EC{gyr}XMFRAC', shot, 'RF').as_key()
 
-            if xfrac_key in raw_data and not isinstance(raw_data[xfrac_key], Exception):
-                fraction = np.atleast_1d(1.0 - raw_data[xfrac_key])
-            else:
+            xfrac = raw_data[xfrac_key]
+            if isinstance(xfrac, NoData):
                 # Pure X-mode if XMFRAC not recorded, consistent with _compose_mode
                 time_key = Requirement(f'dim_of(.ECH.{gyrotron_name.upper()}.EC{gyr}AZIANG+01) / 1E3', shot, 'RF').as_key()
                 time = np.atleast_1d(raw_data[time_key])
                 ntime = len(time) if len(time) > 1 else 1
                 fraction = np.zeros(ntime)
+            else:
+                fraction = np.atleast_1d(1.0 - xfrac)
 
             fraction_arrays.append(fraction)
 
