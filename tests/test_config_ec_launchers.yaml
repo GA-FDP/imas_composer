@@ -44,6 +44,7 @@ omas_path_map:
   ec_launchers.beam.launching_position.z: ec_launchers.beam.:.launching_position.z
   ec_launchers.beam.launching_position.phi: ec_launchers.beam.:.launching_position.phi
   ec_launchers.beam.mode: ec_launchers.beam.:.mode
+  ec_launchers.beam.o_mode_fraction: ec_launchers.beam.:.o_mode_fraction
   ec_launchers.beam.phase.angle: ec_launchers.beam.:.phase.angle
   ec_launchers.beam.phase.curvature: ec_launchers.beam.:.phase.curvature
   ec_launchers.beam.power_launched.time: ec_launchers.beam.:.power_launched.time
