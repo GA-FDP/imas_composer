@@ -21,16 +21,12 @@ import pytest
 import numpy as np
 import yaml
 import awkward as ak
+import os
 from pathlib import Path
 
-import os
-
-# Handle authentication
-
-if "BEARER_TOKEN" not in os.environ:
-    _token_file = Path.home() / ".fdp" / "token"
-    if _token_file.exists():
-        os.environ["BEARER_TOKEN"] = _token_file.read_text().strip()
+# Handle authentication: fdp resolves $BEARER_TOKEN, then the `fdp login` cache, skipping expired tokens
+from toksearch_d3d import setup_environment
+setup_environment()
 
 # Set omas to use toksearch
 from omas.utilities.omas_mds import set_default_mds_backend
@@ -900,12 +896,13 @@ def _compare_recursive(composer_value, ods, omas_path, rtol=1e-10, atol_float=1e
     # Base case: 0D (scalar) or 1D array - do comparison
     if ":" not in omas_path:
         # Check if composer_value is empty (for empty arrays like rectangle fields on outline geometry)
-        # Flatten and check length - if zero, verify OMAS is also empty
+        # Flatten and check length - if zero, verify OMAS is also empty. OMAS keeps the single sample
+        # ptdata returns for a point without data, where composer has an empty channel
         if (composer_value is not None and not np.isscalar(composer_value)
                 and len(ak.flatten(composer_value, axis=None)) == 0):
             try:
                 flat_omas = ak.flatten( ods[omas_path], axis=None)
-                assert len(flat_omas) == 0, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
+                assert len(flat_omas) <= 1, f"Composer has empty array but OMAS has {len(flat_omas)} elements at {omas_path}"
                 return
             except ValueError as e:
                 if not 'has no data' in str(e).lower():
@@ -1055,8 +1052,10 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
         ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
                        fast_ece=fast_ece_omas)
     else:
-        # DO not reset the cache unnecessarily
-        ods = omas_data(ids_name, omas_fetch_spec, shot=shot,
+        # DO not reset the cache unnecessarily. The exception is charge_exchange: its OMAS mapping
+        # appends channels on every fetch, so a cached ODS accumulates duplicate channels
+        reset = (ids_name == 'charge_exchange')
+        ods = omas_data(ids_name, omas_fetch_spec, shot=shot, reset_cache=reset,
                         profiles_tree=profiles_tree, profiles_run_id=profiles_run_id)
 
     # Recursively compare using ndim-based logic with field-specific tolerances
