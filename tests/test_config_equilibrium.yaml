@@ -3,7 +3,18 @@
 # Fields to skip OMAS comparison for (composer still tested)
 # Format: field_path: "reason for skipping"
 skip_fields: {
-  equilibrium.time_slice.profiles_2d.type.index: "Not available with OMAS. Manually verified to be correct."
+  equilibrium.time_slice.profiles_2d.type.index: "Not available with OMAS. Manually verified to be correct.",
+  equilibrium.time_slice.profiles_1d.psi_norm: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.trapped_fraction: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.gm5: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.b_field_average: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.elongation: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.triangularity_upper: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.triangularity_lower: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.r_inboard: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.r_outboard: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.geometric_axis.r: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.geometric_axis.z: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py"
 }
 
 # Field-specific tolerance settings
@@ -25,30 +36,6 @@ field_tolerances:
   # OMAS does the ms -> s conversion on the MDSplus side where everything is 32 bit
     rtol: 1.0e-7
     atol: 1.0e-7
-  equilibrium.time_slice.boundary_separatrix.geometric_axis.r:
-  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-8
-    atol: 1.0e-8
-  equilibrium.time_slice.boundary_separatrix.geometric_axis.z:
-  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-8
-    atol: 1.0e-8
-  equilibrium.time_slice.boundary_separatrix.closest_wall_point.distance:
-  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-8
-    atol: 1.0e-8
-  equilibrium.time_slice.boundary_separatrix.gap.value:
-  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-8
-    atol: 1.0e-8
-  equilibrium.time_slice.boundary_separatrix.strike_point.r:
-  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-8
-    atol: 1.0e-8
-  equilibrium.time_slice.boundary_separatrix.strike_point.z:
-  # OMAS does the cm -> m conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-8
-    atol: 1.0e-8
   equilibrium.time_slice.constraints.pressure.position.psi:
   # IMAS_composer uses the actual psi entries from MDSpus while OMAS recreates the grid
     rtol: 1.0e-10
@@ -65,14 +52,6 @@ field_tolerances:
   # Uses arctan
     rtol: 1.0e-7
     atol: 1.0e-7
-  equilibrium.time_slice.global_quantities.area:
-  # OMAS does the cm^2 -> m^2 conversion on the MDSplus side where everything is 32 bit
-    rtol: 1.0e-6
-    atol: 1.0e-6
-  equilibrium.time_slice.boundary_separatrix.minor_radius:
-     # OMAS does the cm^2 -> m^2 conversion on the MDSplus side where everything is 32 bit
-      rtol: 1.0e-8
-      atol: 1.0e-8
   equilibrium.time_slice.profiles_2d.b_field_tor:
     # Uses interpolation and gradient calculations
     rtol: 1.0e-5

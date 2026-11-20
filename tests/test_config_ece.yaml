@@ -40,6 +40,7 @@ test_variants:
 omas_path_map:
   # Scalar fields (no change)
   ece.ids_properties.homogeneous_time: ece.ids_properties.homogeneous_time
+  ece.time: ece.time
   ece.line_of_sight.first_point.r: ece.line_of_sight.first_point.r
   ece.line_of_sight.first_point.phi: ece.line_of_sight.first_point.phi
   ece.line_of_sight.first_point.z: ece.line_of_sight.first_point.z
