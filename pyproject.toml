@@ -104,6 +104,7 @@ markers = [
     "omas_validation: marks tests that validate against OMAS reference implementation",
     "integration: marks tests as integration tests that require external services",
     "requires_mdsplus: marks tests that require MDSplus access to DIII-D data servers",
+    "requires_atlas: marks tests whose data only atlas serves, skipped when TOKSEARCH_D3D_NO_ATLAS is set",
 ]
 addopts = [
     "-v",

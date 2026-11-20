@@ -120,9 +120,11 @@ def test_aeqdsk_matches_geqdsk_plasma_current():
 
 def test_aeqdsk_fields_on_equilibrium_time():
     mapper = EquilibriumMapper()
+    # 118162 EFIT01 has no FLUXFUN, so the fields that also need it cannot be composed for this shot
     paths = ["equilibrium.time"] + [
         ids_path for ids_path, spec in mapper.specs.items()
         if "equilibrium._aeqdsk_time_indices" in (spec.depends_on or [])
+        and "equilibrium._fluxfun_psi" not in spec.depends_on
     ]
 
     result = simple_load(paths, SHOT_WITH_MISSING_AFILES, efit_tree="EFIT01", efit_run_id="")
