@@ -1124,7 +1124,7 @@ class MagneticsMapper(IDSMapper):
             header = raw_data[key]['rarray']
             k = header[3] # inherent number
             rcg = header[4] # integrator calibration factor
-            result.append(np.abs(k * rcg) * np.ones(nt) * 10.0)
+            result.append(np.abs(k * rcg) * np.ones(nt) * 6.02) # Est. 6 bit of noise variance using 200000 and Vloop
         return ak.Array(result)
 
     def get_specs(self) -> Dict[str, IDSEntrySpec]:
