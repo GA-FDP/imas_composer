@@ -1,7 +1,8 @@
 # Test configuration for EC Launchers IDS
 
-# Include all the standard TEST_SHOTS plus one with top launch
-override_shots: [202161, 203321, 204312, 204601, 204602]
+# Include all the standard TEST_SHOTS plus one with top launch (204312)
+# and one without XMFRAC (170000), which OMAS and imas_composer treat as pure X-mode
+override_shots: [170000, 202161, 203321, 204312, 204601, 204602]
 
 # Fields to skip OMAS comparison for (composer still tested)
 # Format: field_path: "reason for skipping"
@@ -44,6 +45,7 @@ omas_path_map:
   ec_launchers.beam.launching_position.z: ec_launchers.beam.:.launching_position.z
   ec_launchers.beam.launching_position.phi: ec_launchers.beam.:.launching_position.phi
   ec_launchers.beam.mode: ec_launchers.beam.:.mode
+  ec_launchers.beam.o_mode_fraction: ec_launchers.beam.:.o_mode_fraction
   ec_launchers.beam.phase.angle: ec_launchers.beam.:.phase.angle
   ec_launchers.beam.phase.curvature: ec_launchers.beam.:.phase.curvature
   ec_launchers.beam.power_launched.time: ec_launchers.beam.:.power_launched.time
