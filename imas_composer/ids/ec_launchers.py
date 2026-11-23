@@ -8,7 +8,7 @@ from typing import Dict, List
 import numpy as np
 import re
 
-from ..core import RequirementStage, Requirement, IDSEntrySpec
+from ..core import RequirementStage, Requirement, IDSEntrySpec, NoData
 from .base import IDSMapper
 
 
@@ -202,6 +202,14 @@ class EcLaunchersMapper(IDSMapper):
             depends_on=["ec_launchers._gyrotron_data"],
             compose=self._compose_mode,
             ids_path="ec_launchers.beam.mode",
+            docs_file=self.DOCS_PATH
+        )
+
+        self.specs["ec_launchers.beam.o_mode_fraction"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["ec_launchers._gyrotron_data"],
+            compose=self._compose_o_mode_fraction,
+            ids_path="ec_launchers.beam.o_mode_fraction",
             docs_file=self.DOCS_PATH
         )
 
@@ -495,16 +503,41 @@ class EcLaunchersMapper(IDSMapper):
 
             xfrac_key = Requirement(f'.ECH.{gyrotron_name.upper()}.EC{gyr}XMFRAC', shot, 'RF').as_key()
 
-            if xfrac_key in raw_data and not isinstance(raw_data[xfrac_key], Exception):
-                xfrac = raw_data[xfrac_key]
-                mode = int(np.round(1.0 - 2.0 * max(np.atleast_1d(xfrac))))
-            else:
+            xfrac = raw_data[xfrac_key]
+            if isinstance(xfrac, NoData):
                 # Assume X-mode if XMFRAC not recorded
                 mode = -1
+            else:
+                mode = int(np.round(1.0 - 2.0 * max(np.atleast_1d(xfrac))))
 
             modes.append(mode)
 
         return np.array(modes)
+
+    def _compose_o_mode_fraction(self, shot: int, raw_data: dict) -> np.ndarray:
+        """Compose O-mode power fraction arrays (1 - XMFRAC, on the beam time base)."""
+        active_systems = self._get_active_systems(shot, raw_data)
+
+        fraction_arrays = []
+        for system_no in active_systems:
+            gyrotron_name = self._get_gyrotron_name(shot, raw_data, system_no)
+            gyr = gyrotron_name.upper()[:3]
+
+            xfrac_key = Requirement(f'.ECH.{gyrotron_name.upper()}.EC{gyr}XMFRAC', shot, 'RF').as_key()
+
+            xfrac = raw_data[xfrac_key]
+            if isinstance(xfrac, NoData):
+                # Pure X-mode if XMFRAC not recorded, consistent with _compose_mode
+                time_key = Requirement(f'dim_of(.ECH.{gyrotron_name.upper()}.EC{gyr}AZIANG+01) / 1E3', shot, 'RF').as_key()
+                time = np.atleast_1d(raw_data[time_key])
+                ntime = len(time) if len(time) > 1 else 1
+                fraction = np.zeros(ntime)
+            else:
+                fraction = np.atleast_1d(1.0 - xfrac)
+
+            fraction_arrays.append(fraction)
+
+        return np.array(fraction_arrays)
 
     def _compose_phase_angle(self, shot: int, raw_data: dict) -> np.ndarray:
         """Compose phase angle arrays (zeros)."""

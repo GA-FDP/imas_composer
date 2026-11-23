@@ -13,6 +13,7 @@ fields:
   - beam.launching_position.phi
   - beam.mode
   - beam.name
+  - beam.o_mode_fraction
   - beam.phase.angle
   - beam.phase.curvature
   - beam.power_launched.data
