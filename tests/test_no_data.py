@@ -152,7 +152,7 @@ def test_compose_returns_no_data(ids_path, no_data):
 # (ids_name, shot, composer kwargs, expected NoData coverage: "some" or "all" fields)
 OLD_SHOT_CASES = [
     *[pytest.param(ids_name, 118162, {}, "some", id=f"{ids_name}-118162")
-      for ids_name in ["equilibrium", "core_profiles", "ece", "charge_exchange", "reflectometer_profile"]],
+      for ids_name in ["equilibrium", "ece", "charge_exchange", "reflectometer_profile"]],
     # The beam signals are missing, but unit.name needs no data and FIRED/GAS give the species
     pytest.param("nbi", 118162, {}, "some", id="nbi-118162"),
     pytest.param("nbi", 111203, {}, "some", id="nbi-111203"),
@@ -219,3 +219,12 @@ def test_simple_load_probe_without_data(bpol_probe_fields, ids_path, expected):
     identifiers = list(bpol_probe_fields["magnetics.b_field_pol_probe.identifier"])
     assert len(value) == len(identifiers)
     assert ak.to_list(value)[identifiers.index(pointname)] == expected
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+def test_simple_load_invalid_data_raises():
+    """Data that is present but invalid is not NoData: EFIT01 RHOVN on 118162 is not monotonic on two slices."""
+    composer = ImasComposer()
+    with pytest.raises(AssertionError, match="RHOVN is not strictly increasing"):
+        simple_load(composer.get_supported_fields("core_profiles"), 118162, composer=composer)
