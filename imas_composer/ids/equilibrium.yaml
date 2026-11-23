@@ -115,6 +115,17 @@ fields:
   - time_slice.profiles_1d.j_tor
   - time_slice.profiles_1d.j_parallel
   - time_slice.profiles_1d.volume
+  - time_slice.profiles_1d.psi_norm
+  - time_slice.profiles_1d.trapped_fraction
+  - time_slice.profiles_1d.gm5
+  - time_slice.profiles_1d.b_field_average
+  - time_slice.profiles_1d.elongation
+  - time_slice.profiles_1d.triangularity_upper
+  - time_slice.profiles_1d.triangularity_lower
+  - time_slice.profiles_1d.r_inboard
+  - time_slice.profiles_1d.r_outboard
+  - time_slice.profiles_1d.geometric_axis.r
+  - time_slice.profiles_1d.geometric_axis.z
   - time_slice.profiles_2d.grid.dim1
   - time_slice.profiles_2d.grid.dim2
   - time_slice.profiles_2d.grid_type.index
