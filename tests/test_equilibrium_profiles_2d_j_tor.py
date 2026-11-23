@@ -95,8 +95,11 @@ def test_j_tor_vanishes_outside_the_plasma(composed):
     assert np.all(j_tor[normalized_flux(composed) > 1] == 0)
 
 
-def test_j_tor_matches_1d_profiles(composed):
-    """In the core, j_tor = -2 pi (R p' + FF' / (mu0 R)) (COCOS 11) of the 1D profiles evaluated on the flux."""
+def test_j_tor_grad_shafranov(composed):
+    """
+    The right hand side of the Grad Shafranov equation states j_tor = -2 pi (R p' + FF' / (mu0 R)) (COCOS 11).
+    This is evaluated in the core to avoid interpolation errors of the 1D profiles evaluated on the flux.
+    """
     j_tor = composed[J_TOR][:, 0]
     psi_2d = composed[EQ + "profiles_2d.psi"][:, 0]
     R = composed[EQ + "profiles_2d.grid.dim1"][0, 0][:, None]
