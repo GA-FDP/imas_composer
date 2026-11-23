@@ -41,8 +41,8 @@ mds = [
 # Dependency for the fetching backend used by fetch_requirements and simple_load
 # Users can install with: pip install imas_composer[toksearch]
 toksearch = [
-    # Note: toksearch_d3d ships on the ga-fdp conda channel, not PyPI
-    # Users should install it separately: conda install -c ga-fdp toksearch_d3d
+    # Note: toksearch ships on the ga-fdp conda channel, not PyPI
+    # Users should install it separately: conda install -c ga-fdp toksearch
 ]
 
 # OMAS is the reference implementation the test suite validates against; it is
@@ -111,7 +111,7 @@ markers = [
     "omas_validation: marks tests that validate against OMAS reference implementation",
     "integration: marks tests as integration tests that require external services",
     "requires_mdsplus: marks tests that require MDSplus access to DIII-D data servers",
-    "requires_toksearch: marks tests that require toksearch_d3d",
+    "requires_toksearch: marks tests that require toksearch",
 ]
 addopts = [
     "-v",

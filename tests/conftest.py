@@ -23,6 +23,10 @@ import yaml
 import awkward as ak
 from pathlib import Path
 
+# Set omas to use toksearch
+from omas.utilities.omas_mds import set_default_mds_backend
+set_default_mds_backend("toksearch")
+
 from omas import ODS
 from omas.omas_machine import machine_to_omas
 

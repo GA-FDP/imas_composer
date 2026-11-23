@@ -27,7 +27,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-          # versioneer resolves toksearch_d3d's version from git tags
           fetch-depth: 0
 
       - uses: mamba-org/setup-micromamba@v2
