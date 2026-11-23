@@ -32,6 +32,7 @@ from ..efit_basis import (
 )
 from scipy.constants import mu_0
 from scipy.interpolate import interp1d
+from contourpy import contour_generator
 
 # XRSP entries beyond kppcur + kffcur hold the netCDF fill value 9.97e36
 XRSP_FILL_THRESHOLD = 1e30
@@ -73,6 +74,76 @@ def filter_padding(arr: np.ndarray, mask: np.ndarray) -> ak.Array:
     arr = np.asarray(arr)
     mask = np.asarray(mask, dtype=bool)
     return ak.unflatten(arr[mask], mask.sum(axis=1))
+
+
+def parabola_extremum(x: np.ndarray, y: np.ndarray, i: int) -> tuple[float, float]:
+    """
+    Extremum of y(x) near index i of a closed curve, from the parabola through the points i-1, i, i+1.
+
+    Same as OMFIT parabolaMaxCycle(bounded=True): falls back to (x[i], y[i]) when the parabola is
+    degenerate or its vertex lies outside the three points.
+
+    Args:
+        x: Abscissae along the closed curve, without a repeated end point
+        y: Ordinates along the closed curve
+        i: Index of the grid extremum of y
+
+    Returns:
+        (x, y) of the extremum
+    """
+    x0, x1, x2 = x[[i - 1, i, (i + 1) % len(x)]]
+    y0, y1, y2 = y[[i - 1, i, (i + 1) % len(x)]]
+    denom = (x0 - x1) * (x0 - x2) * (x1 - x2)
+    if denom == 0:
+        return x1, y1
+    a = (x2 * (y1 - y0) + x1 * (y0 - y2) + x0 * (y2 - y1)) / denom
+    b = (x2**2 * (y0 - y1) + x1**2 * (y2 - y0) + x0**2 * (y1 - y2)) / denom
+    if a == 0:
+        return x1, y1
+    x_vertex = -b / (2 * a)
+    if not min(x0, x1, x2) <= x_vertex <= max(x0, x1, x2):
+        return x1, y1
+    # Taylor expansion of the parabola around x1
+    return x_vertex, y1 + (2 * a * x1 + b) * (x_vertex - x1) + a * (x_vertex - x1) ** 2
+
+
+def flux_surface_extrema(r_grid: np.ndarray, z_grid: np.ndarray, psirz: np.ndarray, psi_levels: np.ndarray,
+                         r_axis: np.ndarray, z_axis: np.ndarray) -> Dict[str, np.ndarray]:
+    """
+    Trace closed flux surfaces around the magnetic axis and return their extrema.
+
+    Per time slice and level, the surface is the closed contour of psirz whose R and Z ranges contain the
+    magnetic axis. The extrema are refined with parabola_extremum, as in OMFIT fluxGeo.
+
+    Args:
+        r_grid: (n_r,) R grid of psirz
+        z_grid: (n_z,) Z grid of psirz
+        psirz: (n_time, n_z, n_r) poloidal flux, as stored in GEQDSK.PSIRZ
+        psi_levels: (n_time, n_level) poloidal flux of the surfaces, in the convention of psirz
+        r_axis: (n_time,) R of the magnetic axis
+        z_axis: (n_time,) Z of the magnetic axis
+
+    Returns:
+        Dict of (n_time, n_level) arrays: r_max, r_min, z_max, z_min and r_at_z_max, r_at_z_min (R of the
+        highest and lowest point). Levels without a closed contour around the axis (e.g. failed slices) are NaN.
+    """
+    names = ['r_max', 'r_min', 'z_max', 'z_min', 'r_at_z_max', 'r_at_z_min']
+    extrema = {name: np.full(psi_levels.shape, np.nan) for name in names}
+    for i_time in range(psi_levels.shape[0]):
+        contours = contour_generator(x=r_grid, y=z_grid, z=psirz[i_time], line_type="Separate")
+        for i_level, level in enumerate(psi_levels[i_time]):
+            surfaces = [line for line in contours.lines(level)
+                        if np.array_equal(line[0], line[-1])
+                        and line[:, 0].min() < r_axis[i_time] < line[:, 0].max()
+                        and line[:, 1].min() < z_axis[i_time] < line[:, 1].max()]
+            if not surfaces:
+                continue
+            r, z = surfaces[0][:-1, 0], surfaces[0][:-1, 1]
+            _, extrema['r_max'][i_time, i_level] = parabola_extremum(z, r, np.argmax(r))
+            _, extrema['r_min'][i_time, i_level] = parabola_extremum(z, r, np.argmin(r))
+            extrema['r_at_z_max'][i_time, i_level], extrema['z_max'][i_time, i_level] = parabola_extremum(r, z, np.argmax(z))
+            extrema['r_at_z_min'][i_time, i_level], extrema['z_min'][i_time, i_level] = parabola_extremum(r, z, np.argmin(z))
+    return extrema
 
 
 class EquilibriumMapper(IDSMapper):
@@ -1732,6 +1803,114 @@ class EquilibriumMapper(IDSMapper):
             docs_file=self.DOCS_PATH
         )
 
+        # trapped_fraction, gm5, b_field_average - FLUXFUN flux-surface averages interpolated like volume (not in OMAS)
+        self.specs["equilibrium._fluxfun_fc"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.FC', 0, self.efit_tree)],
+            ids_path="equilibrium._fluxfun_fc",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium._fluxfun_b2ave"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.B2AVE', 0, self.efit_tree)],
+            ids_path="equilibrium._fluxfun_b2ave",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium._fluxfun_bave"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.BAVE', 0, self.efit_tree)],
+            ids_path="equilibrium._fluxfun_bave",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.trapped_fraction"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._fluxfun_psi", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin", "equilibrium._fluxfun_fc"],
+            compose=self._compose_profiles_1d_trapped_fraction,
+            ids_path="equilibrium.time_slice.profiles_1d.trapped_fraction",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.gm5"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._fluxfun_psi", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin", "equilibrium._fluxfun_b2ave", "equilibrium._bt0", "equilibrium._aeqdsk_time_indices"],
+            compose=self._compose_profiles_1d_gm5,
+            ids_path="equilibrium.time_slice.profiles_1d.gm5",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.b_field_average"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._fluxfun_psi", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin", "equilibrium._fluxfun_bave", "equilibrium._bt0", "equilibrium._aeqdsk_time_indices"],
+            compose=self._compose_profiles_1d_b_field_average,
+            ids_path="equilibrium.time_slice.profiles_1d.b_field_average",
+            docs_file=self.DOCS_PATH
+        )
+
+        # psi_norm - the GEQDSK.PSIN grid
+        self.specs["equilibrium.time_slice.profiles_1d.psi_norm"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._psin", "equilibrium._gtime"],
+            compose=self._compose_profiles_1d_psi_norm,
+            ids_path="equilibrium.time_slice.profiles_1d.psi_norm",
+            docs_file=self.DOCS_PATH
+        )
+
+        # Flux surface geometry: surfaces traced in GEQDSK.PSIRZ between axis and boundary; the axis value comes from
+        # GEQDSK.RMAXIS/ZMAXIS or AEQDSK.KAPPA0, the boundary value from the AEQDSK boundary scalars (not in OMAS)
+        self.specs["equilibrium._kappa0"] = IDSEntrySpec(
+            stage=RequirementStage.DIRECT,
+            static_requirements=[Requirement(f'{self.aeqdsk_node}.KAPPA0', 0, self.efit_tree)],
+            ids_path="equilibrium._kappa0",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.elongation"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._r_grid", "equilibrium._z_grid", "equilibrium._psirz", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin", "equilibrium._rmaxis", "equilibrium._zmaxis", "equilibrium._aeqdsk_time_indices", "equilibrium._kappa0", "equilibrium._kappa"],
+            compose=self._compose_profiles_1d_elongation,
+            ids_path="equilibrium.time_slice.profiles_1d.elongation",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.triangularity_upper"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._r_grid", "equilibrium._z_grid", "equilibrium._psirz", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin", "equilibrium._rmaxis", "equilibrium._zmaxis", "equilibrium._aeqdsk_time_indices", "equilibrium._tritop"],
+            compose=self._compose_profiles_1d_triangularity_upper,
+            ids_path="equilibrium.time_slice.profiles_1d.triangularity_upper",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.triangularity_lower"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._r_grid", "equilibrium._z_grid", "equilibrium._psirz", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin", "equilibrium._rmaxis", "equilibrium._zmaxis", "equilibrium._aeqdsk_time_indices", "equilibrium._tribot"],
+            compose=self._compose_profiles_1d_triangularity_lower,
+            ids_path="equilibrium.time_slice.profiles_1d.triangularity_lower",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.r_inboard"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._r_grid", "equilibrium._z_grid", "equilibrium._psirz", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin", "equilibrium._rmaxis", "equilibrium._zmaxis", "equilibrium._aeqdsk_time_indices", "equilibrium._rsurf", "equilibrium._aminor"],
+            compose=self._compose_profiles_1d_r_inboard,
+            ids_path="equilibrium.time_slice.profiles_1d.r_inboard",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.r_outboard"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._r_grid", "equilibrium._z_grid", "equilibrium._psirz", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin", "equilibrium._rmaxis", "equilibrium._zmaxis", "equilibrium._aeqdsk_time_indices", "equilibrium._rsurf", "equilibrium._aminor"],
+            compose=self._compose_profiles_1d_r_outboard,
+            ids_path="equilibrium.time_slice.profiles_1d.r_outboard",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.geometric_axis.r"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._r_grid", "equilibrium._z_grid", "equilibrium._psirz", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin", "equilibrium._rmaxis", "equilibrium._zmaxis", "equilibrium._aeqdsk_time_indices", "equilibrium._rsurf"],
+            compose=self._compose_profiles_1d_geometric_axis_r,
+            ids_path="equilibrium.time_slice.profiles_1d.geometric_axis.r",
+            docs_file=self.DOCS_PATH
+        )
+        self.specs["equilibrium.time_slice.profiles_1d.geometric_axis.z"] = IDSEntrySpec(
+            stage=RequirementStage.COMPUTED,
+            depends_on=["equilibrium._r_grid", "equilibrium._z_grid", "equilibrium._psirz", "equilibrium._ssimag", "equilibrium._ssibry", "equilibrium._psin", "equilibrium._rmaxis", "equilibrium._zmaxis", "equilibrium._aeqdsk_time_indices", "equilibrium._zsurf"],
+            compose=self._compose_profiles_1d_geometric_axis_z,
+            ids_path="equilibrium.time_slice.profiles_1d.geometric_axis.z",
+            docs_file=self.DOCS_PATH
+        )
+
         # === Auxiliary nodes for profiles_2d ===
 
         # R grid from GEQDSK
@@ -3149,22 +3328,22 @@ class EquilibriumMapper(IDSMapper):
         rhovn_key = Requirement(f'{self.geqdsk_node}.RHOVN', self.resolve_shot(shot), self.efit_tree).as_key()
         return raw_data[rhovn_key]
 
-    def _compose_profiles_1d_j_tor(self, shot: int, raw_data: dict) -> np.ndarray:
+    def _interpolate_fluxfun(self, shot: int, raw_data: dict, node: str) -> np.ndarray:
         """
-        Compose j_tor profile using interpolate_psi_1d transformation.
+        Interpolate FLUXFUN.<node> from the FLUXFUN psi grid onto the GEQDSK.PSIN grid.
 
-        OMAS: py2tdi(interpolate_psi_1d,'\\EFIT::TOP.RESULTS.FLUXFUN.PSI','\\EFIT::TOP.RESULTS.FLUXFUN.JEFF',
+        OMAS: py2tdi(interpolate_psi_1d,'\\EFIT::TOP.RESULTS.FLUXFUN.PSI','\\EFIT::TOP.RESULTS.FLUXFUN.<node>',
                      '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY','\\EFIT::TOP.RESULTS.GEQDSK.PSIN')
-        Transform: Interpolate from FLUXFUN.PSI/JEFF to GEQDSK.PSIN grid
+        Slices whose FLUXFUN.PSI has repeated values (failed fits) cannot be interpolated and stay zero.
         """
         fluxfun_psi_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.PSI', self.resolve_shot(shot), self.efit_tree).as_key()
-        fluxfun_jeff_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.JEFF', self.resolve_shot(shot), self.efit_tree).as_key()
+        fluxfun_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.{node}', self.resolve_shot(shot), self.efit_tree).as_key()
         ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', self.resolve_shot(shot), self.efit_tree).as_key()
         ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self.resolve_shot(shot), self.efit_tree).as_key()
         psin_key = Requirement(f'{self.geqdsk_node}.PSIN', self.resolve_shot(shot), self.efit_tree).as_key()
-        # Fluxfun quantities comes as (radial direction, time), but we need (time, radial direction/psi)
+        # Fluxfun quantities come as (radial direction, time), but we need (time, radial direction/psi)
         fluxfun_psi = raw_data[fluxfun_psi_key].T
-        fluxfun_jeff = raw_data[fluxfun_jeff_key].T
+        fluxfun_values = raw_data[fluxfun_key].T
         ssimag = raw_data[ssimag_key]
         ssibry = raw_data[ssibry_key]
         psin = raw_data[psin_key]
@@ -3173,14 +3352,23 @@ class EquilibriumMapper(IDSMapper):
         fluxfun_psi_norm = (fluxfun_psi - ssimag[:, None]) / (ssibry[:, None] - ssimag[:, None])
 
         # Interpolate from FLUXFUN grid to GEQDSK grid
-        j_tor = np.zeros(ssimag.shape + psin.shape)
+        values = np.zeros(ssimag.shape + psin.shape)
         for i in range(fluxfun_psi.shape[0]):
             # Use constant extrapolation: first and last values for out-of-bounds
-            fill_value = (fluxfun_jeff[i][0], fluxfun_jeff[i][-1])
+            fill_value = (fluxfun_values[i][0], fluxfun_values[i][-1])
             if np.all(np.unique(fluxfun_psi_norm[i], return_counts=True)[1] == 1):
-                j_tor[i] = interp1d(fluxfun_psi_norm[i], fluxfun_jeff[i], kind='cubic',
-                                    bounds_error=False, fill_value=fill_value)(psin)
-        return j_tor
+                values[i] = interp1d(fluxfun_psi_norm[i], fluxfun_values[i], kind='cubic',
+                                     bounds_error=False, fill_value=fill_value)(psin)
+        return values
+
+    def _compose_profiles_1d_j_tor(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose j_tor profile using interpolate_psi_1d transformation.
+
+        OMAS: py2tdi(interpolate_psi_1d,'\\EFIT::TOP.RESULTS.FLUXFUN.PSI','\\EFIT::TOP.RESULTS.FLUXFUN.JEFF',
+                     '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY','\\EFIT::TOP.RESULTS.GEQDSK.PSIN')
+        """
+        return self._interpolate_fluxfun(shot, raw_data, 'JEFF')
 
     def _compose_profiles_1d_j_parallel(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -3188,32 +3376,8 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(interpolate_psi_1d,'\\EFIT::TOP.RESULTS.FLUXFUN.PSI','\\EFIT::TOP.RESULTS.FLUXFUN.JLL',
                      '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY','\\EFIT::TOP.RESULTS.GEQDSK.PSIN')
-        Transform: Interpolate from FLUXFUN.PSI/JLL to GEQDSK.PSIN grid
         """
-        fluxfun_psi_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.PSI', self.resolve_shot(shot), self.efit_tree).as_key()
-        fluxfun_jll_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.JLL', self.resolve_shot(shot), self.efit_tree).as_key()
-        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', self.resolve_shot(shot), self.efit_tree).as_key()
-        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self.resolve_shot(shot), self.efit_tree).as_key()
-        psin_key = Requirement(f'{self.geqdsk_node}.PSIN', self.resolve_shot(shot), self.efit_tree).as_key()
-
-        # Fluxfun quantities come as (radial direction, time), but we need (time, radial direction/psi)
-        fluxfun_psi = raw_data[fluxfun_psi_key].T
-        fluxfun_jll = raw_data[fluxfun_jll_key].T
-        ssimag = raw_data[ssimag_key]
-        ssibry = raw_data[ssibry_key]
-        psin = raw_data[psin_key]
-
-        # Normalize FLUXFUN.PSI
-        fluxfun_psi_norm = (fluxfun_psi - ssimag[:, None]) / (ssibry[:, None] - ssimag[:, None])
-
-        # Interpolate from FLUXFUN grid to GEQDSK grid
-        j_parallel = np.zeros(ssimag.shape + psin.shape)
-        for i in range(fluxfun_psi.shape[0]):
-            # Use constant extrapolation: first and last values for out-of-bounds
-            fill_value = (fluxfun_jll[i][0], fluxfun_jll[i][-1])
-            j_parallel[i] = interp1d(fluxfun_psi_norm[i], fluxfun_jll[i], kind='cubic',
-                                     bounds_error=False, fill_value=fill_value)(psin)
-        return j_parallel
+        return self._interpolate_fluxfun(shot, raw_data, 'JLL')
 
     def _compose_profiles_1d_volume(self, shot: int, raw_data: dict) -> np.ndarray:
         """
@@ -3221,32 +3385,145 @@ class EquilibriumMapper(IDSMapper):
 
         OMAS: py2tdi(interpolate_psi_1d,'\\EFIT::TOP.RESULTS.FLUXFUN.PSI','\\EFIT::TOP.RESULTS.FLUXFUN.VOL',
                      '\\EFIT::TOP.RESULTS.GEQDSK.SSIMAG','\\EFIT::TOP.RESULTS.GEQDSK.SSIBRY','\\EFIT::TOP.RESULTS.GEQDSK.PSIN')
-        Transform: Interpolate from FLUXFUN.PSI/VOL to GEQDSK.PSIN grid
         """
-        fluxfun_psi_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.PSI', self.resolve_shot(shot), self.efit_tree).as_key()
-        fluxfun_vol_key = Requirement(f'\\{self.efit_tree}::TOP.RESULTS.FLUXFUN.VOL', self.resolve_shot(shot), self.efit_tree).as_key()
-        ssimag_key = Requirement(f'{self.geqdsk_node}.SSIMAG', self.resolve_shot(shot), self.efit_tree).as_key()
-        ssibry_key = Requirement(f'{self.geqdsk_node}.SSIBRY', self.resolve_shot(shot), self.efit_tree).as_key()
+        return self._interpolate_fluxfun(shot, raw_data, 'VOL')
+
+    def _compose_profiles_1d_trapped_fraction(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose trapped_fraction as 1 - FLUXFUN.FC (circulating fraction) on the GEQDSK.PSIN grid.
+
+        Not in OMAS. Matches OMFIT fluxSurfaces (1 - avg['fc']). No particle is trapped on the axis.
+        """
+        trapped_fraction = 1.0 - self._interpolate_fluxfun(shot, raw_data, 'FC')
+        trapped_fraction[:, 0] = 0.0
+        return trapped_fraction
+
+    def _abs_b_on_axis(self, shot: int, raw_data: dict) -> np.ndarray:
+        """|B| on the magnetic axis, where B_pol = 0, so |B| = |AEQDSK.BT0|. NaN for slices without an a-file."""
+        return np.abs(self._aeqdsk_profile_end(shot, raw_data, 'BT0'))
+
+    def _compose_profiles_1d_gm5(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose gm5 = <B^2> from FLUXFUN.B2AVE on the GEQDSK.PSIN grid, with BT0^2 on the axis.
+
+        Not in OMAS. Matches OMFIT fluxSurfaces avg['Btot**2'].
+        """
+        gm5 = self._interpolate_fluxfun(shot, raw_data, 'B2AVE')
+        gm5[:, 0] = self._abs_b_on_axis(shot, raw_data) ** 2
+        return gm5
+
+    def _compose_profiles_1d_b_field_average(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose b_field_average = <|B|> from FLUXFUN.BAVE on the GEQDSK.PSIN grid, with |BT0| on the axis.
+
+        Not in OMAS. Matches OMFIT fluxSurfaces avg['Btot'] (OMFIT's own b_field_average is the plain mean
+        over the contour points, not a flux-surface average).
+        """
+        b_field_average = self._interpolate_fluxfun(shot, raw_data, 'BAVE')
+        b_field_average[:, 0] = self._abs_b_on_axis(shot, raw_data)
+        return b_field_average
+
+    def _compose_profiles_1d_psi_norm(self, shot: int, raw_data: dict) -> np.ndarray:
+        """GEQDSK.PSIN repeated on every time slice."""
         psin_key = Requirement(f'{self.geqdsk_node}.PSIN', self.resolve_shot(shot), self.efit_tree).as_key()
+        gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', self.resolve_shot(shot), self.efit_tree).as_key()
+        return np.tile(raw_data[psin_key], (len(raw_data[gtime_key]), 1))
 
-        # Fluxfun quantities comes as (radial direction, time), but we need (time, radial direction/psi)
-        fluxfun_psi = raw_data[fluxfun_psi_key].T
-        fluxfun_vol = raw_data[fluxfun_vol_key].T
-        ssimag = raw_data[ssimag_key]
-        ssibry = raw_data[ssibry_key]
-        psin = raw_data[psin_key]
+    def _profiles_1d_flux_surface_extrema(self, shot: int, raw_data: dict) -> Dict[str, np.ndarray]:
+        """Extrema of the flux surfaces traced in GEQDSK.PSIRZ at the PSIN levels between axis and boundary."""
+        def get(node):
+            return raw_data[Requirement(f'{self.geqdsk_node}.{node}', self.resolve_shot(shot), self.efit_tree).as_key()]
 
-        # Normalize FLUXFUN.PSI
-        fluxfun_psi_norm = (fluxfun_psi - ssimag[:, None]) / (ssibry[:, None] - ssimag[:, None])
+        ssimag = get('SSIMAG')
+        ssibry = get('SSIBRY')
+        psi_levels = ssimag[:, None] + get('PSIN')[None, 1:-1] * (ssibry - ssimag)[:, None]
+        return flux_surface_extrema(get('R'), get('Z'), get('PSIRZ'), psi_levels, get('RMAXIS'), get('ZMAXIS'))
 
-        # Interpolate from FLUXFUN grid to GEQDSK grid
-        volume = np.zeros(ssimag.shape + psin.shape)
-        for i in range(fluxfun_psi.shape[0]):
-            # Use constant extrapolation: first and last values for out-of-bounds
-            fill_value = (fluxfun_vol[i][0], fluxfun_vol[i][-1])
-            volume[i] = interp1d(fluxfun_psi_norm[i], fluxfun_vol[i], kind='cubic',
-                                 bounds_error=False, fill_value=fill_value)(psin)
-        return volume
+    def _aeqdsk_profile_end(self, shot: int, raw_data: dict, node: str) -> np.ndarray:
+        """
+        AEQDSK.<node> on GTIME as the axis or boundary column of a profile.
+
+        Unlike _aeqdsk_on_gtime, slices without an a-file are NaN rather than missing.
+        """
+        key = Requirement(f'{self.aeqdsk_node}.{node}', self.resolve_shot(shot), self.efit_tree).as_key()
+        indices = self._compose_aeqdsk_time_indices(shot, raw_data)
+        return np.where(indices >= 0, np.asarray(raw_data[key], dtype=float)[indices], np.nan)
+
+    def _compose_profiles_1d_elongation(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose elongation (zmax - zmin) / (rmax - rmin) of each flux surface.
+
+        Not in OMAS. Interior surfaces match OMFIT fluxSurfaces (0.5 * (kapu + kapl)). The axis is AEQDSK.KAPPA0
+        and the boundary AEQDSK.KAPPA, so the last point equals boundary_separatrix.elongation.
+        """
+        ext = self._profiles_1d_flux_surface_extrema(shot, raw_data)
+        interior = (ext['z_max'] - ext['z_min']) / (ext['r_max'] - ext['r_min'])
+        return np.column_stack([self._aeqdsk_profile_end(shot, raw_data, 'KAPPA0'), interior,
+                                self._aeqdsk_profile_end(shot, raw_data, 'KAPPA')])
+
+    def _compose_profiles_1d_triangularity_upper(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose upper triangularity (R_geo - R(zmax)) / a of each flux surface.
+
+        Not in OMAS. Interior surfaces match OMFIT fluxSurfaces (delu). Zero on the axis and AEQDSK.TRITOP at the
+        boundary, so the last point equals boundary_separatrix.triangularity_upper.
+        """
+        ext = self._profiles_1d_flux_surface_extrema(shot, raw_data)
+        interior = (ext['r_max'] + ext['r_min'] - 2 * ext['r_at_z_max']) / (ext['r_max'] - ext['r_min'])
+        return np.column_stack([np.zeros(len(interior)), interior,
+                                self._aeqdsk_profile_end(shot, raw_data, 'TRITOP')])
+
+    def _compose_profiles_1d_triangularity_lower(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose lower triangularity (R_geo - R(zmin)) / a of each flux surface.
+
+        Not in OMAS. Interior surfaces match OMFIT fluxSurfaces (dell). Zero on the axis and AEQDSK.TRIBOT at the
+        boundary, so the last point equals boundary_separatrix.triangularity_lower.
+        """
+        ext = self._profiles_1d_flux_surface_extrema(shot, raw_data)
+        interior = (ext['r_max'] + ext['r_min'] - 2 * ext['r_at_z_min']) / (ext['r_max'] - ext['r_min'])
+        return np.column_stack([np.zeros(len(interior)), interior,
+                                self._aeqdsk_profile_end(shot, raw_data, 'TRIBOT')])
+
+    def _compose_profiles_1d_r_inboard(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose r_inboard, the smallest major radius of each flux surface.
+
+        Not in OMAS. RMAXIS on the axis and AEQDSK.RSURF - AEQDSK.AMINOR at the boundary.
+        """
+        ext = self._profiles_1d_flux_surface_extrema(shot, raw_data)
+        boundary = self._aeqdsk_profile_end(shot, raw_data, 'RSURF') - self._aeqdsk_profile_end(shot, raw_data, 'AMINOR')
+        return np.column_stack([self._compose_global_magnetic_axis_r(shot, raw_data), ext['r_min'], boundary])
+
+    def _compose_profiles_1d_r_outboard(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose r_outboard, the largest major radius of each flux surface.
+
+        Not in OMAS. RMAXIS on the axis and AEQDSK.RSURF + AEQDSK.AMINOR at the boundary.
+        """
+        ext = self._profiles_1d_flux_surface_extrema(shot, raw_data)
+        boundary = self._aeqdsk_profile_end(shot, raw_data, 'RSURF') + self._aeqdsk_profile_end(shot, raw_data, 'AMINOR')
+        return np.column_stack([self._compose_global_magnetic_axis_r(shot, raw_data), ext['r_max'], boundary])
+
+    def _compose_profiles_1d_geometric_axis_r(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose geometric_axis.r = (rmin + rmax) / 2 of each flux surface.
+
+        Not in OMAS. RMAXIS on the axis and AEQDSK.RSURF at the boundary (= boundary_separatrix.geometric_axis.r).
+        """
+        ext = self._profiles_1d_flux_surface_extrema(shot, raw_data)
+        return np.column_stack([self._compose_global_magnetic_axis_r(shot, raw_data), 0.5 * (ext['r_max'] + ext['r_min']),
+                                self._aeqdsk_profile_end(shot, raw_data, 'RSURF')])
+
+    def _compose_profiles_1d_geometric_axis_z(self, shot: int, raw_data: dict) -> np.ndarray:
+        """
+        Compose geometric_axis.z = (zmin + zmax) / 2 of each flux surface.
+
+        Not in OMAS. ZMAXIS on the axis and AEQDSK.ZSURF at the boundary (= boundary_separatrix.geometric_axis.z).
+        """
+        ext = self._profiles_1d_flux_surface_extrema(shot, raw_data)
+        return np.column_stack([self._compose_global_magnetic_axis_z(shot, raw_data), 0.5 * (ext['z_max'] + ext['z_min']),
+                                self._aeqdsk_profile_end(shot, raw_data, 'ZSURF')])
 
     def _compose_profiles_2d_grid_dim1(self, shot: int, raw_data: dict) -> np.ndarray:
         """

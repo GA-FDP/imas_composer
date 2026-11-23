@@ -274,7 +274,7 @@ def resolve_and_compose(composer, ids_path, shot=REFERENCE_SHOT):
     single_path = isinstance(ids_path, str)
     ids_paths = [ids_path] if single_path else ids_path
     # Load test configuration to get optional requirements list
-    ids_name = ids_path.split('.')[0]
+    ids_name = ids_paths[0].split('.')[0]
     test_config = load_test_config(ids_name)
     optional_patterns = test_config.get('requirement_validation', {}).get('optional_requirements', [])
 
