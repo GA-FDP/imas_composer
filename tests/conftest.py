@@ -24,10 +24,6 @@ import awkward as ak
 import os
 from pathlib import Path
 
-# Handle authentication: fdp resolves $BEARER_TOKEN, then the `fdp login` cache, skipping expired tokens
-from toksearch_d3d import setup_environment
-setup_environment()
-
 # Set omas to use toksearch
 from omas.utilities.omas_mds import set_default_mds_backend
 set_default_mds_backend("toksearch")
