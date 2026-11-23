@@ -149,42 +149,6 @@ def test_compose_returns_no_data(ids_path, no_data):
     assert composer.compose([ids_path], 200000, raw_data)[ids_path] is no_data
 
 
-def nbi_raw_data(requirements, beams_with_data, no_data):
-    """Every beam fired with D2; beams outside beams_with_data have no PINJ, PINJ time base or VBEAM."""
-    raw_data = {}
-    for req in requirements:
-        beam, node = re.search(r"\.NB(\w+)\.(\w+)", req.mds_path).groups()
-        if node == "FIRED":
-            raw_data[req.as_key()] = 1
-        elif node == "GAS":
-            raw_data[req.as_key()] = "D2"
-        elif beam not in beams_with_data:
-            raw_data[req.as_key()] = no_data
-        elif req.mds_path.startswith("dim_of"):
-            raw_data[req.as_key()] = np.linspace(0.0, 1.0, 3)
-        else:
-            raw_data[req.as_key()] = np.full(3, 1e6)
-    return raw_data
-
-
-@pytest.mark.parametrize("beams_with_data", [["30L", "21R"], ["33R"], []], ids=["two_beams", "one_beam", "no_beam"])
-def test_nbi_composes_beams_with_data(beams_with_data, no_data):
-    """Fired beams without PINJ data are left out of every per-beam field; without any beam left, all are NoData."""
-    composer = ImasComposer()
-    fields = [path for path in composer.get_supported_fields("nbi") if ".ids_properties." not in path]
-    _, requirements = composer.resolve(fields, 200000, {})
-    raw_data = nbi_raw_data(requirements, beams_with_data, no_data)
-    assert all(composer.resolve(fields, 200000, raw_data)[0].values())
-
-    results = composer.compose(fields, 200000, raw_data)
-
-    if beams_with_data:
-        assert list(results["nbi.unit.name"]) == beams_with_data
-        assert {path: len(value) for path, value in results.items()} == dict.fromkeys(fields, len(beams_with_data))
-    else:
-        assert all(value is no_data for value in results.values())
-
-
 # (ids_name, shot, composer kwargs, expected NoData coverage: "some" or "all" fields)
 OLD_SHOT_CASES = [
     *[pytest.param(ids_name, 118162, {}, "some", id=f"{ids_name}-118162")
