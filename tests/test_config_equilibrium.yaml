@@ -3,7 +3,18 @@
 # Fields to skip OMAS comparison for (composer still tested)
 # Format: field_path: "reason for skipping"
 skip_fields: {
-  equilibrium.time_slice.profiles_2d.type.index: "Not available with OMAS. Manually verified to be correct."
+  equilibrium.time_slice.profiles_2d.type.index: "Not available with OMAS. Manually verified to be correct.",
+  equilibrium.time_slice.profiles_1d.psi_norm: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.trapped_fraction: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.gm5: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.b_field_average: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.elongation: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.triangularity_upper: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.triangularity_lower: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.r_inboard: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.r_outboard: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.geometric_axis.r: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py",
+  equilibrium.time_slice.profiles_1d.geometric_axis.z: "No OMAS mapping; tested against OMFIT and EFIT scalars in test_equilibrium_profiles_1d_omfit.py"
 }
 
 # Field-specific tolerance settings

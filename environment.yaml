@@ -13,6 +13,7 @@ dependencies:
   - pyyaml *
   - awkward *
   - scipy *
+  - f90nml # parsing EFIT k-files
 
   # Test tools
   - pytest *

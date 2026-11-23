@@ -53,8 +53,10 @@ def fetch_requirements(
     Requirements with treename == "__ptdata__" are batched into a single
     tree-less getMany() of ptdata2/dim_of/pthead2 TDI, returning a dict with
     keys 'data', 'times' (ms), and 'rarray'.  Everything else is batched per
-    (treename, shot) and evaluated as TDI against an MDSplus tree.  Every group
-    is tried first against the FDP thin client and then atlas.
+    (treename, shot) and evaluated as TDI against an MDSplus tree; requirements
+    with isolated=True are fetched one by one with get() instead of in the
+    getMany() batch.  Every group is tried first against the FDP thin client
+    and then atlas.
 
     Args:
         requirements: List of Requirement objects to fetch.

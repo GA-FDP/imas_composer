@@ -89,6 +89,23 @@ def test_fetch_requirements_missing_ptdata(pointname, shot):
     assert pointname in str(value)
 
 
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+@pytest.mark.requires_toksearch
+@pytest.mark.parametrize("treename, shot, mds_path, code", [
+    # Standard EFIT tree without stored k-files
+    pytest.param("EFIT01", 155151, "\\EFIT01::TOP.NAMELISTS:KEQDSKS", "NODATA", id="empty_node"),
+    # EFIT run that does not exist
+    pytest.param("EFIT", 15515199, "\\EFIT::TOP.NAMELISTS:KEQDSKS", "FOPENR", id="missing_tree"),
+])
+def test_isolated_fetch_returns_no_data(treename, shot, mds_path, code):
+    """An isolated requirement (fetched without getMany) stores missing data as NoData as well."""
+    req = Requirement(mds_path, shot, treename, isolated=True)
+    value = fetch_requirements([req])[req.as_key()]
+    assert isinstance(value, NoData), repr(value)
+    assert re.search(rf"%TREE-[A-Z]-{code}\b", str(value)), str(value)
+
+
 @pytest.mark.parametrize("error, is_no_data", [
     (Exception("%TREE-E-FOPENR, Error opening file read-only."), True),
     (Exception("%TREE-E-NODATA, No data available for this node"), True),
@@ -132,10 +149,46 @@ def test_compose_returns_no_data(ids_path, no_data):
     assert composer.compose([ids_path], 200000, raw_data)[ids_path] is no_data
 
 
+def nbi_raw_data(requirements, beams_with_data, no_data):
+    """Every beam fired with D2; beams outside beams_with_data have no PINJ, PINJ time base or VBEAM."""
+    raw_data = {}
+    for req in requirements:
+        beam, node = re.search(r"\.NB(\w+)\.(\w+)", req.mds_path).groups()
+        if node == "FIRED":
+            raw_data[req.as_key()] = 1
+        elif node == "GAS":
+            raw_data[req.as_key()] = "D2"
+        elif beam not in beams_with_data:
+            raw_data[req.as_key()] = no_data
+        elif req.mds_path.startswith("dim_of"):
+            raw_data[req.as_key()] = np.linspace(0.0, 1.0, 3)
+        else:
+            raw_data[req.as_key()] = np.full(3, 1e6)
+    return raw_data
+
+
+@pytest.mark.parametrize("beams_with_data", [["30L", "21R"], ["33R"], []], ids=["two_beams", "one_beam", "no_beam"])
+def test_nbi_composes_beams_with_data(beams_with_data, no_data):
+    """Fired beams without PINJ data are left out of every per-beam field; without any beam left, all are NoData."""
+    composer = ImasComposer()
+    fields = [path for path in composer.get_supported_fields("nbi") if ".ids_properties." not in path]
+    _, requirements = composer.resolve(fields, 200000, {})
+    raw_data = nbi_raw_data(requirements, beams_with_data, no_data)
+    assert all(composer.resolve(fields, 200000, raw_data)[0].values())
+
+    results = composer.compose(fields, 200000, raw_data)
+
+    if beams_with_data:
+        assert list(results["nbi.unit.name"]) == beams_with_data
+        assert {path: len(value) for path, value in results.items()} == dict.fromkeys(fields, len(beams_with_data))
+    else:
+        assert all(value is no_data for value in results.values())
+
+
 # (ids_name, shot, composer kwargs, expected NoData coverage: "some" or "all" fields)
 OLD_SHOT_CASES = [
     *[pytest.param(ids_name, 118162, {}, "some", id=f"{ids_name}-118162")
-      for ids_name in ["equilibrium", "core_profiles", "ece", "charge_exchange", "reflectometer_profile"]],
+      for ids_name in ["equilibrium", "ece", "charge_exchange", "reflectometer_profile"]],
     # The beam signals are missing, but unit.name needs no data and FIRED/GAS give the species
     pytest.param("nbi", 118162, {}, "some", id="nbi-118162"),
     pytest.param("nbi", 111203, {}, "some", id="nbi-111203"),
@@ -202,3 +255,12 @@ def test_simple_load_probe_without_data(bpol_probe_fields, ids_path, expected):
     identifiers = list(bpol_probe_fields["magnetics.b_field_pol_probe.identifier"])
     assert len(value) == len(identifiers)
     assert ak.to_list(value)[identifiers.index(pointname)] == expected
+
+
+@pytest.mark.integration
+@pytest.mark.requires_mdsplus
+def test_simple_load_invalid_data_raises():
+    """Data that is present but invalid is not NoData: EFIT01 RHOVN on 118162 is not monotonic on two slices."""
+    composer = ImasComposer()
+    with pytest.raises(AssertionError, match="RHOVN is not strictly increasing"):
+        simple_load(composer.get_supported_fields("core_profiles"), 118162, composer=composer)
