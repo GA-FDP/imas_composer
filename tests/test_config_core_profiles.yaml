@@ -36,6 +36,7 @@ field_tolerances:
     atol: 1.0e-6
 
   core_profiles.profiles_1d.ion.density_thermal:
+  # ZIPFIT differs from OMAS by up to 1.4e-7 relative (2.8e12 m^-3) on the test shots, just over the default rtol
     rtol: 1.0e-6
     atol: 5.0e+12
 
