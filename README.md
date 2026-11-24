@@ -33,6 +33,33 @@ results = simple_load(ids_paths, shot, efit_tree='EFIT01')
 # results = {'equilibrium.time': array(...), 'equilibrium.time_slice.profiles_1d.psi': array(...)}
 ```
 
+## Data access
+
+imas_composer fetches all MDSplus and PTDATA data through [TokSearch](https://ga-fdp.github.io/toksearch/).
+[toksearch_d3d](https://github.com/GA-FDP/toksearch_d3d) tries two DIII-D servers in turn: the FDP origin first,
+then `atlas.gat.com` when it is reachable (on site or through the VPN).
+
+The FDP origin needs a bearer token in `$BEARER_TOKEN`. Get one with the `fdp` CLI from
+[GA-FDP/fdp](https://github.com/GA-FDP/fdp) and run your script under `fdp run`, which exports it:
+```bash
+fdp login
+fdp run python my_script.py
+```
+`eval "$(fdp env)"` exports it into the current shell instead. With `$BEARER_TOKEN` unset, importing toksearch_d3d
+(through ptdata) sets it from `~/.fdp/token`, which `fdp login` does not refresh.
+
+Without a valid token, every FDP connection prints
+`HTTP 401: ... permission denied` and the fetch moves on to atlas. Off site this ends in
+`Error connecting to fdp://...`, which `simple_load` raises. With atlas reachable the fetch succeeds silently, but
+then the data comes from atlas, not FDP:
+
+- The FDP origin is not synced with atlas regularly yet, and a node missing on FDP comes back as `NoData` without
+  being tried on atlas. Some fields can therefore differ depending on whether a token is present.
+- `fetch_requirements` returns a `NoData` instance for data that does not exist, and the exception for any other
+  failure; check the values before composing, as `simple_load` does.
+
+Set `TOKSEARCH_D3D_NO_ATLAS=1` to use FDP only, as CI does.
+
 ## Temporary setup to export to standard IDS (assumes Omega cluster)
 Clone IMAS_composer:
 ```
