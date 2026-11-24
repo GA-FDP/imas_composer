@@ -58,7 +58,9 @@ The `open-pr` skill reads this section.
 The full test suite fetches DIII-D data for every IDS and takes 10 hours or more when run locally and
 serially, so it runs in CI, not in the session. `.github/workflows/tests.yml` runs on every pull
 request: a quick job (`tests/test_fetchers.py`, `tests/test_get_supported_fields.py`), then one job
-per IDS (`tests/test_<ids>_*.py`). `baseline_validation` tests are opt-in and run nowhere by default.
+per IDS (`tests/test_<ids>_*.py`, one IDS per `tests/test_<ids>_requirements.py`) and an `other` job
+that runs every remaining module. `baseline_validation` and `benchmark` tests are opt-in and run
+nowhere by default; `requires_d3drdb` tests run only locally, because CI cannot reach D3DRDB.
 
 - Locally, run at most the tests of the touched IDS, in the `imas_composer` environment:
   `mamba run -n imas_composer pytest tests/test_<ids>_*.py -n auto --maxfail=0`.
@@ -70,8 +72,8 @@ per IDS (`tests/test_<ids>_*.py`). `baseline_validation` tests are opt-in and ru
   The evidence in the risk entries is the CI run of the head commit: name the jobs and their result,
   and update the PR body once CI has finished.
 
-Then check what CI cannot: a new IDS is in the `ids` matrix of `.github/workflows/tests.yml`
-(otherwise CI never runs its tests), a new field is in its `ids/<ids>.yaml` and has tests, unit conversions
+Then check what CI cannot: a new IDS has a `tests/test_<ids>_requirements.py` (otherwise it gets
+no job of its own and its tests run in the `other` job), a new field is in its `ids/<ids>.yaml` and has tests, unit conversions
 and time bases are checked against OMAS or the MDSplus source, a new or loosened entry in a
 `tests/test_config_<ids>.yaml` says why, and no requirement bundles data a field does not need.
 
