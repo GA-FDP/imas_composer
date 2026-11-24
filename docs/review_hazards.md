@@ -68,4 +68,5 @@ read this file. When a defect escapes review, its fix adds an entry here.
 | Tests | Tolerance loosened in a `tests/test_config_<ids>.yaml` without a stated reason | 895ccc1 (`v_loop`) |
 | Tests | OMAS treated as ground truth where OMAS itself is wrong: matching OMAS hid a factor 100 because OMAS had the same bug; the comparison needs the MDSplus source and its units | #113, gafusion/omas#442 |
 | Tests | Only checks shape or "it runs" | `.claude/TESTING_GUIDE.md` |
+| Tests | A test module whose name matches no CI job never runs, so its failures go unseen | `test_zipfit_grid_axes` (#106), summary IDS missing from the hand-kept `ids` matrix |
 | Hygiene | Merge resolution that drops or duplicates code | #133 |
