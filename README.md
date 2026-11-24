@@ -36,7 +36,8 @@ results = simple_load(ids_paths, shot, efit_tree='EFIT01')
 ## Data access
 
 imas_composer fetches all MDSplus and PTDATA data through [TokSearch](https://ga-fdp.github.io/toksearch/).
-[toksearch_d3d](https://github.com/GA-FDP/toksearch_d3d) tries two DIII-D servers in turn: the FDP origin first,
+TokSearch and [toksearch_d3d](https://github.com/GA-FDP/toksearch_d3d) come from the `ga-fdp` conda channel.
+toksearch_d3d tries two DIII-D servers in turn: the FDP origin first,
 then `atlas.gat.com` when it is reachable (on site or through the VPN).
 
 The FDP origin needs a bearer token. Get one with the `fdp` CLI from [GA-FDP/fdp](https://github.com/GA-FDP/fdp):
