@@ -68,6 +68,7 @@ jobs:
           - nbi
           - pf_active
           - reflectometer_profile
+          - summary
           - tf
           - thomson_scattering
           - wall
