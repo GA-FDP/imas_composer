@@ -113,6 +113,7 @@ markers = [
     "requires_mdsplus: marks tests that require MDSplus access to DIII-D data servers",
     "requires_toksearch: marks tests that require toksearch",
     "requires_atlas: marks tests whose data only atlas serves, skipped when TOKSEARCH_D3D_NO_ATLAS is set",
+    "requires_d3drdb: marks tests that query the D3DRDB server, which CI cannot reach",
 ]
 addopts = [
     "-v",

@@ -20,6 +20,8 @@ jobs:
   quick:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      ids: ${{ steps.ids.outputs.ids }}
     steps:
       - name: Use HTTPS for submodules
         run: git config --global url."https://github.com/".insteadOf "git@github.com:"
@@ -28,6 +30,16 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+
+      # One ids job per tests/test_<ids>_requirements.py, so a new IDS gets its
+      # job without being listed in this workflow.
+      - name: List IDS
+        id: ids
+        run: |
+          ls tests/test_*_requirements.py \
+            | sed -E 's#tests/test_(.*)_requirements\.py#\1#' \
+            | jq -Rnc '[inputs]' \
+            | sed 's/^/ids=/' >> "$GITHUB_OUTPUT"
 
       - uses: mamba-org/setup-micromamba@v2
         with:
@@ -56,21 +68,7 @@ jobs:
       # One failing IDS should not cancel the others
       fail-fast: false
       matrix:
-        ids:
-          - charge_exchange
-          - core_profiles
-          - ec_launchers
-          - ece
-          - equilibrium
-          - gas_injection
-          - interferometer
-          - magnetics
-          - nbi
-          - pf_active
-          - reflectometer_profile
-          - tf
-          - thomson_scattering
-          - wall
+        ids: ${{ fromJSON(needs.quick.outputs.ids) }}
     steps:
       - name: Use HTTPS for submodules
         run: git config --global url."https://github.com/".insteadOf "git@github.com:"
@@ -100,3 +98,48 @@ jobs:
         # --maxfail=0 overrides the -x in pyproject addopts so a job reports
         # every failure in its IDS rather than stopping at the first.
         run: pytest tests/test_${{ matrix.ids }}_*.py -n auto --maxfail=0
+
+  # Every test module the quick and ids jobs do not pick up, so a new module
+  # runs in CI without being listed.
+  other:
+    needs: quick
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Use HTTPS for submodules
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: environment_dev.yaml
+          cache-environment: true
+
+      - name: Install packages
+        run: |
+          pip install --no-deps --no-build-isolation -e ./omas_submodule
+          pip install --no-deps --no-build-isolation -e ./toksearch_submodule
+          pip install --no-deps --no-build-isolation -e ./fdp_submodule
+          pip install --no-deps --no-build-isolation -e ./toksearch_d3d_submodule
+          pip install --no-deps --no-build-isolation -e .
+
+      - name: Run remaining tests
+        env:
+          BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
+          TOKSEARCH_D3D_NO_ATLAS: "1"
+        # -m replaces the addopts marker expression, so baseline_validation is
+        # deselected again here.
+        run: |
+          ignores=""
+          for ids in $(jq -r '.[]' <<< '${{ needs.quick.outputs.ids }}'); do
+            ignores+=" --ignore-glob=tests/test_${ids}_*.py"
+          done
+          pytest tests $ignores \
+            --ignore=tests/test_fetchers.py \
+            --ignore=tests/test_get_supported_fields.py \
+            -m "not baseline_validation and not benchmark and not requires_d3drdb" \
+            -n auto --maxfail=0
