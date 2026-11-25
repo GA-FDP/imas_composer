@@ -6,21 +6,26 @@ It is intentionally separate from composer.py so that ImasComposer itself has no
 dependency on any specific data backend (MDSplus, ptdata, etc.).
 
 Public API:
-    fetch_requirements: Fetch a list of Requirement objects from MDSplus via OMAS
+    fetch_requirements: Fetch a list of Requirement objects via toksearch
     simple_load: Convenience wrapper that runs the full resolve-fetch-compose loop
 """
 
 import re
 from typing import Dict, List, Tuple, Any, Optional
+
+import numpy as np
+
 from .core import Requirement, NoData
 from .composer import ImasComposer
 
 try:
-    from omas import mdsvalue
-    OMAS_AVAILABLE = True
+    from toksearch.interfaces.req_interface import fetch_many_from_req
+    # Patches the DIII-D servers and PTDATA support into toksearch's req_interface
+    import toksearch_d3d
+    TOKSEARCH_AVAILABLE = True
 except ImportError:
-    OMAS_AVAILABLE = False
-    mdsvalue = None
+    TOKSEARCH_AVAILABLE = False
+    fetch_many_from_req = None
 
 # MDSplus status codes meaning the data does not exist for this shot.
 # getMany reports a missing bare node as INVTREE instead of NNF.
@@ -34,100 +39,65 @@ def _as_no_data(exc: Exception) -> Exception:
     return exc
 
 
-def fetch_requirements(requirements: List[Requirement]) -> Dict[Tuple[str, int, str], Any]:
+def _is_missing_ptdata(value: dict) -> bool:
+    """ptdata reports a point without data through an all-zero pthead2 header."""
+    return not np.any(value['rarray'])
+
+
+def fetch_requirements(
+    requirements: List[Requirement],
+) -> Dict[Tuple[str, int, str], Any]:
     """
-    Fetch a list of requirements from MDSplus via OMAS mdsvalue.
+    Fetch a list of requirements via toksearch.
 
-    Requirements are grouped by (treename, shot) for efficient batching.
-    Requirements with isolated=True are fetched one by one instead of in the getMany batch.
-
-    Requirements with treename == "__ptdata__" are treated as ptdata signals:
-    the mds_path is used as the signal name and three TDI expressions are built
-    (ptdata2 for data, dim_of for time, pthead2/__rarray for the header).  The
-    result is stored as a dict with keys 'data', 'times' (ms), and 'rarray',
-    matching the format expected by mapper compose functions.
+    Requirements with treename == "__ptdata__" are batched into a single
+    tree-less getMany() of ptdata2/dim_of/pthead2 TDI, returning a dict with
+    keys 'data', 'times' (ms), and 'rarray'.  Everything else is batched per
+    (treename, shot) and evaluated as TDI against an MDSplus tree; requirements
+    with isolated=True are fetched one by one with get() instead of in the
+    getMany() batch.  Every group is tried first against the FDP thin client
+    and then atlas.
 
     Args:
         requirements: List of Requirement objects to fetch.
 
     Returns:
         Dict mapping each requirement's as_key() tuple to its fetched value,
-        or to the Exception if fetching failed. Errors caused by missing data
-        (missing tree, empty node, node not found) are stored as NoData.
+        or to the Exception if fetching failed. Missing data (missing tree,
+        empty node, node not found, ptdata point without data) is stored as NoData.
 
     Raises:
-        RuntimeError: If OMAS is not installed.
+        RuntimeError: If toksearch is not installed.
     """
     if not requirements:
         return {}
 
-    if not OMAS_AVAILABLE:
+    if not TOKSEARCH_AVAILABLE:
         raise RuntimeError(
-            "OMAS is required for fetching requirements but is not installed."
+            "toksearch and toksearch_d3d are required for fetching requirements "
+            "but are not installed. Install them with: "
+            "conda install -c ga-fdp toksearch toksearch_d3d"
         )
 
-    ptdata_reqs = [r for r in requirements if r.treename == "__ptdata__"]
-    mds_reqs = [r for r in requirements if r.treename != "__ptdata__"]
+    unique_requirements = []
+    seen_keys = set()
+    for req in requirements:
+        key = req.as_key()
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        unique_requirements.append(req)
 
-    raw_data = {}
-
-    # --- __ptdata__ requirements: translate to ptdata2/pthead2 TDI via OMAS ---
-    if ptdata_reqs:
-        seen_keys = set()
-        for req in ptdata_reqs:
-            k = req.as_key()
-            if k in seen_keys:
-                continue
-            seen_keys.add(k)
-            sig = req.mds_path
-            shot = req.shot
-            tdi = {
-                'data':   f'ptdata2("{sig}",{shot})',
-                'times':  f'dim_of(ptdata2("{sig}",{shot}),0)',
-                'rarray': f'pthead2("{sig}",{shot}), __rarray',
-            }
-            try:
-                result = mdsvalue('d3d', treename=None, pulse=shot, TDI=tdi)
-                tree_data = result.raw()
-                raw_data[k] = {
-                    'data':   tree_data['data'],
-                    'times':  tree_data['times'],
-                    'rarray': tree_data['rarray'],
-                }
-            except Exception as e:
-                raw_data[k] = _as_no_data(e)
-
-    # --- MDSplus requirements ---
-    if mds_reqs:
-        by_tree_shot = {}
-        for req in mds_reqs:
-            key = (req.treename, req.shot)
-            if key not in by_tree_shot:
-                by_tree_shot[key] = []
-            by_tree_shot[key].append(req)
-
-        for (treename, shot), reqs in by_tree_shot.items():
-            # getMany truncates multi-dimensional string arrays to their first row; a plain TDI string uses get
-            for req in [r for r in reqs if r.isolated]:
-                try:
-                    raw_data[req.as_key()] = mdsvalue('d3d', treename=treename, pulse=shot, TDI=req.mds_path).raw()
-                except Exception as e:
-                    raw_data[req.as_key()] = _as_no_data(e)
-
-            batched = [r for r in reqs if not r.isolated]
-            if not batched:
-                continue
-            tdi_query = {req.mds_path: req.mds_path for req in batched}
-            try:
-                result = mdsvalue('d3d', treename=treename, pulse=shot, TDI=tdi_query)
-                tree_data = result.raw()
-                for req in batched:
-                    value = tree_data[req.mds_path]
-                    raw_data[req.as_key()] = _as_no_data(value) if isinstance(value, Exception) else value
-            except Exception as e:
-                for req in batched:
-                    raw_data[req.as_key()] = _as_no_data(e)
-
+    raw_data = fetch_many_from_req(unique_requirements)
+    for req in unique_requirements:
+        key = req.as_key()
+        value = raw_data[key]
+        if isinstance(value, Exception):
+            raw_data[key] = _as_no_data(value)
+        elif req.treename == "__ptdata__" and _is_missing_ptdata(value):
+            raw_data[key] = NoData(
+                f"PTDATA point '{req.mds_path}' #{req.shot}: pthead2 returned an all-zero header (no data)"
+            )
     return raw_data
 
 
@@ -142,13 +112,12 @@ def simple_load(
     fast_ece: bool = False,
     include_rip: bool = False,
     crop_core_profiles: bool = False,
-    max_iterations: int = 10
+    max_iterations: int = 10,
 ) -> Dict[str, Any]:
     """
     Simple utility function to resolve and compose IDS data in one call.
 
-    Runs the full resolve-fetch-compose loop using fetch_requirements for data
-    retrieval (MDSplus via OMAS and ptdata). Requires OMAS to be installed.
+    Runs the full resolve-fetch-compose loop, fetching through toksearch.
 
     Args:
         ids_paths: List of full IDS paths to compose (e.g., ['ece.channel.t_e.data'])
@@ -169,8 +138,9 @@ def simple_load(
         data for that path is not available
 
     Raises:
-        RuntimeError: If requirements cannot be resolved or a fetch fails
-            for a reason other than missing data.
+        RuntimeError: If toksearch is not installed, or if requirements
+            cannot be resolved or a fetch fails for a reason other than
+            missing data.
 
     Example:
         >>> result = simple_load(['equilibrium.time'], 200000)

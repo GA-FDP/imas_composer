@@ -10,6 +10,8 @@ import numpy as np
 
 from omas import ODS
 
+from imas_composer.fetchers import fetch_requirements
+
 
 pytestmark = [pytest.mark.omas_validation]
 
@@ -37,14 +39,11 @@ def test_profiles_2d_magnetic_fields(field_name, composer, test_shot):
         if status[ids_path]:
             break
 
-        # Fetch requirements from MDSplus
-        from omas import mdsvalue
-        for req in requirements:
-            try:
-                mds_data = mdsvalue('d3d', req.treename, req.shot, req.mds_path).raw()
-                raw_data[req.as_key()] = mds_data
-            except Exception as e:
-                pytest.skip(f"MDSplus data unavailable for {req.mds_path}: {e}")
+        # Fetch requirements via toksearch
+        for key, value in fetch_requirements(requirements).items():
+            if isinstance(value, Exception):
+                pytest.skip(f"Data unavailable for {key[0]}: {value}")
+            raw_data[key] = value
 
     # Compose the field
     composer_result = composer.compose([ids_path], test_shot, raw_data)
@@ -92,9 +91,10 @@ def test_profiles_2d_magnetic_fields(field_name, composer, test_shot):
 
     # Compare values with appropriate tolerances
     # Magnetic field calculations involve gradients and interpolations,
-    # so we need somewhat relaxed tolerances
+    # so we need somewhat relaxed tolerances. b_field_r and b_field_z differ from OMAS by up to 1.6e-6 T
+    # on the test shots, where they are close to zero.
     rtol = 1e-5
-    atol = 1e-7
+    atol = 1e-5
 
     # Handle the grid dimension in OMAS (axis 1)
     # OMAS has shape (n_time, n_grid, n_r, n_z), composer has (n_time, 1, n_r, n_z)

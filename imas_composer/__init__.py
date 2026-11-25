@@ -5,7 +5,7 @@ Public API:
     ImasComposer: Main interface for resolving and composing IDS data
     Requirement: Data requirement specification
     NoData: Placeholder value for requested data that is not available
-    simple_load: Simple utility for loading IDS data in one call (requires OMAS)
+    simple_load: Simple utility for loading IDS data in one call (requires toksearch)
 """
 
 from .composer import ImasComposer

@@ -212,6 +212,13 @@ def get_iri_upload_ids(shot: int, tag: str = 'CAKE_FDP') -> Tuple[str, str]:
         raise ValueError(f"No valid IRI CAKE data for shot {shot} (run too old)")
 
     uploads = iri_runs[iri_num]['results_uploaded']
+    missing = [code for code in ('OMFIT_CAKE_PROF', 'OMFIT_CAKE_EFIT') if code not in uploads]
+    if missing:
+        raise ValueError(
+            f"IRI CAKE run {iri_num} for shot {shot} (tag '{tag}') is missing "
+            f"upload(s) {missing}.\nUploaded codes: {sorted(uploads) or ['(none)']}"
+        )
+
     prof_id = str(uploads['OMFIT_CAKE_PROF']['UPLOAD_ID'])[-3:]
     eq_id   = str(uploads['OMFIT_CAKE_EFIT']['UPLOAD_ID'])[-2:]
     return prof_id, eq_id
