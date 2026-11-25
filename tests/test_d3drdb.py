@@ -1,7 +1,8 @@
 """
 Tests of the D3DRDB code run database queries.
 
-They need the D3DRDB server (d3drdb.gat.com), so they are integration tests.
+They need the D3DRDB server (d3drdb.gat.com), so they are integration tests, and CI
+cannot reach it.
 """
 
 import pytest
@@ -13,6 +14,7 @@ SHOT_WITH_CAKE_RUN = 173587
 
 
 @pytest.mark.integration
+@pytest.mark.requires_d3drdb
 def test_list_standard_efit_trees():
     """The standard per-shot EFIT trees, without the EFIT tree the IRI CAKE runs are stored in."""
     trees = list_standard_efit_trees(SHOT_WITH_CAKE_RUN)
@@ -23,6 +25,7 @@ def test_list_standard_efit_trees():
 
 
 @pytest.mark.integration
+@pytest.mark.requires_d3drdb
 def test_list_standard_efit_trees_of_a_shot_without_runs():
     # shot 1 is a test shot with EFIT runs, a negative shot has none
     with pytest.raises(ValueError, match='No standard EFIT run for shot -1'):
