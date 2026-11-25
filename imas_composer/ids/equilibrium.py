@@ -383,7 +383,8 @@ class EquilibriumMapper(IDSMapper):
         )
 
         # Internal dependency: the snap file (&EFITIN) the run was set up with. The standard EFIT01/EFIT02 trees
-        # store it, and their slices have no k-files.
+        # store it, and their slices have no k-files. Not isolated: it is a single string, which getMany returns
+        # whole (unlike the 2D KEQDSKS array, see test_getmany_returns_whole_snap_file).
         self.specs["equilibrium._snap"] = IDSEntrySpec(
             stage=RequirementStage.DIRECT,
             static_requirements=[
