@@ -11,10 +11,10 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import pytest
 from scipy.integrate import cumulative_trapezoid
+from scipy.constants import mu_0
 
 from imas_composer import ImasComposer, NoData
 from imas_composer.efit_basis import (
-    EFIT_MU0,
     RECOVERY_TOLERANCE,
     basis_settings,
     efit_f_profile,
@@ -35,7 +35,7 @@ from tests.conftest import efit_fpol
 KNOT_TOLERANCE = 1e-6  # psi_n, recovered from float32 profiles
 COEFFICIENT_TOLERANCE = 1e-6  # relative
 # the IMAS (COCOS 11) factors of the g-file sums, +-1 / (2 pi) for p' and +-mu0 / (2 pi) for FF'
-IMAS_FACTORS = {"pprime": -1 / (2 * np.pi), "ffprime": -EFIT_MU0 / (2 * np.pi)}
+IMAS_FACTORS = {"pprime": -1 / (2 * np.pi), "ffprime": -mu_0 / (2 * np.pi)}
 SHOT = 200000
 CODE_PARAMETERS = "equilibrium.code.parameters"
 DPRESSURE_DPSI = "equilibrium.time_slice.profiles_1d.dpressure_dpsi"
@@ -529,7 +529,7 @@ def standard_tree_raw_data(
     used = xrsp[:, :4].astype(np.float64)
     sign_out = np.where(np.array(plasma) > 0, -1.0, 1.0)[:, np.newaxis]
     pprime = np.stack([efit_polynomial_reference(psin, coefficients[:2], 0.0) for coefficients in used])
-    ffprim = np.stack([EFIT_MU0 * efit_polynomial_reference(psin, coefficients[2:], 0.0) for coefficients in used])
+    ffprim = np.stack([mu_0 * efit_polynomial_reference(psin, coefficients[2:], 0.0) for coefficients in used])
     values = {
         "GTIME": np.array([1000.0, 2000.0]),
         "MTIME": np.array([1000.0, 2000.0]),

@@ -41,8 +41,6 @@ RECOVERY_TOLERANCE = 1e-6
 N_KNOT_STARTS = 300
 # xtol, ftol and gtol of each knot fit, with which the starts of 155149 at 1180 ms reach a relative rms of 1.7e-8
 KNOT_FIT_TOLERANCE = 1e-15
-# EFIT's mu0 of FF', twopi * tmu with tmu = 2e-7 (modules-efit.F90)
-EFIT_MU0 = 4e-7 * np.pi
 
 POLYNOMIAL = 0
 TENSION_SPLINE = 6

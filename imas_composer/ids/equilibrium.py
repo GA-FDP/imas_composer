@@ -22,7 +22,6 @@ from ..cocos import (
 )
 from ..efit_basis import (
     BASIS_KEYS,
-    EFIT_MU0,
     RECOVERY_TOLERANCE,
     basis_settings,
     format_floats,
@@ -2193,7 +2192,7 @@ class EquilibriumMapper(IDSMapper):
             factors = {
                 "pprime": self._apply_cocos_transform(
                     1.0, shot, raw_data, "equilibrium.time_slice.profiles_1d.dpressure_dpsi"),
-                "ffprime": EFIT_MU0 * self._apply_cocos_transform(
+                "ffprime": mu_0 * self._apply_cocos_transform(
                     1.0, shot, raw_data, "equilibrium.time_slice.profiles_1d.f_df_dpsi"),
             }
             basis_element = ET.SubElement(root, "basis")
