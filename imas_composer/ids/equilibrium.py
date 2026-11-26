@@ -20,6 +20,16 @@ from ..cocos import (
     identify_cocos_from_signals,
     apply_cocos_transform,
 )
+from ..efit_basis import (
+    BASIS_KEYS,
+    EFIT_MU0,
+    RECOVERY_TOLERANCE,
+    basis_settings,
+    format_floats,
+    resolve_basis,
+    split_coefficients,
+    write_basis,
+)
 from scipy.constants import mu_0
 from scipy.interpolate import interp1d
 from contourpy import contour_generator
@@ -28,6 +38,13 @@ from contourpy import contour_generator
 XRSP_FILL_THRESHOLD = 1e30
 # a k-file belongs to the equilibrium slice at the same time (KTIME and GTIME in ms)
 KTIME_TOLERANCE = 1e-3
+FITDELZ_KEYS = ("fitdelz", "ifitdelz")
+# namelist group of the basis and of the fitdelz settings in a k-file and in a snap file
+BASIS_GROUPS = {"kfile": "in1", "snap": "efitin"}
+FITDELZ_GROUPS = {"kfile": "inwant", "snap": "efitin"}
+# EFIT nodes <xrsp> and <basis> of equilibrium.code.parameters are composed from
+XRSP_INPUTS = frozenset({"GTIME", "MTIME", "XRSP"})
+BASIS_INPUTS = XRSP_INPUTS | {"PLASMA", "PSIN", "PPRIME", "FFPRIM", "BCENTR", "CPASMA"}
 # an a-file belongs to the equilibrium slice at the same time (ATIME and GTIME in ms, spaced by >= 20 ms)
 ATIME_TOLERANCE = 0.1
 
@@ -149,6 +166,9 @@ class EquilibriumMapper(IDSMapper):
         """
         self.efit_tree = efit_tree
         self.efit_run_id = efit_run_id
+        # The run-id runs of the EFIT tree (CAKE runs) store the k-file of every slice, the standard trees (EFIT01,
+        # EFIT02) the snap file of the run. Only the namelist of the tree is a requirement.
+        self.namelist_source = "kfile" if efit_tree == "EFIT" else "snap"
 
         # MDSplus path prefixes
         self.geqdsk_node = f'\\{efit_tree}::TOP.RESULTS.GEQDSK'
@@ -376,8 +396,10 @@ class EquilibriumMapper(IDSMapper):
         self.specs["equilibrium.code.parameters"] = IDSEntrySpec(
             stage=RequirementStage.COMPUTED,
             depends_on=[
-                "equilibrium._xrsp", "equilibrium._constraint_time_indices", "equilibrium._keqdsks", "equilibrium._snap",
-                "equilibrium._gtime",
+                "equilibrium._xrsp", "equilibrium._constraint_time_indices", "equilibrium._gtime",
+                "equilibrium._keqdsks" if self.namelist_source == "kfile" else "equilibrium._snap",
+                "equilibrium._psin", "equilibrium._pprime", "equilibrium._ffprim", "equilibrium._plasma",
+                "equilibrium._bcentr", "equilibrium._cpasma_cocos",
             ],
             compose=self._compose_code_parameters,
             ids_path="equilibrium.code.parameters",
@@ -2101,8 +2123,8 @@ class EquilibriumMapper(IDSMapper):
 
     def _compose_code_parameters(self, shot: int, raw_data: dict) -> str:
         """
-        Compose the EFIT code parameters as XML: the basis function coefficients of p' and FF' (XRSP) and, for runs
-        that store their k-file or snap file namelists, EFIT's rigid vertical shift settings (fitdelz, ifitdelz).
+        Compose the EFIT code parameters as XML: the basis function coefficients of p' and FF' (XRSP), the basis
+        functions of p' and FF' of every slice and EFIT's rigid vertical shift settings (fitdelz, ifitdelz).
 
         XRSP is brsp/darea of the last EFIT iteration (write_m.F90), the kppcur coefficients of p' followed by
         the kffcur coefficients of FF'. With the profile basis functions of the run they give the profiles
@@ -2112,70 +2134,162 @@ class EquilibriumMapper(IDSMapper):
 
         in g-file units, before EFIT's output sign: the g-file PPRIME and FFPRIM are these sums times sign_out = -1
         where the measured Ip of the slice (MEASUREMENTS.PLASMA) is > 0 and 1 otherwise (write_g.f90), while XRSP is
-        written without it. The basis (kppfnc, kfffnc, knots, tensions) is an input of the run, set in its namelists
-        (&IN1 of a k-file, &EFITIN of a snap file) with EFIT's defaults for what they do not set; it is not decoded
-        here. One <time_slice> per equilibrium time slice (XRSP is on the MEASUREMENTS time base), the unused
-        entries (netCDF fill values) are dropped and the float32 values written in their shortest exact form.
+        written without it. The reconstructed CPASMA does not decide it; it keeps its sign where the measured Ip is 0.
+        One <time_slice> per equilibrium time slice (XRSP is on the MEASUREMENTS time base), the unused entries
+        (netCDF fill values) are dropped and the float32 values written in their shortest exact form.
+
+        The basis (kppfnc, kfffnc, knots, tensions) is an input of the run, set in the namelist of the slice
+        (`_compose_slice_namelists`), with EFIT's defaults for what it does not set (efit_basis.basis_settings).
+        <basis> holds one <time_slice> per equilibrium time slice with the `source` of its settings (kfile, snap or
+        defaults) and the bases of p' and FF' (efit_basis.write_basis). The coefficients are scaled to the units and
+        COCOS of profiles_1d.dpressure_dpsi and f_df_dpsi, and every basis is checked against these stored profiles;
+        where EFIT moved the knots of a spline (kautoknt) they are fitted to them (efit_basis.resolve_basis). A slice
+        whose settings are not supported or whose basis misses the stored profiles has no bases but an `error`.
+        efit_basis.efit_profile_basis evaluates a slice of the XML.
+
+        Every part is written when its inputs exist: <xrsp> needs XRSP, <basis> also the g-file profiles and the
+        measured Ip, <fitdelz> a namelist. The field is NoData only when none of them can be written.
 
         With fitdelz EFIT fits a rigid vertical shift of the plasma: ifitdelz = 1 translates the total flux by it
-        (pflux.F90), ifitdelz = 3 the plasma current (current.f90). The settings come from the k-file of the slice
-        (NAMELISTS:KEQDSKS, &INWANT) for runs that store k-files (CAKE runs), otherwise from the snap file of the run
-        (TOP:NAMELIST, &EFITIN), which the standard EFIT01/EFIT02 trees store and which holds for every slice.
-        <fitdelz> and <ifitdelz> hold one <time_slice> per equilibrium time slice whose namelist sets the value. A
-        value the namelist does not set is left out (EFIT's default applies, set_defaults.f90: fitdelz = .false.,
-        ifitdelz = 1), and both are absent for runs that store neither namelist.
+        (pflux.F90), ifitdelz = 3 the plasma current (current.f90). The settings come from the same namelists, &INWANT
+        of a k-file and &EFITIN of a snap file. <fitdelz> and <ifitdelz> hold one <time_slice> per equilibrium time
+        slice whose namelist sets the value. A value the namelist does not set is left out (EFIT's default applies,
+        set_defaults.f90: fitdelz = .false., ifitdelz = 1), and both are absent for runs whose namelists set neither.
 
         Returns:
             XML string
+
+        Raises:
+            ValueError: If none of the parts can be written, which compose() reports as the NoData of an input.
         """
-        xrsp_key = Requirement(f'{self.measurements_node}.XRSP', self.resolve_shot(shot), self.efit_tree).as_key()
-        xrsp = np.asarray(raw_data[xrsp_key], dtype=np.float32)[self._compose_constraint_time_indices(shot, raw_data)]
+        inputs = {
+            name: raw_data[Requirement(f'{node}.{name}', self.resolve_shot(shot), self.efit_tree).as_key()]
+            for node, names in (
+                (self.geqdsk_node, ("GTIME", "PSIN", "PPRIME", "FFPRIM", "BCENTR", "CPASMA")),
+                (self.measurements_node, ("MTIME", "XRSP", "PLASMA")),
+            )
+            for name in names
+        }
+        missing = {name for name, value in inputs.items() if isinstance(value, NoData)}
+        namelists = [] if "GTIME" in missing else self._compose_slice_namelists(shot, raw_data)
 
         root = ET.Element("parameters")
-        xrsp_element = ET.SubElement(root, "xrsp")
-        for index, coefficients in enumerate(xrsp):
-            used = coefficients[np.abs(coefficients) < XRSP_FILL_THRESHOLD]
-            element = ET.SubElement(xrsp_element, "time_slice", index=str(index))
-            element.text = " ".join(np.format_float_scientific(value, unique=True) for value in used)
+        if not missing & XRSP_INPUTS:
+            time_indices = self._compose_constraint_time_indices(shot, raw_data)
+            xrsp = np.asarray(inputs["XRSP"], dtype=np.float32)[time_indices]
+            coefficients = [values[np.abs(values) < XRSP_FILL_THRESHOLD] for values in xrsp]
+            xrsp_element = ET.SubElement(root, "xrsp")
+            for index, used in enumerate(coefficients):
+                ET.SubElement(xrsp_element, "time_slice", index=str(index)).text = format_floats(used)
+
+        if not missing & BASIS_INPUTS:
+            sign_out = np.where(np.asarray(inputs["PLASMA"])[time_indices] > 0, -1.0, 1.0)
+            psin = np.asarray(inputs["PSIN"], dtype=np.float64)
+            profiles = {
+                "pprime": np.asarray(self._compose_profiles_1d_dpressure_dpsi(shot, raw_data), dtype=np.float64),
+                "ffprime": np.asarray(self._compose_profiles_1d_f_df_dpsi(shot, raw_data), dtype=np.float64),
+            }
+            # from the g-file sums of the coefficients to these profiles, before sign_out
+            factors = {
+                "pprime": self._apply_cocos_transform(
+                    1.0, shot, raw_data, "equilibrium.time_slice.profiles_1d.dpressure_dpsi"),
+                "ffprime": EFIT_MU0 * self._apply_cocos_transform(
+                    1.0, shot, raw_data, "equilibrium.time_slice.profiles_1d.f_df_dpsi"),
+            }
+            basis_element = ET.SubElement(root, "basis")
+            for index, ((source, namelist), used) in enumerate(zip(namelists, coefficients)):
+                slice_element = ET.SubElement(basis_element, "time_slice", index=str(index), source=source)
+                values = {} if namelist is None else self._parse_namelist(namelist, BASIS_GROUPS[source], BASIS_KEYS)
+                try:
+                    settings = basis_settings(values)
+                    shares = split_coefficients(used.astype(np.float64), settings)
+                except ValueError as error:
+                    # settings efit_basis does not support, e.g. kinds 1-5 or rotation coefficients in XRSP
+                    slice_element.set("error", str(error))
+                    continue
+                resolved = {
+                    profile: resolve_basis(
+                        profile_settings, sign_out[index] * factors[profile] * shares[profile], psin,
+                        profiles[profile][index]
+                    )
+                    for profile, profile_settings in settings.items()
+                }
+                misses = [
+                    f"{profile} ({settings[profile]['kind']}) by a relative rms of {rms:.1e}"
+                    for profile, (_, rms, _) in resolved.items()
+                    if rms > RECOVERY_TOLERANCE
+                ]
+                if misses:
+                    slice_element.set(
+                        "error",
+                        f"EFIT's basis (settings from {source}) misses the stored {' and '.join(misses)} "
+                        f"(tolerance {RECOVERY_TOLERANCE:.0e}).",
+                    )
+                    continue
+                for profile, (basis, _, fitted) in resolved.items():
+                    write_basis(slice_element, profile, basis, fitted)
+
+        # fitdelz and ifitdelz by equilibrium time slice index
+        fitdelz = {
+            index: self._parse_namelist(namelist, FITDELZ_GROUPS[source], FITDELZ_KEYS)
+            for index, (source, namelist) in enumerate(namelists)
+            if namelist is not None
+        }
+        if any(fitdelz.values()):
+            elements = {key: ET.SubElement(root, key) for key in FITDELZ_KEYS}
+            for index, values in fitdelz.items():
+                for key, value in values.items():
+                    ET.SubElement(elements[key], "time_slice", index=str(index)).text = str(value).lower()
+        if len(root) == 0:
+            raise ValueError(
+                f"No EFIT code parameters for shot {shot}, tree {self.efit_tree} run {self.efit_run_id!r}: "
+                f"{sorted(missing)} are missing and no namelist sets fitdelz."
+            )
+        return ET.tostring(root, encoding="unicode")
+
+    def _compose_slice_namelists(self, shot: int, raw_data: dict) -> list:
+        """
+        The namelist of every equilibrium time slice and its source.
+
+        For the run-id runs of the EFIT tree (CAKE runs) that is the k-file of the slice ("kfile", NAMELISTS:KEQDSKS,
+        matched to GTIME by KTIME), for the standard trees the snap file of the run ("snap", TOP:NAMELIST), which holds
+        for every slice. A slice without a namelist, e.g. of a run that stores none, has None ("defaults").
+
+        Returns:
+            (source, namelist text or None) per equilibrium time slice
+        """
+        gtime_key = Requirement(f'{self.geqdsk_node}.GTIME', self.resolve_shot(shot), self.efit_tree).as_key()
+        gtime = np.asarray(raw_data[gtime_key], dtype=np.float64)
+        if self.namelist_source == "snap":
+            snap = raw_data[Requirement(f'\\{self.efit_tree}::TOP:NAMELIST', self.resolve_shot(shot), self.efit_tree).as_key()]
+            if isinstance(snap, NoData):
+                return [("defaults", None)] * len(gtime)
+            return [("snap", str(np.asarray(snap)))] * len(gtime)
 
         keqdsks = raw_data[Requirement(f'{self.namelists_node}:KEQDSKS', self.resolve_shot(shot), self.efit_tree).as_key()]
         ktime = raw_data[Requirement(f'{self.namelists_node}:KEQDSKS:KTIME', self.resolve_shot(shot), self.efit_tree).as_key()]
-        snap = raw_data[Requirement(f'\\{self.efit_tree}::TOP:NAMELIST', self.resolve_shot(shot), self.efit_tree).as_key()]
-        gtime = np.asarray(
-            raw_data[Requirement(f'{self.geqdsk_node}.GTIME', self.resolve_shot(shot), self.efit_tree).as_key()],
-            dtype=np.float64,
-        )
-        settings = {}  # fitdelz and ifitdelz by equilibrium time slice index
-        if not isinstance(keqdsks, NoData) and not isinstance(ktime, NoData):
-            namelists = np.asarray(keqdsks).astype(str)
-            ktime = np.asarray(ktime, dtype=np.float64)
-            if namelists.ndim != 2 or len(namelists) != len(ktime):
-                raise ValueError(
-                    f"KEQDSKS holds {namelists.shape} namelist lines for {len(ktime)} KTIME entries, expected one row "
-                    "of lines per k-file"
-                )
-            for index, time in enumerate(gtime):
-                matches = np.flatnonzero(np.abs(ktime - time) < KTIME_TOLERANCE)
-                if len(matches):
-                    settings[index] = self._parse_fitdelz("\n".join(namelists[matches[0]]), "inwant")
-        elif not isinstance(snap, NoData):
-            run_settings = self._parse_fitdelz(str(np.asarray(snap)), "efitin")
-            settings = {index: run_settings for index in range(len(gtime))}
-
-        if settings:
-            elements = {key: ET.SubElement(root, key) for key in ("fitdelz", "ifitdelz")}
-            for index, values in settings.items():
-                for key, value in values.items():
-                    ET.SubElement(elements[key], "time_slice", index=str(index)).text = str(value).lower()
-        return ET.tostring(root, encoding="unicode")
+        if isinstance(keqdsks, NoData) or isinstance(ktime, NoData):
+            return [("defaults", None)] * len(gtime)
+        namelists = np.asarray(keqdsks).astype(str)
+        ktime = np.asarray(ktime, dtype=np.float64)
+        if namelists.ndim != 2 or len(namelists) != len(ktime):
+            raise ValueError(
+                f"KEQDSKS holds {namelists.shape} namelist lines for {len(ktime)} KTIME entries, expected one row "
+                "of lines per k-file"
+            )
+        slices = []
+        for time in gtime:
+            matches = np.flatnonzero(np.abs(ktime - time) < KTIME_TOLERANCE)
+            slices.append(("kfile", "\n".join(namelists[matches[0]])) if len(matches) else ("defaults", None))
+        return slices
 
     @staticmethod
-    def _parse_fitdelz(namelist: str, group: str) -> dict:
-        """The fitdelz and ifitdelz settings a namelist sets in `group`: &INWANT of a k-file (one line per record) or
+    def _parse_namelist(namelist: str, group: str, keys: tuple) -> dict:
+        """The values of `keys` a namelist sets in `group`, e.g. &IN1 or &INWANT of a k-file (one line per record) or
         &EFITIN of a snap file. f90nml skips the text around the groups, such as the comments that follow the
         &EFITIN group of the stored snap files."""
         values = f90nml.reads(namelist).get(group, {})
-        return {key: values[key] for key in ("fitdelz", "ifitdelz") if key in values}
+        return {key: values[key] for key in keys if key in values}
 
     def _compose_constraint_time_indices(self, shot: int, raw_data: dict) -> np.ndarray:
         """
