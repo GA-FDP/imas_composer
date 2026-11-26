@@ -1052,3 +1052,27 @@ def run_composition_against_omas(ids_path, composer, omas_data, ids_name, shot):
 
     # Recursively compare using ndim-based logic with field-specific tolerances
     _compare_recursive(composer_value, ods, omas_access_path, rtol=rtol, atol_float=atol_float, atol_array=atol_array)
+
+
+def efit_fpol(ffprim: np.ndarray, f_boundary: float, delta_psi: float) -> np.ndarray:
+    """
+    Literal port of EFIT's integration of F from FF' (ece.F90): the trapezoidal rule from the boundary inwards on
+    equidistant psi_n, keeping the boundary value where F^2 would be negative.
+
+    Args:
+        ffprim: (nw,) FF' on psi_n = 0 ... 1.
+        f_boundary: F at psi_n = 1.
+        delta_psi: psi_boundary - psi_axis, in the convention of `ffprim`.
+
+    Returns:
+        (nw,) F on psi_n = 0 ... 1
+    """
+    nw = len(ffprim)
+    fpol = np.empty(nw)
+    fpol[-1] = f_boundary
+    sumf = f_boundary**2 / 2
+    delsi = -delta_psi / (nw - 1)
+    for i in range(1, nw):
+        sumf += 0.5 * delsi * (ffprim[nw - i] + ffprim[nw - i - 1])
+        fpol[nw - i - 1] = np.sqrt(2 * sumf) * np.sign(f_boundary) if sumf >= 0 else f_boundary
+    return fpol
