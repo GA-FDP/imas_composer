@@ -239,7 +239,7 @@ When a test fails:
    - In `omas/machine_mappings/d3d.py` or `_efit.json`
    - See exactly what OMAS does
 
-3. **Add debug prints** (user will run):
+3. **Add debug prints**:
    ```python
    def _compose_field(self, shot, raw_data):
        result = transform(raw_data[key])
@@ -247,11 +247,13 @@ When a test fails:
        return result
    ```
 
-4. **Digest output from user** - they'll run the test and provide output
+4. **Run the tests of that IDS** and read the output:
+   `mamba run -n imas_composer pytest tests/test_<ids>_*.py -n auto --maxfail=0`
 
-5. **Iterate** - fix issue, user runs again
+5. **Iterate** - fix the issue, run again
 
-**Remember:** You CANNOT run tests yourself (data privacy policy). User runs tests and shares output.
+The full suite takes 10 hours or more serially: run only the touched IDS locally and leave the rest
+to CI (see "Pull request checks" in `CLAUDE.md`).
 
 ## Test Infrastructure (conftest.py)
 
@@ -278,7 +280,7 @@ All shared test logic lives in `conftest.py`:
 1. Create `tests/test_<ids>_requirements.py` (use template above)
 2. Create `tests/test_<ids>_composition.py` (use template above)
 3. Create `tests/test_config_<ids>.yaml` with special rules if needed
-4. User runs tests: as described above
+4. Run the tests of the new IDS as described above; CI runs them again on the PR
 5. Debug failures using workflow above
 
 That's it! Each test file is ~17 lines. All complexity is in conftest.py (DRY principle).
